@@ -5,6 +5,5 @@ dist
 cad/*.step
 traces/*.json
 !traces/*.annotations.json
-.deploy.env
 .wrangler
 *.log
