@@ -1,0 +1,68 @@
+# Checks every push and pull request, and deploys the site when a change reaches main.
+# The deploy job runs only after the checks pass. It is off until the repository variable CF_DEPLOY is "true", and it
+# needs the secrets CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID and the variable CF_PAGES_PROJECT.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    name: Build and test
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Type-check
+        run: npx tsc --noEmit
+      - name: Test
+        run: npm test
+      # The Match Lab and the lessons page are generated and committed, so that the build needs no Python. This step
+      # fails if someone changed the post, the template, or the result files and didn't rebuild the pages.
+      - name: Check that the generated pages are fresh
+        run: |
+          python3 scripts/build-site.py
+          git diff --exit-code -- public/lab public/lessons docs/results.html
+      - name: Build the site
+        run: npx vite build
+      - uses: actions/upload-artifact@v4
+        with:
+          name: site
+          path: dist
+          retention-days: 7
+
+  deploy:
+    name: Deploy to Cloudflare Pages
+    needs: check
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && vars.CF_DEPLOY == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment:
+      name: production
+      url: https://biobuzz.ncssmftc.org/
+    steps:
+      # The checkout supplies wrangler.toml and functions/, which hold the match counter and its D1 binding.
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: site
+          path: dist
+      - uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          command: pages deploy dist --project-name=${{ vars.CF_PAGES_PROJECT }} --branch=main

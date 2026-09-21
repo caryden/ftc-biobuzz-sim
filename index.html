@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>NCSSM FTC BIOBUZZ Lab</title>
+<meta name="description" content="A BIOBUZZ match simulator, an interactive results lab, and ten lessons for FTC teams, from the students and mentors of NCSSM FTC teams 5064, 8569, and 22377." />
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap" />
+<style>
+  :root { --ground: #eef1f4; --panel: #ffffff; --ink: #15202b; --dim: #55626f; --grid: #c5ced8; --faint: #dde3e9; --red: #d8342a; --blue: #2f5fd0; --you: #b88a00;
+    --display: "Barlow Condensed", "Arial Narrow", sans-serif; --body: "IBM Plex Sans", system-ui, sans-serif; --mono: "IBM Plex Mono", ui-monospace, Menlo, monospace; }
+  @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --ground: #12171d; --panel: #1a212a; --ink: #e7ecf2; --dim: #98a5b3; --grid: #36424f; --faint: #232c37; --red: #f0574c; --blue: #6b93ff; --you: #f2c230; } }
+  :root[data-theme="dark"] { --ground: #12171d; --panel: #1a212a; --ink: #e7ecf2; --dim: #98a5b3; --grid: #36424f; --faint: #232c37; --red: #f0574c; --blue: #6b93ff; --you: #f2c230; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--ground); color: var(--ink); font: 16px/1.6 var(--body); padding-inline: 20px; padding-block: 0 64px; }
+  main, nav, footer { max-width: 1080px; margin-inline: auto; }
+  nav { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 22px; padding-block: 16px; border-bottom: 1px solid var(--grid); font: 500 13px var(--mono); letter-spacing: .04em; }
+  nav a { color: var(--dim); text-decoration: none; } nav a:hover { color: var(--ink); } nav .brand { font: 700 20px var(--display); letter-spacing: .02em; text-transform: uppercase; color: var(--ink); margin-right: auto; }
+  a:focus-visible { outline: 2px solid var(--you); outline-offset: 2px; }
+  header { padding-block: 48px 8px; display: flex; flex-direction: column; gap: 14px; }
+  .eyebrow { font: 500 12px var(--mono); letter-spacing: .14em; text-transform: uppercase; color: var(--dim); }
+  h1 { font: 700 clamp(44px, 8vw, 84px)/0.98 var(--display); text-transform: uppercase; margin: 0; text-wrap: balance; } h1 span { color: var(--you); font-variant-numeric: tabular-nums; }
+  .lede { font-size: 19px; color: var(--dim); max-width: 60ch; margin: 0; }
+  .teams { display: flex; flex-wrap: wrap; gap: 8px; } .teams b { font: 700 18px var(--display); letter-spacing: .04em; color: #fff; padding: 2px 12px; border-radius: 3px; } .teams b:nth-child(odd) { background: var(--red); } .teams b:nth-child(even) { background: var(--blue); }
+  .doors { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 18px; margin-top: 36px; }
+  .door { display: flex; flex-direction: column; gap: 10px; background: var(--panel); border: 1px solid var(--faint); border-top: 4px solid var(--ink); border-radius: 4px; padding: 20px; color: inherit; text-decoration: none; }
+  .door:hover { border-top-color: var(--you); } .door h2 { font: 700 30px/1.05 var(--display); text-transform: uppercase; margin: 0; } .door p { margin: 0; color: var(--dim); font-size: 15px; }
+  .door .go { margin-top: auto; font: 500 13px var(--mono); letter-spacing: .04em; color: var(--ink); } .door .fig { font: 700 44px/1 var(--display); color: var(--you); font-variant-numeric: tabular-nums; }
+  section.found { margin-top: 56px; display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 24px; border-top: 3px solid var(--ink); padding-top: 24px; }
+  .found h2 { grid-column: 1 / -1; font: 700 30px var(--display); text-transform: uppercase; margin: 0; } .found div { display: flex; flex-direction: column; gap: 4px; } .found b { font: 700 40px/1 var(--display); font-variant-numeric: tabular-nums; } .found b.minus { color: var(--red); } .found b.plus { color: var(--blue); } .found span { color: var(--dim); font-size: 15px; }
+  :root:not([data-units="us"]) .u-us { display: none; } :root[data-units="us"] .u-si { display: none; }
+  .units { display: inline-flex; border: 1px solid var(--grid); border-radius: 999px; overflow: hidden; } .units button { font: 500 12px var(--mono); letter-spacing: .04em; color: var(--dim); background: none; border: 0; padding: 4px 10px; cursor: pointer; }
+  .units button[aria-pressed="true"] { background: var(--ink); color: var(--ground); } .units button:focus-visible { outline: 2px solid var(--you); outline-offset: -2px; }
+  footer { margin-top: 56px; border-top: 1px solid var(--grid); padding-top: 16px; color: var(--dim); font-size: 13px; }
+</style>
+</head>
+<body>
+<nav aria-label="Site"><a class="brand" href="/">NCSSM FTC · BIOBUZZ</a><a href="/sim/">Simulator</a><a href="/lab/">Match Lab</a><a href="/lessons/">Ten lessons</a><span class="units" role="group" aria-label="Units"><button type="button" data-setunits="metric">Metric</button><button type="button" data-setunits="us">US</button></span></nav>
+<main>
+  <header>
+    <div class="eyebrow"><i>FIRST</i> Tech Challenge 2026-2027 · BIOBUZZ</div>
+    <h1><span id="count">3,468</span> matches played so far…</h1>
+    <p class="lede">We are the students and mentors of the three FTC teams at NCSSM. We built a physics simulator of this season's game, ran thousands of matches in it, and changed one thing at a time. This is what we learned, and the tools that we used, for any team that wants them.</p>
+    <div class="teams" aria-label="Our teams"><b>5064</b><b>8569</b><b>22377</b></div>
+  </header>
+
+  <div class="doors">
+    <a class="door" href="/lessons/"><div class="fig">10</div><h2>Ten lessons</h2><p>What to build, what to practice, and how to plan a match. Each lesson gives the advice, the numbers, and something to try at practice.</p><span class="go">Read the lessons →</span></a>
+    <a class="door" href="/lab/"><div class="fig">65</div><h2>Match Lab</h2><p>Configure an alliance and see its likely scores and its chance of beating an opponent. All 65 setups that we tested are there, with a dot for every match.</p><span class="go">Open the lab →</span></a>
+    <a class="door" href="/sim/"><div class="fig">2:30</div><h2>Simulator</h2><p>Watch four robots play a full match on the official field, or drive one with a controller. Configure each robot, and then review and annotate the match. Best on a laptop: the field model is 17 MB.</p><span class="go">Start a match →</span></a>
+  </div>
+
+  <section class="found" aria-label="What we found">
+    <h2>Four numbers to start with</h2>
+    <div><b class="minus">-142</b><span>points per match when a launcher is 3 times less repeatable. Nothing else that we tested comes close.</span></div>
+    <div><b class="minus">-81</b><span>points for an alliance that runs no AUTO. Two solo routines that ignore each other lose 49.</span></div>
+    <div><b class="plus">73%</b><span>of TELEOP is driving, and 5% is launching. A shorter trip buys more than a faster shooter.</span></div>
+    <div><b class="plus"><span class="u-si">+5</span><span class="u-us">+2.4</span></b><span>points for every <span class="u-si">kilogram</span><span class="u-us">pound</span> that you leave off the robot. Top speed bought nothing.</span></div>
+  </section>
+</main>
+<footer><p>A project of the students and mentors of the NCSSM FTC teams 5064, 8569, and 22377. This site isn't affiliated with or endorsed by <i>FIRST</i>. <i>FIRST</i> and <i>FIRST</i> Tech Challenge are trademarks of For Inspiration and Recognition of Science and Technology.</p></footer>
+<script>
+  // Display units: metric unless the reader chose US. The choice is shared with the other pages through the browser's storage.
+  (function () { var u = 'metric'; try { if (localStorage.getItem('biobuzz.units') === 'us') u = 'us'; } catch (e) {}
+    function apply(v) { document.documentElement.dataset.units = v; document.querySelectorAll('[data-setunits]').forEach(function (b) { b.setAttribute('aria-pressed', String(b.dataset.setunits === v)); }); }
+    apply(u); document.addEventListener('click', function (e) { var b = e.target.closest('[data-setunits]'); if (!b) return; try { localStorage.setItem('biobuzz.units', b.dataset.setunits); } catch (err) {} apply(b.dataset.setunits); }); })();
+  // The live count of simulated matches: ours, plus every match that a visitor finishes in the simulator.
+  fetch('/api/matches').then(r => (r.ok ? r.json() : null)).then(d => { if (d && d.count) { document.getElementById('count').textContent = d.count.toLocaleString('en-US'); } }).catch(() => {});
+</script>
+</body>
+</html>

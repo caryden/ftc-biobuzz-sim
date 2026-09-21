@@ -1,0 +1,42 @@
+{
+ "trace": "20260920-165529",
+ "settings": {
+  "match": "full",
+  "stage": "qual",
+  "referee": "rule",
+  "R0": "plate 8569 · Planner · catapult · AUTO right harvest · tips only · 500 rpm · 14 in. · 20 lb",
+  "R1": "plate 5064 · Planner · catapult · AUTO default · tips only · 600 rpm · 14 in. · 20 lb · dual intake",
+  "B0": "plate B0 · Planner · dual · AUTO default · tips only · 435 rpm · 16.9 in. · 28.7 lb",
+  "B1": "plate B1 · Planner · dual · AUTO default · tips only · 435 rpm · 16.9 in. · 28.7 lb"
+ },
+ "notes": [
+  {
+   "t": 85.98,
+   "clock": 72.03,
+   "phase": "teleop",
+   "robot": "R1",
+   "text": "bot moved here with full load and partner had none. waiting for a tip."
+  },
+  {
+   "t": 87.13,
+   "clock": 70.88,
+   "phase": "teleop",
+   "robot": null,
+   "text": ""
+  },
+  {
+   "t": 102.96,
+   "clock": 55.05,
+   "phase": "teleop",
+   "robot": "R0",
+   "text": "pushing a partner - let the closer bot shoot first. do not push them"
+  },
+  {
+   "t": 103.06,
+   "clock": 54.95,
+   "phase": "teleop",
+   "robot": null,
+   "text": ""
+  }
+ ]
+}

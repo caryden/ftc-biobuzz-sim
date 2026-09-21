@@ -1,0 +1,36 @@
+{
+ "trace": "20260920-125457",
+ "settings": {
+  "match": "full",
+  "driver": "jev",
+  "auto": "cycle_and_park",
+  "partners": "on",
+  "opponent": "scripted",
+  "partnerPlan": "45",
+  "shooter": "dual",
+  "strategy": "Keep tipping the HIVE for the whole MATCH. Never work FLOWERS. Use own NECTAR for TIPS."
+ },
+ "notes": [
+  {
+   "t": 42.9,
+   "clock": 115.11,
+   "phase": "teleop",
+   "robot": "R1",
+   "text": "pinning yoru ualliance partner"
+  },
+  {
+   "t": 89,
+   "clock": 69.01,
+   "phase": "teleop",
+   "robot": "R0",
+   "text": "pinning/pushing alliance partner not good"
+  },
+  {
+   "t": 101.19,
+   "clock": 56.82,
+   "phase": "teleop",
+   "robot": "R1",
+   "text": "it has a high cell in the hive, it has the elements to make it tip and it drives away???"
+  }
+ ]
+}

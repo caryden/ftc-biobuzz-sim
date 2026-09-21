@@ -1,0 +1,29 @@
+{
+ "trace": "20260920-123408",
+ "settings": {
+  "match": "full",
+  "driver": "jev",
+  "auto": "cycle_and_park",
+  "partners": "on",
+  "opponent": "scripted",
+  "partnerPlan": "45",
+  "shooter": "dual",
+  "strategy": "Keep tipping the HIVE for the whole MATCH. Never work FLOWERS. Use own NECTAR for TIPS."
+ },
+ "notes": [
+  {
+   "t": 132.54,
+   "clock": 25.47,
+   "phase": "teleop",
+   "robot": "R0",
+   "text": "fighting with partner to shoot."
+  },
+  {
+   "t": 184.62,
+   "clock": 0,
+   "phase": "post",
+   "robot": "R0",
+   "text": "failed part coordination"
+  }
+ ]
+}

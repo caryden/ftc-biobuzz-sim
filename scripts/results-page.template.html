@@ -1,0 +1,285 @@
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>BIOBUZZ Match Lab</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+  :root {
+    --ground: #eef1f4; --panel: #ffffff; --ink: #15202b; --dim: #55626f; --grid: #c5ced8; --faint: #dde3e9;
+    --red: #d8342a; --blue: #2f5fd0; --you: #b88a00; --you-fill: rgba(217,164,0,.28); --opp-fill: rgba(47,95,208,.20);
+    --good: #1d8a4e; --bad: #c0392b; --noise: rgba(85,98,111,.12);
+    --display: "Barlow Condensed", "Arial Narrow", sans-serif; --body: "IBM Plex Sans", system-ui, sans-serif; --mono: "IBM Plex Mono", ui-monospace, Menlo, monospace;
+  }
+  @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+    --ground: #12171d; --panel: #1a212a; --ink: #e7ecf2; --dim: #98a5b3; --grid: #36424f; --faint: #232c37;
+    --red: #f0574c; --blue: #6b93ff; --you: #f2c230; --you-fill: rgba(242,194,48,.26); --opp-fill: rgba(107,147,255,.22);
+    --good: #4cc47f; --bad: #f0746a; --noise: rgba(152,165,179,.13); } }
+  :root[data-theme="dark"] {
+    --ground: #12171d; --panel: #1a212a; --ink: #e7ecf2; --dim: #98a5b3; --grid: #36424f; --faint: #232c37;
+    --red: #f0574c; --blue: #6b93ff; --you: #f2c230; --you-fill: rgba(242,194,48,.26); --opp-fill: rgba(107,147,255,.22);
+    --good: #4cc47f; --bad: #f0746a; --noise: rgba(152,165,179,.13); }
+  * { box-sizing: border-box; }
+  body { background: var(--ground); color: var(--ink); font: 15px/1.55 var(--body); padding-inline: 20px; padding-block: 0 64px; }
+  main { max-width: 1080px; margin-inline: auto; display: flex; flex-direction: column; gap: 44px; padding-top: 28px; }
+  h1, h2, h3 { font-family: var(--display); font-weight: 700; letter-spacing: .01em; line-height: 1.05; margin: 0; text-wrap: balance; }
+  h1 { font-size: clamp(38px, 6vw, 60px); text-transform: uppercase; } h2 { font-size: 30px; text-transform: uppercase; } h3 { font-size: 20px; font-weight: 600; }
+  h2 { scroll-margin-top: 16px; } .anchor { font: 500 .6em var(--mono); color: var(--grid); text-decoration: none; margin-left: 6px; vertical-align: middle; } h2:hover .anchor, .anchor:focus-visible { color: var(--blue); } @media (hover: none) { .anchor { color: var(--dim); } }
+  p { margin: 0; max-width: 68ch; } .lede { font-size: 17px; color: var(--dim); } .note { color: var(--dim); font-size: 13px; }
+  header { display: flex; flex-direction: column; gap: 12px; border-bottom: 3px solid var(--ink); padding-bottom: 20px; }
+  .eyebrow { font: 500 12px var(--mono); letter-spacing: .14em; text-transform: uppercase; color: var(--dim); }
+  section { display: flex; flex-direction: column; gap: 16px; }
+  .lab { display: grid; grid-template-columns: minmax(0, 360px) minmax(0, 1fr); gap: 20px; align-items: start; }
+  @media (max-width: 820px) { .lab { grid-template-columns: minmax(0, 1fr); } }
+  .panel { background: var(--panel); border: 1px solid var(--faint); border-radius: 6px; padding: 16px; }
+  .controls { display: flex; flex-direction: column; gap: 10px; }
+  .controls h3 { margin-top: 6px; border-top: 1px solid var(--faint); padding-top: 10px; } .controls h3:first-child { margin-top: 0; border-top: 0; padding-top: 0; }
+  label { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 150px); gap: 10px; align-items: center; font-size: 13px; color: var(--dim); }
+  label output { font: 500 12px var(--mono); color: var(--ink); justify-self: end; }
+  .slider { grid-template-columns: minmax(0, 1fr) auto; } .slider input { grid-column: 1 / -1; width: 100%; accent-color: var(--you); }
+  .errhead { display: flex; justify-content: space-between; align-items: center; gap: 8px; font-size: 13px; color: var(--dim); } .errhead .opps button { padding: 3px 10px; }
+  input[type=number] { width: 100%; font: 13px var(--mono); color: var(--ink); background: var(--ground); border: 1px solid var(--grid); border-radius: 4px; padding: 5px 6px; }
+  select { width: 100%; font: 13px var(--body); color: var(--ink); background: var(--ground); border: 1px solid var(--grid); border-radius: 4px; padding: 5px 6px; }
+  select:focus-visible, input:focus-visible, button:focus-visible { outline: 2px solid var(--you); outline-offset: 2px; }
+  .readout { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+  @media (max-width: 560px) { .readout { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+  .stat { display: flex; flex-direction: column; gap: 2px; } .stat b { font: 700 38px/1 var(--display); font-variant-numeric: tabular-nums; } .stat span { font: 500 11px var(--mono); letter-spacing: .08em; text-transform: uppercase; color: var(--dim); }
+  .stat.you b { color: var(--you); } .stat.opp b { color: var(--blue); }
+  .opps { display: flex; flex-wrap: wrap; gap: 6px; }
+  .opps button, .tabs button { font: 500 12px var(--mono); letter-spacing: .04em; color: var(--ink); background: var(--ground); border: 1px solid var(--grid); border-radius: 999px; padding: 6px 12px; cursor: pointer; }
+  .opps button[aria-pressed="true"], .tabs button[aria-pressed="true"] { background: var(--ink); color: var(--ground); border-color: var(--ink); }
+  .tabs { display: flex; flex-wrap: wrap; gap: 6px; }
+  svg { display: block; width: 100%; height: auto; } svg text { font-family: var(--mono); fill: var(--dim); font-size: 11px; } svg .lbl { fill: var(--ink); font-size: 12px; font-family: var(--body); }
+  .wide { overflow-x: auto; } .wide svg { min-width: 640px; }
+  .parts { font: 12px/1.6 var(--mono); color: var(--dim); display: flex; flex-wrap: wrap; gap: 4px 14px; } .parts b { color: var(--ink); font-weight: 500; }
+  .legend { display: flex; flex-wrap: wrap; gap: 14px; font: 12px var(--mono); color: var(--dim); } .legend i { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 6px; vertical-align: -1px; }
+  .two { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 20px; }
+  table { border-collapse: collapse; font-size: 13px; width: 100%; } th, td { text-align: right; padding: 5px 8px; border-bottom: 1px solid var(--faint); font-variant-numeric: tabular-nums; } th:first-child, td:first-child { text-align: left; } th { font: 500 11px var(--mono); letter-spacing: .06em; text-transform: uppercase; color: var(--dim); }
+  footer { border-top: 1px solid var(--grid); padding-top: 16px; color: var(--dim); font-size: 13px; display: flex; flex-direction: column; gap: 8px; }
+  code { font: 12px var(--mono); background: var(--faint); padding: 1px 5px; border-radius: 3px; }
+</style>
+
+<!--NAV-->
+<main>
+<header>
+  <div class="eyebrow">FIRST Tech Challenge 2026-2027 · BIOBUZZ · <span id="nmatches"></span> simulated matches</div>
+  <h1>Match Lab</h1>
+  <p class="lede">Set up your alliance and see the scores that it is likely to post, and how often it beats an opponent. We measured every effect below in a physics simulator by changing one thing at a time. The estimate stacks those measurements, so read it as a guide, not as a promise.</p>
+</header>
+
+<section aria-labelledby="configure">
+  <h2 id="configure">Your alliance against an opponent <a class="anchor" href="#configure" aria-label="Link to this section">#</a></h2>
+  <div class="lab">
+    <form class="panel controls" id="form" onsubmit="return false">
+      <h3>Launcher</h3>
+      <div class="errhead"><span>Shot-to-shot error, 1 SD</span><span class="opps" role="group" aria-label="Launcher error presets"><button type="button" data-err="1">1x</button><button type="button" data-err="3">3x</button><button type="button" data-err="5">5x</button></span></div>
+      <label for="elev">Elevation, ° <input id="elev" type="number" min="0.5" max="10" step="0.1" value="1"></label>
+      <label for="azim">Azimuth, ° <input id="azim" type="number" min="0.5" max="12" step="0.1" value="1.2"></label>
+      <label for="speed"><span id="l-speed">Launch speed, m/s</span> <input id="speed" type="number" min="0.02" max="1" step="0.01" value="0.08"></label>
+      <p class="note" id="o-spread"></p>
+      <label for="release">Release <select id="release"><option value="dual">Two at a time, 0.3 s apart</option><option value="cat">All four at once</option><option value="fast">Two at a time, 0.15 s apart</option><option value="fifo">One at a time</option><option value="slow">Two at a time, 0.6 s apart</option></select></label>
+      <label for="side">Shooter faces <select id="side"><option value="rear">Away from the intake</option><option value="front">The same way as the intake</option></select></label>
+      <label for="standoff">Launches from <select id="standoff"><option value="mid">The middle of the scoring window</option><option value="edge">An edge of the window</option></select></label>
+      <h3>Chassis</h3>
+      <label class="slider" for="mass">Mass <output id="o-mass"></output><input id="mass" type="range" min="7" max="17" step="0.5" value="10"></label>
+      <label class="slider" for="size">Square chassis <output id="o-size"></output><input id="size" type="range" min="30" max="46" step="1" value="38"></label>
+      <label class="slider" for="rpm">Wheel speed <output id="o-rpm"></output><input id="rpm" type="range" min="312" max="850" step="1" value="600"></label>
+      <h3>Intake</h3>
+      <label for="intake">Layout <select id="intake"><option value="front">Front, narrower than the chassis</option><option value="frontwide">Front, full width</option><option value="dual">Front and rear</option><option value="dualwide">Front and rear, full width</option></select></label>
+      <label class="slider" for="rel">Pickup success <output id="o-rel"></output><input id="rel" type="range" min="60" max="95" step="5" value="95"></label>
+      <h3>Match plan</h3>
+      <label for="auto">AUTO <select id="auto"><option value="pair">A planned pair</option><option value="sololeave">One solo routine, partner parks</option><option value="solo">Two solo routines</option><option value="leave">Both only LEAVE and PARK</option><option value="none">No AUTO</option></select></label>
+      <label for="teleop">TELEOP <select id="teleop"><option value="tips">Both robots keep tipping</option><option value="p30">Partner on FLOWERS from 30 s</option><option value="p45">Partner on FLOWERS from 45 s</option><option value="b30">Both on FLOWERS from 30 s</option><option value="b45">Both on FLOWERS from 45 s</option><option value="b66">Both on FLOWERS from 66 s</option></select></label>
+      <label for="defense">Defense <select id="defense"><option value="none">None</option><option value="full">One robot defends all of TELEOP</option></select></label>
+    </form>
+    <div style="display:flex;flex-direction:column;gap:14px">
+      <div class="opps" role="group" aria-label="Opponent" id="opps"></div>
+      <div class="panel" style="display:flex;flex-direction:column;gap:14px">
+        <div class="readout">
+          <div class="stat you"><b id="s-you"></b><span>Your score</span></div>
+          <div class="stat opp"><b id="s-opp"></b><span>Opponent</span></div>
+          <div class="stat"><b id="s-margin"></b><span>Expected margin</span></div>
+          <div class="stat"><b id="s-win"></b><span>You win</span></div>
+        </div>
+        <svg id="dist" viewBox="0 0 680 250" role="img" aria-label="Score distributions of your alliance and the opponent"></svg>
+        <svg id="margin" viewBox="0 0 680 120" role="img" aria-label="Distribution of the score margin"></svg>
+        <div class="parts" id="parts"></div>
+      </div>
+      <p class="note">Scores are treated as normal distributions, and the two alliances as independent. Your spread is 7 points plus 7% of your mean, fitted to the match data. Gains shrink as they stack: the factor is fitted to one combined build, which scored 508 where the sum of its parts says 538. A launcher that is tighter than the reference isn't measured, so it counts as the reference.</p>
+    </div>
+  </div>
+</section>
+
+<section aria-labelledby="effects">
+  <h2 id="effects">What each choice is worth <a class="anchor" href="#effects" aria-label="Link to this section">#</a></h2>
+  <p>Points per alliance against the baseline robot, with one standard error on each side. The shaded band is 25 points: inside it, 12 matches can't tell a change from luck.</p>
+  <div class="panel wide"><svg id="fx" role="img" aria-label="Effect of every configuration against the baseline"></svg></div>
+</section>
+
+<section aria-labelledby="matches">
+  <h2 id="matches">Every match, one dot <a class="anchor" href="#matches" aria-label="Link to this section">#</a></h2>
+  <p>Each dot is one match of the red alliance with that change, in bins of 20 points. The tick is the mean, and the line is the baseline mean. A wide row is a robot whose results you can't count on.</p>
+  <div class="tabs" role="group" aria-label="Experiment group" id="tabs"></div>
+  <div class="panel wide"><svg id="hist" role="img" aria-label="Match scores per configuration"></svg></div>
+</section>
+
+<section aria-labelledby="where-points-come-from">
+  <h2 id="where-points-come-from">Where the points come from <a class="anchor" href="#where-points-come-from" aria-label="Link to this section">#</a></h2>
+  <div class="two">
+    <div class="panel" style="display:flex;flex-direction:column;gap:10px"><h3>A robot's 120 s of TELEOP</h3><svg id="time" viewBox="0 0 480 190" role="img" aria-label="Time account"></svg><p class="note">Driving is 73% of the match and launching is 5%. A shorter trip buys more than a faster shooter.</p></div>
+    <div class="panel" style="display:flex;flex-direction:column;gap:10px"><h3>Better decisions, the same robot</h3><svg id="loop" viewBox="0 0 480 190" role="img" aria-label="Combined score after each kept change"></svg><p class="note">Combined score of both alliances on 24 fixed seeds, after each change that was kept. The last step is the lighter, smaller robot.</p></div>
+    <div class="panel" style="display:flex;flex-direction:column;gap:10px"><h3>When one robot defends</h3><svg id="def" viewBox="0 0 480 190" role="img" aria-label="Defense"></svg><p class="note">Points that the defender gives up against points that it takes from the opponent. A weak alliance still lost all 24 matches with a defender. The mixed alliance, a strong robot with a weak partner, went from 0 wins to 15 of 24. The only contact rule in the simulator is the PIN rule, G421, and the opponents here don't adapt to a defender.</p></div>
+    <div class="panel" style="display:flex;flex-direction:column;gap:10px"><h3>Your score doesn't depend on theirs</h3><div class="wide"><table id="indep"></table></div><p class="note">Without defense, an alliance scores the same alone, against itself, and against a stronger opponent. That is why the lab models each alliance from its own robot.</p></div>
+  </div>
+</section>
+
+<footer>
+  <p>The baseline robot is <span id="f-base"></span>, and geared for 600 rpm at the wheel, with a rear-facing shooter and a 95% reliable intake. The meta alliance is two robots with a four-element catapult, <span id="f-meta"></span>, 500 rpm, and intakes at both ends.</p>
+  <p>The simulator uses the listed ball weights but estimates how the balls bounce and roll. It plays no defense unless you choose it, and doesn't check whether a design can be built. The written lessons are in <code>docs/top-ten.md</code>, and the data is in <code>experiments/</code> of the repository.</p>
+</footer>
+</main>
+<!--FOOT-->
+
+<script>
+const DATA = /*DATA*/;
+const $ = id => document.getElementById(id), NS = 'http://www.w3.org/2000/svg';
+const el = (tag, attrs, text) => { const e = document.createElementNS(NS, tag); for (const k in attrs) e.setAttribute(k, attrs[k]); if (text !== undefined) e.textContent = text; return e; };
+const mean = v => v.reduce((a, b) => a + b, 0) / v.length, sd = v => { const m = mean(v); return Math.sqrt(v.reduce((a, b) => a + (b - m) ** 2, 0) / Math.max(1, v.length - 1)); }, se = v => sd(v) / Math.sqrt(v.length);
+const cfg = id => DATA.configs.find(c => c.id === id), BASE = mean(cfg('shoot-dual').red), BASE_SE = se(cfg('shoot-dual').red);
+const delta = id => mean(cfg(id).red) - BASE, lerp = (pts, x) => { if (x <= pts[0][0]) return pts[0][1]; for (let i = 1; i < pts.length; i++) if (x <= pts[i][0]) { const [x0, y0] = pts[i - 1], [x1, y1] = pts[i]; return y0 + (y1 - y0) * (x - x0) / (x1 - x0); } return pts[pts.length - 1][1]; };
+$('nmatches').textContent = (DATA.matches.design + DATA.matches.loop + DATA.matches.first).toLocaleString('en-US');
+
+// ---------- the estimate ----------
+const KG = 0.45359237, IN = 0.0254;
+// Display units: metric by default, shared with the rest of the site through the browser's storage.
+let UNITS = 'metric'; try { if (localStorage.getItem('biobuzz.units') === 'us') UNITS = 'us'; } catch {}
+const massText = kg => (UNITS === 'us' ? `${Math.round(kg / KG)} lb` : `${kg} kg`), sizeText = cm => (UNITS === 'us' ? `${(cm / 2.54).toFixed(1)} in.` : `${cm} cm`);
+// The labels of the configurations carry both units. This keeps the one that the reader chose.
+const unitLabel = s => s.replace(/(\d+(?:\.\d+)?) in\. \((0\.\d+) m(, baseline)?\)/, (m, a, b, c) => (UNITS === 'us' ? `${a} in.` : `${Math.round(b * 100)} cm`) + (c ? ' (baseline)' : '')).replace(/(\d+) kg \(([\d.]+) lb\)/, (m, a, b) => (UNITS === 'us' ? `${b} lb` : `${a} kg`)).replace(/(\d+) kg robot/, (m, a) => (UNITS === 'us' ? `${Math.round(a / KG)} lb robot` : `${a} kg robot`)).replace(/(\d+) in\. chassis/, (m, a) => (UNITS === 'us' ? `${a} in. chassis` : `${Math.round(a * 2.54)} cm chassis`));
+// Gains shrink as they stack. The factor is fitted to the combined build: parts that sum to 126 points measured 90.
+const STACK = 0.0023;
+function estimate(c) {
+  const parts = [];
+  const add = (name, v) => { if (Math.abs(v) >= 0.5) parts.push([name, v]); };
+  add('release', { dual: 0, cat: delta('shoot-catapult'), fast: delta('shoot-fast'), fifo: delta('shoot-fifo'), slow: delta('shoot-slow') }[c.release]);
+  const dual = c.intake === 'dual' || c.intake === 'dualwide';
+  // With intakes at both ends, the shooter's side stops mattering: 434 at the front against 438 at the rear.
+  if (c.side === 'front') add('shooter side', dual ? delta('intake-dual-front-shooter') - delta('intake-dual') : delta('shoot-front'));
+  add('mass', lerp([[7, delta('mass-7')], [10, 0], [13, delta('mass-13')], [17, delta('mass-17')]], c.mass)); // kilograms
+  add('size', lerp([[0.30, delta('size-30')], [0.34, delta('size-34')], [0.381, 0], [0.43, delta('size-43')], [0.457, delta('size-46')]], c.size / 100)); // The slider is in centimeters.
+  // Gearing is flat from 312 rpm to 700 rpm: every row is inside the noise. Only 850 rpm loses points.
+  add('gearing', lerp([[700, 0], [850, delta('drive-850')]], c.rpm));
+  add('intake', { front: 0, frontwide: delta('size-38-wide-intake'), dual: delta('intake-dual'), dualwide: delta('intake-dual-wide') }[c.intake]);
+  add('pickup success', lerp([[60, delta('intake-60')], [80, delta('intake-80')], [95, 0]], c.rel));
+  add('AUTO', { pair: 0, sololeave: delta('auto-solo-leave'), solo: delta('auto-naive'), leave: delta('auto-leave-leave'), none: delta('auto-none') }[c.auto]);
+  add('TELEOP plan', { tips: 0, p30: delta('strat-tips-f30'), p45: delta('strat-tips-f45'), b30: delta('strat-f30-f30'), b45: delta('strat-f45-f45'), b66: delta('strat-f66-f66') }[c.teleop]);
+  const pos = parts.filter(p => p[1] > 0).reduce((a, p) => a + p[1], 0), neg = parts.filter(p => p[1] < 0).reduce((a, p) => a + p[1], 0);
+  let m = BASE + pos * Math.max(0.6, 1 - STACK * pos) + neg;
+  const spreadF = lerp([[1, 1], [3, mean(cfg('acc-x3').red) / BASE], [5, mean(cfg('acc-x5').red) / BASE], [8, mean(cfg('acc-x8').red) / BASE]], c.spread);
+  m *= spreadF; if (c.spread > 1) parts.push(['launch spread', m - m / spreadF]);
+  if (c.standoff === 'edge') { const f = mean(cfg('path-standoff-near').red.concat(cfg('path-standoff-near').blue)) / mean(cfg('path-base').red.concat(cfg('path-base').blue)); parts.push(['window edge', m * f - m]); m *= f; }
+  return { mean: Math.max(40, m), parts };
+}
+const sdOf = m => 7 + 0.07 * m;
+// A full-time defender gives up 22% of its alliance's score and takes 19% of the opponent's: 92 of 416 and 87 of 413.
+const DEF_OWN = 0.78, DEF_OPP = 0.81;
+const META = { release: 'cat', side: 'rear', standoff: 'mid', mass: 7, size: 30.5, rpm: 500, intake: 'dual', rel: 95, auto: 'pair', teleop: 'tips', spread: 1, defense: 'none' };
+const BASELINE = { release: 'dual', side: 'rear', standoff: 'mid', mass: 10, size: 38.1, rpm: 600, intake: 'front', rel: 95, auto: 'pair', teleop: 'tips', spread: 1, defense: 'none' };
+const phi = z => { const t = 1 / (1 + 0.3275911 * Math.abs(z) / Math.SQRT2), y = 1 - (((((1.061405429 * t - 1.453152027) * t) + 1.421413741) * t - 0.284496736) * t + 0.254829592) * t * Math.exp(-z * z / 2); return 0.5 * (1 + Math.sign(z) * y); };
+const pdf = (x, m, s) => Math.exp(-((x - m) ** 2) / (2 * s * s)) / (s * Math.sqrt(2 * Math.PI));
+
+let opponent = 'baseline';
+const OPPS = [['none', 'No opponent'], ['same', 'The same alliance'], ['baseline', 'The baseline alliance'], ['meta', 'The meta alliance']];
+// The three launcher errors combine into one effective multiple of the reference launcher. The weights come from three
+// measurements at 3 times the reference, one error at a time: launch speed cost 109 points, elevation 62, and azimuth 25.
+const REF = { elev: 1.0, azim: 1.2, speed: 0.08 }, WEIGHT = { elev: 62 / 196, azim: 25 / 196, speed: 109 / 196 };
+const effectiveSpread = (e, a, v) => Math.sqrt(Math.max(1, 1 + WEIGHT.elev * ((e / REF.elev) ** 2 - 1) + WEIGHT.azim * ((a / REF.azim) ** 2 - 1) + WEIGHT.speed * ((v / REF.speed) ** 2 - 1)));
+const speedIn = () => +$('speed').value * (UNITS === 'us' ? 0.3048 : 1);
+function readForm() { const v = id => $(id).value; return { spread: Math.min(8, effectiveSpread(+v('elev'), +v('azim'), speedIn())), release: v('release'), side: v('side'), standoff: v('standoff'), mass: +v('mass'), size: +v('size'), rpm: +v('rpm'), intake: v('intake'), rel: +v('rel'), auto: v('auto'), teleop: v('teleop'), defense: v('defense') }; }
+function curve(svg, x0, x1, W, top, H, m, s, stroke, fill, peak) {
+  const X = x => 40 + (x - x0) / (x1 - x0) * (W - 60), Y = p => top + H - p / peak * H; let d = '';
+  for (let i = 0; i <= 160; i++) { const x = x0 + (x1 - x0) * i / 160; d += `${i ? 'L' : 'M'}${X(x).toFixed(1)},${Y(pdf(x, m, s)).toFixed(1)}`; }
+  svg.append(el('path', { d: `${d}L${X(x1)},${top + H}L${X(x0)},${top + H}Z`, fill, stroke: 'none' }), el('path', { d, fill: 'none', stroke, 'stroke-width': 2 }));
+  svg.append(el('line', { x1: X(m), x2: X(m), y1: Y(pdf(m, m, s)), y2: top + H, stroke, 'stroke-width': 1, 'stroke-dasharray': '3 3' }));
+  return X;
+}
+function axis(svg, X, x0, x1, y, step, fmt) { svg.append(el('line', { x1: X(x0), x2: X(x1), y1: y, y2: y, stroke: 'var(--grid)' })); for (let t = Math.ceil(x0 / step) * step; t <= x1; t += step) { svg.append(el('line', { x1: X(t), x2: X(t), y1: y, y2: y + 4, stroke: 'var(--grid)' })); const tx = el('text', { x: X(t), y: y + 16, 'text-anchor': 'middle' }, fmt ? fmt(t) : t); svg.append(tx); } }
+function update() {
+  const c = readForm(); $('o-spread').textContent = `Together these act like ${c.spread.toFixed(1)} times the reference launcher. Launch speed matters most: at 3 times the reference, it alone costs 109 points, elevation 62, and azimuth 25.`; $('o-mass').textContent = massText(c.mass); $('o-size').textContent = sizeText(c.size); $('o-rpm').textContent = `${c.rpm} rpm`; $('o-rel').textContent = `${c.rel}%`;
+  const mine = estimate(c); let my = mine.mean, opp = opponent === 'none' ? null : estimate(opponent === 'same' ? c : opponent === 'meta' ? META : BASELINE).mean;
+  if (c.defense === 'full') { mine.parts.push(['defender gives up', my * DEF_OWN - my]); my *= DEF_OWN; if (opp !== null) opp *= DEF_OPP; }
+  if (opponent === 'same' && c.defense === 'full') my *= DEF_OPP; // The mirror alliance defends too.
+  const sMy = sdOf(my), sOpp = opp === null ? 0 : sdOf(opp);
+  $('s-you').textContent = Math.round(my); $('s-opp').textContent = opp === null ? '–' : Math.round(opp);
+  const dm = opp === null ? null : my - opp, ds = Math.hypot(sMy, sOpp), win = opp === null ? null : phi(dm / ds);
+  $('s-margin').textContent = dm === null ? '–' : `${dm >= 0 ? '+' : '-'}${Math.abs(Math.round(dm))}`; $('s-win').textContent = win === null ? '–' : `${Math.round(100 * Math.min(0.99, Math.max(0.01, win)))}%`;
+  const svg = $('dist'); svg.replaceChildren(); const lo = Math.min(my - 3.2 * sMy, opp === null ? 1e9 : opp - 3.2 * sOpp), hi = Math.max(my + 3.2 * sMy, opp === null ? -1e9 : opp + 3.2 * sOpp), x0 = Math.max(0, Math.floor(lo / 50) * 50), x1 = Math.ceil(hi / 50) * 50;
+  const peak = Math.max(pdf(my, my, sMy), opp === null ? 0 : pdf(opp, opp, sOpp)) * 1.12; let X;
+  if (opp !== null) curve(svg, x0, x1, 680, 24, 180, opp, sOpp, 'var(--blue)', 'var(--opp-fill)', peak);
+  X = curve(svg, x0, x1, 680, 24, 180, my, sMy, 'var(--you)', 'var(--you-fill)', peak); axis(svg, X, x0, x1, 204, (x1 - x0) > 500 ? 100 : 50);
+  svg.append(el('text', { x: X(my), y: 16, 'text-anchor': 'middle', class: 'lbl' }, `you ${Math.round(my)} ± ${Math.round(sMy)}`)); if (opp !== null && Math.abs(X(opp) - X(my)) > 90) svg.append(el('text', { x: X(opp), y: 16, 'text-anchor': 'middle', class: 'lbl' }, `opponent ${Math.round(opp)} ± ${Math.round(sOpp)}`));
+  svg.append(el('text', { x: 360, y: 240, 'text-anchor': 'middle' }, 'match score, points'));
+  const ms = $('margin'); ms.replaceChildren();
+  if (dm !== null) { const a = Math.floor((dm - 3.2 * ds) / 50) * 50, b = Math.ceil((dm + 3.2 * ds) / 50) * 50, pk = pdf(dm, dm, ds) * 1.15, Xm = x => 40 + (x - a) / (b - a) * 620, Ym = p => 84 - p / pk * 66; let dWin = '', dAll = '';
+    for (let i = 0; i <= 160; i++) { const x = a + (b - a) * i / 160, pt = `${Xm(x).toFixed(1)},${Ym(pdf(x, dm, ds)).toFixed(1)}`; dAll += `${i ? 'L' : 'M'}${pt}`; if (x >= 0) dWin += `${dWin ? 'L' : `M${Xm(Math.max(0, a)).toFixed(1)},84L`}${pt}`; }
+    if (dWin) ms.append(el('path', { d: `${dWin}L${Xm(b)},84Z`, fill: 'var(--you-fill)', stroke: 'none' })); ms.append(el('path', { d: dAll, fill: 'none', stroke: 'var(--ink)', 'stroke-width': 1.5 }));
+    if (a < 0 && b > 0) ms.append(el('line', { x1: Xm(0), x2: Xm(0), y1: 12, y2: 84, stroke: 'var(--ink)', 'stroke-width': 1 })); axis(ms, Xm, a, b, 84, (b - a) > 500 ? 100 : 50, t => (t > 0 ? `+${t}` : t)); ms.append(el('text', { x: 360, y: 116, 'text-anchor': 'middle' }, 'your score minus theirs: the shaded part is a win')); }
+  else ms.append(el('text', { x: 340, y: 60, 'text-anchor': 'middle' }, 'Pick an opponent to see the margin.'));
+  $('parts').replaceChildren(...[['baseline', BASE], ...mine.parts].map(([n, v], i) => { const s = document.createElement('span'); s.innerHTML = `${n} <b>${i ? (v >= 0 ? '+' : '-') + Math.abs(Math.round(v)) : Math.round(v)}</b>`; return s; }));
+}
+$('opps').append(...OPPS.map(([k, t]) => { const b = document.createElement('button'); b.type = 'button'; b.textContent = t; b.id = `opp-${k}`; b.setAttribute('aria-pressed', String(k === opponent)); b.onclick = () => { opponent = k; for (const q of $('opps').children) q.setAttribute('aria-pressed', String(q === b)); update(); }; return b; }));
+$('form').addEventListener('input', update);
+const setSpeedField = mps => { $('speed').value = UNITS === 'us' ? (mps / 0.3048).toFixed(2) : mps.toFixed(2); $('l-speed').textContent = `Launch speed, ${UNITS === 'us' ? 'ft/s' : 'm/s'}`; };
+document.querySelectorAll('[data-err]').forEach(b => { b.onclick = () => { const k = +b.dataset.err; $('elev').value = (REF.elev * k).toFixed(1); $('azim').value = (REF.azim * k).toFixed(1); setSpeedField(REF.speed * k); update(); }; });
+
+// ---------- what each choice is worth ----------
+const GROUPS = [['accuracy', 'Launcher and intake reliability'], ['auto', 'AUTO'], ['strategy', 'TELEOP plan'], ['shooter', 'Shooter'], ['drivetrain', 'Gearing and mass'], ['size', 'Size'], ['intake', 'Intake and shooter layout']];
+const isBase = c => Math.abs(mean(c.red) - BASE) < 1e-9;
+function drawEffects() {
+  const svg = $('fx'), rows = []; for (const [g, title] of GROUPS) { rows.push({ title }); for (const c of DATA.configs.filter(q => q.group === g && !isBase(q)).sort((a, b) => mean(b.red) - mean(a.red))) rows.push({ c }); }
+  const W = 1040, L = 330, R = 60, rowH = 19, H = rows.length * rowH + 50, lo = -330, hi = 70, X = v => L + (v - lo) / (hi - lo) * (W - L - R); svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
+  svg.append(el('rect', { x: X(-25), y: 22, width: X(25) - X(-25), height: H - 50, fill: 'var(--noise)' })); for (let t = -300; t <= 50; t += 50) { svg.append(el('line', { x1: X(t), x2: X(t), y1: 22, y2: H - 28, stroke: t === 0 ? 'var(--ink)' : 'var(--faint)', 'stroke-width': 1 })); svg.append(el('text', { x: X(t), y: H - 12, 'text-anchor': 'middle' }, t > 0 ? `+${t}` : t)); }
+  rows.forEach((r, i) => { const y = 34 + i * rowH; if (r.title) { svg.append(el('text', { x: 8, y: y + 4, class: 'lbl', style: 'font-family:var(--display);font-size:15px;font-weight:600;text-transform:uppercase' }, r.title)); return; }
+    const d = mean(r.c.red) - BASE, e = Math.hypot(se(r.c.red), BASE_SE), col = Math.abs(d) < 25 ? 'var(--dim)' : d > 0 ? 'var(--good)' : 'var(--bad)';
+    svg.append(el('text', { x: L - 12, y: y + 4, 'text-anchor': 'end', class: 'lbl' }, (l => (l.length > 46 ? l.slice(0, 45) + '…' : l))(unitLabel(r.c.label))));
+    svg.append(el('line', { x1: X(Math.max(lo, d - e)), x2: X(Math.min(hi, d + e)), y1: y, y2: y, stroke: col, 'stroke-width': 2 }), el('circle', { cx: X(Math.max(lo, d)), cy: y, r: 4.5, fill: col }));
+    svg.append(el('text', { x: W - 8, y: y + 4, 'text-anchor': 'end', style: `fill:${col}` }, `${d >= 0 ? '+' : '-'}${Math.abs(Math.round(d))}`)); });
+}
+// ---------- every match, one dot ----------
+let histGroup = 'shooter';
+function drawHist() {
+  const svg = $('hist'); svg.replaceChildren(); const list = DATA.configs.filter(c => c.group === histGroup), all = list.flatMap(c => c.red), lo = Math.floor(Math.min(...all) / 20) * 20, hi = Math.ceil(Math.max(...all) / 20) * 20 + 20;
+  const W = 1040, L = 330, rowH = 46, H = list.length * rowH + 44, X = v => L + (v - lo) / (hi - lo) * (W - L - 30); svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
+  for (let t = Math.ceil(lo / 50) * 50; t <= hi; t += 50) { svg.append(el('line', { x1: X(t), x2: X(t), y1: 8, y2: H - 30, stroke: 'var(--faint)' })); svg.append(el('text', { x: X(t), y: H - 12, 'text-anchor': 'middle' }, t)); }
+  svg.append(el('line', { x1: X(BASE), x2: X(BASE), y1: 8, y2: H - 30, stroke: 'var(--blue)', 'stroke-dasharray': '4 3' }));
+  list.forEach((c, i) => { const y = 8 + (i + 1) * rowH - 8, m = mean(c.red), bins = {}; svg.append(el('line', { x1: L, x2: W - 30, y1: y, y2: y, stroke: 'var(--grid)' }));
+    svg.append(el('text', { x: L - 12, y: y - 12, 'text-anchor': 'end', class: 'lbl' }, (l => (l.length > 46 ? l.slice(0, 45) + '…' : l))(unitLabel(c.label)))); svg.append(el('text', { x: L - 12, y: y + 2, 'text-anchor': 'end' }, `mean ${Math.round(m)} · sd ${Math.round(sd(c.red))}`));
+    for (const v of c.red) { const b = Math.floor(v / 20) * 20, k = (bins[b] = (bins[b] ?? 0) + 1); svg.append(el('circle', { cx: X(b + 10), cy: y - 6 - (k - 1) * 9, r: 4, fill: isBase(c) ? 'var(--blue)' : 'var(--red)', 'fill-opacity': .85 })); }
+    svg.append(el('line', { x1: X(m), x2: X(m), y1: y - 2, y2: y + 7, stroke: 'var(--ink)', 'stroke-width': 2 })); });
+}
+$('tabs').append(...GROUPS.map(([g, t]) => { const b = document.createElement('button'); b.type = 'button'; b.textContent = t; b.id = `tab-${g}`; b.setAttribute('aria-pressed', String(g === histGroup)); b.onclick = () => { histGroup = g; for (const q of $('tabs').children) q.setAttribute('aria-pressed', String(q === b)); drawHist(); }; return b; }));
+
+// ---------- small charts ----------
+function drawTime() { const svg = $('time'), parts = [['Driving to elements', 49, 'var(--you)'], ['Driving to the launch spot', 38, 'var(--blue)'], ['Slowing onto the spot', 13, 'var(--red)'], ['Launching', 6, 'var(--good)'], ['Waiting for the CELL', 4, 'var(--dim)'], ['Collision recovery', 3, 'var(--bad)'], ['PARK', 6, 'var(--grid)']], total = parts.reduce((a, p) => a + p[1], 0); let x = 10;
+  for (const [, v, col] of parts) { const w = v / total * 460; svg.append(el('rect', { x, y: 10, width: Math.max(1, w - 1.5), height: 34, fill: col })); x += w; }
+  parts.forEach(([n, v, col], i) => { const cx = 10 + (i % 2) * 235, cy = 66 + Math.floor(i / 2) * 28; svg.append(el('rect', { x: cx, y: cy, width: 11, height: 11, fill: col }), el('text', { x: cx + 18, y: cy + 10, class: 'lbl' }, `${n}`), el('text', { x: cx + 222, y: cy + 10, 'text-anchor': 'end' }, `${v} s`)); }); }
+function drawLoop() { const svg = $('loop'), steps = [['start', 'baseline'], ['partner load', 'e1-partner-load-eta'], ['launch tolerance', 'e2-loose-launch-tolerance'], ['wall sweeps', 'e4-wall-lanes-closer'], ['rear wall grab', 'e11-rear-wall-grab'], ['endgame by value', 'e16-endgame-value'], ['lighter robot', 'e18-new-default-robot']].filter(s => DATA.loop[s[1]]);
+  const v = steps.map(s => DATA.loop[s[1]].combined), lo = 700, hi = 860, X = i => 44 + i * (420 / (steps.length - 1)), Y = q => 130 - (q - lo) / (hi - lo) * 112;
+  for (let t = 700; t <= 850; t += 50) { svg.append(el('line', { x1: 40, x2: 470, y1: Y(t), y2: Y(t), stroke: 'var(--faint)' }), el('text', { x: 34, y: Y(t) + 4, 'text-anchor': 'end' }, t)); }
+  svg.append(el('path', { d: v.map((q, i) => `${i ? 'L' : 'M'}${X(i)},${Y(q)}`).join(''), fill: 'none', stroke: 'var(--you)', 'stroke-width': 2.5 }));
+  steps.forEach((s, i) => { const d = DATA.loop[s[1]]; svg.append(el('line', { x1: X(i), x2: X(i), y1: Y(d.combined - d.se), y2: Y(d.combined + d.se), stroke: 'var(--you)' }), el('circle', { cx: X(i), cy: Y(d.combined), r: 4, fill: 'var(--you)' }), el('text', { x: X(i), y: Y(d.combined) - 10, 'text-anchor': 'middle', class: 'lbl' }, Math.round(d.combined)));
+    const t = el('text', { x: X(i), y: 146, 'text-anchor': 'end', transform: `rotate(-32 ${X(i)} 146)` }, s[0]); svg.append(t); }); }
+function drawDefense() { const svg = $('def'), L = DATA.loop, pair = (a, b) => (L[a] && L[b] ? { give: L[a].red - L[b].red, take: L[a].blue - L[b].blue } : null);
+  const rows = [['Equal robots', pair('e27-referee-baseline', 'e28-full-defense-left-robot')], ['Your spread is 3 x', pair('e30-weak-red-both-score', 'e31-weak-red-one-defends')], ['Your spread is 5 x', pair('e32-very-weak-red-both-score', 'e33-very-weak-red-one-defends')], ['Strong robot, weak partner', pair('e38-meta-plus-weak-both-score', 'e39-meta-plus-weak-defender')]].filter(r => r[1]), X = q => 170 + q / 100 * 250;
+  for (let t = 0; t <= 100; t += 25) { svg.append(el('line', { x1: X(t), x2: X(t), y1: 8, y2: 150, stroke: 'var(--faint)' }), el('text', { x: X(t), y: 166, 'text-anchor': 'middle' }, t)); }
+  rows.forEach(([n, p], i) => { const y = 10 + i * 36, net = p.take - p.give; svg.append(el('text', { x: 160, y: y + 10, 'text-anchor': 'end', class: 'lbl' }, n), el('text', { x: 160, y: y + 24, 'text-anchor': 'end', style: `fill:${net > 15 ? 'var(--good)' : 'var(--dim)'}` }, `margin ${net >= 0 ? '+' : '-'}${Math.abs(Math.round(net))}`));
+    // A weak scorer can cost its partner points, so an alliance can gain points when that robot stops scoring.
+    const g = Math.abs(p.give); svg.append(el('rect', { x: X(0), y, width: X(g) - X(0), height: 12, fill: p.give >= 0 ? 'var(--red)' : 'var(--you)' }), el('rect', { x: X(0), y: y + 14, width: X(p.take) - X(0), height: 12, fill: 'var(--good)' }));
+    svg.append(el('text', { x: X(g) + 5, y: y + 10 }, `${p.give >= 0 ? 'gives up' : 'own score rises'} ${Math.round(g)}`), el('text', { x: X(p.take) + 5, y: y + 25 }, `takes ${Math.round(p.take)}`)); });
+  svg.append(el('text', { x: 295, y: 184, 'text-anchor': 'middle' }, 'points per match')); }
+function drawIndep() { const L = DATA.loop, r = k => (L[k] ? Math.round(L[k].red) : '–'), b = k => (L[k] ? Math.round(L[k].blue) : '–');
+  $('indep').innerHTML = `<tr><th>Alliance</th><th>Alone</th><th>Against itself</th><th>Against the other</th></tr><tr><td>Baseline</td><td>${r('e34-baseline-alone')}</td><td>${r('e18b-default-margin')}</td><td>${r('e37-baseline-vs-meta')}</td></tr><tr><td>Meta</td><td>${r('e35-meta-alone')}</td><td>${r('e36-meta-vs-meta')}</td><td>${b('e37-baseline-vs-meta')}</td></tr>`; }
+const redraw = () => { $('f-base').textContent = `${sizeText(38)} square, ${massText(10)}`; $('f-meta').textContent = `${sizeText(30)}, ${massText(7)}`; update(); $('fx').replaceChildren(); drawEffects(); drawHist(); };
+// The site's navigation carries the units switch and announces a change with this event.
+addEventListener('biobuzz-units', e => { const mps = speedIn(); UNITS = e.detail; setSpeedField(mps); redraw(); });
+const start = () => { setSpeedField(0.08); $('f-base').textContent = `${sizeText(38)} square, ${massText(10)}`; $('f-meta').textContent = `${sizeText(30)}, ${massText(7)}`; update(); drawEffects(); drawHist(); drawTime(); drawLoop(); drawDefense(); drawIndep(); };
+start();
+</script>

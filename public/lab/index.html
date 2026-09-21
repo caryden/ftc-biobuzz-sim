@@ -1,0 +1,305 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>BIOBUZZ Match Lab</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+  :root {
+    --ground: #eef1f4; --panel: #ffffff; --ink: #15202b; --dim: #55626f; --grid: #c5ced8; --faint: #dde3e9;
+    --red: #d8342a; --blue: #2f5fd0; --you: #b88a00; --you-fill: rgba(217,164,0,.28); --opp-fill: rgba(47,95,208,.20);
+    --good: #1d8a4e; --bad: #c0392b; --noise: rgba(85,98,111,.12);
+    --display: "Barlow Condensed", "Arial Narrow", sans-serif; --body: "IBM Plex Sans", system-ui, sans-serif; --mono: "IBM Plex Mono", ui-monospace, Menlo, monospace;
+  }
+  @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+    --ground: #12171d; --panel: #1a212a; --ink: #e7ecf2; --dim: #98a5b3; --grid: #36424f; --faint: #232c37;
+    --red: #f0574c; --blue: #6b93ff; --you: #f2c230; --you-fill: rgba(242,194,48,.26); --opp-fill: rgba(107,147,255,.22);
+    --good: #4cc47f; --bad: #f0746a; --noise: rgba(152,165,179,.13); } }
+  :root[data-theme="dark"] {
+    --ground: #12171d; --panel: #1a212a; --ink: #e7ecf2; --dim: #98a5b3; --grid: #36424f; --faint: #232c37;
+    --red: #f0574c; --blue: #6b93ff; --you: #f2c230; --you-fill: rgba(242,194,48,.26); --opp-fill: rgba(107,147,255,.22);
+    --good: #4cc47f; --bad: #f0746a; --noise: rgba(152,165,179,.13); }
+  * { box-sizing: border-box; }
+  body { background: var(--ground); color: var(--ink); font: 15px/1.55 var(--body); padding-inline: 20px; padding-block: 0 64px; }
+  main { max-width: 1080px; margin-inline: auto; display: flex; flex-direction: column; gap: 44px; padding-top: 28px; }
+  h1, h2, h3 { font-family: var(--display); font-weight: 700; letter-spacing: .01em; line-height: 1.05; margin: 0; text-wrap: balance; }
+  h1 { font-size: clamp(38px, 6vw, 60px); text-transform: uppercase; } h2 { font-size: 30px; text-transform: uppercase; } h3 { font-size: 20px; font-weight: 600; }
+  h2 { scroll-margin-top: 16px; } .anchor { font: 500 .6em var(--mono); color: var(--grid); text-decoration: none; margin-left: 6px; vertical-align: middle; } h2:hover .anchor, .anchor:focus-visible { color: var(--blue); } @media (hover: none) { .anchor { color: var(--dim); } }
+  p { margin: 0; max-width: 68ch; } .lede { font-size: 17px; color: var(--dim); } .note { color: var(--dim); font-size: 13px; }
+  header { display: flex; flex-direction: column; gap: 12px; border-bottom: 3px solid var(--ink); padding-bottom: 20px; }
+  .eyebrow { font: 500 12px var(--mono); letter-spacing: .14em; text-transform: uppercase; color: var(--dim); }
+  section { display: flex; flex-direction: column; gap: 16px; }
+  .lab { display: grid; grid-template-columns: minmax(0, 360px) minmax(0, 1fr); gap: 20px; align-items: start; }
+  @media (max-width: 820px) { .lab { grid-template-columns: minmax(0, 1fr); } }
+  .panel { background: var(--panel); border: 1px solid var(--faint); border-radius: 6px; padding: 16px; }
+  .controls { display: flex; flex-direction: column; gap: 10px; }
+  .controls h3 { margin-top: 6px; border-top: 1px solid var(--faint); padding-top: 10px; } .controls h3:first-child { margin-top: 0; border-top: 0; padding-top: 0; }
+  label { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 150px); gap: 10px; align-items: center; font-size: 13px; color: var(--dim); }
+  label output { font: 500 12px var(--mono); color: var(--ink); justify-self: end; }
+  .slider { grid-template-columns: minmax(0, 1fr) auto; } .slider input { grid-column: 1 / -1; width: 100%; accent-color: var(--you); }
+  .errhead { display: flex; justify-content: space-between; align-items: center; gap: 8px; font-size: 13px; color: var(--dim); } .errhead .opps button { padding: 3px 10px; }
+  input[type=number] { width: 100%; font: 13px var(--mono); color: var(--ink); background: var(--ground); border: 1px solid var(--grid); border-radius: 4px; padding: 5px 6px; }
+  select { width: 100%; font: 13px var(--body); color: var(--ink); background: var(--ground); border: 1px solid var(--grid); border-radius: 4px; padding: 5px 6px; }
+  select:focus-visible, input:focus-visible, button:focus-visible { outline: 2px solid var(--you); outline-offset: 2px; }
+  .readout { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+  @media (max-width: 560px) { .readout { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+  .stat { display: flex; flex-direction: column; gap: 2px; } .stat b { font: 700 38px/1 var(--display); font-variant-numeric: tabular-nums; } .stat span { font: 500 11px var(--mono); letter-spacing: .08em; text-transform: uppercase; color: var(--dim); }
+  .stat.you b { color: var(--you); } .stat.opp b { color: var(--blue); }
+  .opps { display: flex; flex-wrap: wrap; gap: 6px; }
+  .opps button, .tabs button { font: 500 12px var(--mono); letter-spacing: .04em; color: var(--ink); background: var(--ground); border: 1px solid var(--grid); border-radius: 999px; padding: 6px 12px; cursor: pointer; }
+  .opps button[aria-pressed="true"], .tabs button[aria-pressed="true"] { background: var(--ink); color: var(--ground); border-color: var(--ink); }
+  .tabs { display: flex; flex-wrap: wrap; gap: 6px; }
+  svg { display: block; width: 100%; height: auto; } svg text { font-family: var(--mono); fill: var(--dim); font-size: 11px; } svg .lbl { fill: var(--ink); font-size: 12px; font-family: var(--body); }
+  .wide { overflow-x: auto; } .wide svg { min-width: 640px; }
+  .parts { font: 12px/1.6 var(--mono); color: var(--dim); display: flex; flex-wrap: wrap; gap: 4px 14px; } .parts b { color: var(--ink); font-weight: 500; }
+  .legend { display: flex; flex-wrap: wrap; gap: 14px; font: 12px var(--mono); color: var(--dim); } .legend i { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 6px; vertical-align: -1px; }
+  .two { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 20px; }
+  table { border-collapse: collapse; font-size: 13px; width: 100%; } th, td { text-align: right; padding: 5px 8px; border-bottom: 1px solid var(--faint); font-variant-numeric: tabular-nums; } th:first-child, td:first-child { text-align: left; } th { font: 500 11px var(--mono); letter-spacing: .06em; text-transform: uppercase; color: var(--dim); }
+  footer { border-top: 1px solid var(--grid); padding-top: 16px; color: var(--dim); font-size: 13px; display: flex; flex-direction: column; gap: 8px; }
+  code { font: 12px var(--mono); background: var(--faint); padding: 1px 5px; border-radius: 3px; }
+</style>
+
+<style>:root { --ground: #eef1f4; --panel: #ffffff; --ink: #15202b; --dim: #55626f; --grid: #c5ced8; --faint: #dde3e9; --red: #d8342a; --blue: #2f5fd0; --you: #b88a00; --good: #1d8a4e; --bad: #c0392b;
+  --display: "Barlow Condensed", "Arial Narrow", sans-serif; --body: "IBM Plex Sans", system-ui, sans-serif; --mono: "IBM Plex Mono", ui-monospace, Menlo, monospace; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --ground: #12171d; --panel: #1a212a; --ink: #e7ecf2; --dim: #98a5b3; --grid: #36424f; --faint: #232c37; --red: #f0574c; --blue: #6b93ff; --you: #f2c230; --good: #4cc47f; --bad: #f0746a; } }
+:root[data-theme="dark"] { --ground: #12171d; --panel: #1a212a; --ink: #e7ecf2; --dim: #98a5b3; --grid: #36424f; --faint: #232c37; --red: #f0574c; --blue: #6b93ff; --you: #f2c230; --good: #4cc47f; --bad: #f0746a; }
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--ground); color: var(--ink); font: 16px/1.6 var(--body); padding-inline: 20px; padding-block: 0 64px; }
+.sitenav { max-width: 1080px; margin-inline: auto; display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 22px; padding-block: 16px; border-bottom: 1px solid var(--grid); font: 500 13px var(--mono); letter-spacing: .04em; }
+.sitenav a { color: var(--dim); text-decoration: none; } .sitenav a:hover, .sitenav a[aria-current="page"] { color: var(--ink); } .sitenav .brand { font: 700 20px var(--display); letter-spacing: .02em; text-transform: uppercase; color: var(--ink); margin-right: auto; }
+a { color: var(--blue); } a:focus-visible { outline: 2px solid var(--you); outline-offset: 2px; }
+.sitefoot { max-width: 1080px; margin: 48px auto 0; border-top: 1px solid var(--grid); padding-top: 16px; color: var(--dim); font-size: 13px; }
+/* Display units. Metric shows unless the reader chose US. The switch is in the site navigation. */
+:root:not([data-units="us"]) .u-us { display: none; } :root[data-units="us"] .u-si { display: none; }
+.units { display: inline-flex; border: 1px solid var(--grid); border-radius: 999px; overflow: hidden; } .units button { font: 500 12px var(--mono); letter-spacing: .04em; color: var(--dim); background: none; border: 0; padding: 4px 10px; cursor: pointer; }
+.units button[aria-pressed="true"] { background: var(--ink); color: var(--ground); } .units button:focus-visible { outline: 2px solid var(--you); outline-offset: -2px; }
+</style><nav class="sitenav" aria-label="Site"><a class="brand" href="/">NCSSM FTC · BIOBUZZ</a><a href="/sim/">Simulator</a><a href="/lab/" aria-current="page">Match Lab</a><a href="/lessons/">Ten lessons</a><span class="units" role="group" aria-label="Units"><button type="button" data-setunits="metric">Metric</button><button type="button" data-setunits="us">US</button></span></nav><script>(function(){var u='metric';try{if(localStorage.getItem('biobuzz.units')==='us')u='us'}catch(e){}
+function apply(v){document.documentElement.dataset.units=v;document.querySelectorAll('[data-setunits]').forEach(function(b){b.setAttribute('aria-pressed',String(b.dataset.setunits===v))})}
+apply(u);document.addEventListener('click',function(e){var b=e.target.closest('[data-setunits]');if(!b)return;var v=b.dataset.setunits;try{localStorage.setItem('biobuzz.units',v)}catch(e){}apply(v);dispatchEvent(new CustomEvent('biobuzz-units',{detail:v}))})})();</script>
+<main>
+<header>
+  <div class="eyebrow">FIRST Tech Challenge 2026-2027 · BIOBUZZ · <span id="nmatches"></span> simulated matches</div>
+  <h1>Match Lab</h1>
+  <p class="lede">Set up your alliance and see the scores that it is likely to post, and how often it beats an opponent. We measured every effect below in a physics simulator by changing one thing at a time. The estimate stacks those measurements, so read it as a guide, not as a promise.</p>
+</header>
+
+<section aria-labelledby="configure">
+  <h2 id="configure">Your alliance against an opponent <a class="anchor" href="#configure" aria-label="Link to this section">#</a></h2>
+  <div class="lab">
+    <form class="panel controls" id="form" onsubmit="return false">
+      <h3>Launcher</h3>
+      <div class="errhead"><span>Shot-to-shot error, 1 SD</span><span class="opps" role="group" aria-label="Launcher error presets"><button type="button" data-err="1">1x</button><button type="button" data-err="3">3x</button><button type="button" data-err="5">5x</button></span></div>
+      <label for="elev">Elevation, ° <input id="elev" type="number" min="0.5" max="10" step="0.1" value="1"></label>
+      <label for="azim">Azimuth, ° <input id="azim" type="number" min="0.5" max="12" step="0.1" value="1.2"></label>
+      <label for="speed"><span id="l-speed">Launch speed, m/s</span> <input id="speed" type="number" min="0.02" max="1" step="0.01" value="0.08"></label>
+      <p class="note" id="o-spread"></p>
+      <label for="release">Release <select id="release"><option value="dual">Two at a time, 0.3 s apart</option><option value="cat">All four at once</option><option value="fast">Two at a time, 0.15 s apart</option><option value="fifo">One at a time</option><option value="slow">Two at a time, 0.6 s apart</option></select></label>
+      <label for="side">Shooter faces <select id="side"><option value="rear">Away from the intake</option><option value="front">The same way as the intake</option></select></label>
+      <label for="standoff">Launches from <select id="standoff"><option value="mid">The middle of the scoring window</option><option value="edge">An edge of the window</option></select></label>
+      <h3>Chassis</h3>
+      <label class="slider" for="mass">Mass <output id="o-mass"></output><input id="mass" type="range" min="7" max="17" step="0.5" value="10"></label>
+      <label class="slider" for="size">Square chassis <output id="o-size"></output><input id="size" type="range" min="30" max="46" step="1" value="38"></label>
+      <label class="slider" for="rpm">Wheel speed <output id="o-rpm"></output><input id="rpm" type="range" min="312" max="850" step="1" value="600"></label>
+      <h3>Intake</h3>
+      <label for="intake">Layout <select id="intake"><option value="front">Front, narrower than the chassis</option><option value="frontwide">Front, full width</option><option value="dual">Front and rear</option><option value="dualwide">Front and rear, full width</option></select></label>
+      <label class="slider" for="rel">Pickup success <output id="o-rel"></output><input id="rel" type="range" min="60" max="95" step="5" value="95"></label>
+      <h3>Match plan</h3>
+      <label for="auto">AUTO <select id="auto"><option value="pair">A planned pair</option><option value="sololeave">One solo routine, partner parks</option><option value="solo">Two solo routines</option><option value="leave">Both only LEAVE and PARK</option><option value="none">No AUTO</option></select></label>
+      <label for="teleop">TELEOP <select id="teleop"><option value="tips">Both robots keep tipping</option><option value="p30">Partner on FLOWERS from 30 s</option><option value="p45">Partner on FLOWERS from 45 s</option><option value="b30">Both on FLOWERS from 30 s</option><option value="b45">Both on FLOWERS from 45 s</option><option value="b66">Both on FLOWERS from 66 s</option></select></label>
+      <label for="defense">Defense <select id="defense"><option value="none">None</option><option value="full">One robot defends all of TELEOP</option></select></label>
+    </form>
+    <div style="display:flex;flex-direction:column;gap:14px">
+      <div class="opps" role="group" aria-label="Opponent" id="opps"></div>
+      <div class="panel" style="display:flex;flex-direction:column;gap:14px">
+        <div class="readout">
+          <div class="stat you"><b id="s-you"></b><span>Your score</span></div>
+          <div class="stat opp"><b id="s-opp"></b><span>Opponent</span></div>
+          <div class="stat"><b id="s-margin"></b><span>Expected margin</span></div>
+          <div class="stat"><b id="s-win"></b><span>You win</span></div>
+        </div>
+        <svg id="dist" viewBox="0 0 680 250" role="img" aria-label="Score distributions of your alliance and the opponent"></svg>
+        <svg id="margin" viewBox="0 0 680 120" role="img" aria-label="Distribution of the score margin"></svg>
+        <div class="parts" id="parts"></div>
+      </div>
+      <p class="note">Scores are treated as normal distributions, and the two alliances as independent. Your spread is 7 points plus 7% of your mean, fitted to the match data. Gains shrink as they stack: the factor is fitted to one combined build, which scored 508 where the sum of its parts says 538. A launcher that is tighter than the reference isn't measured, so it counts as the reference.</p>
+    </div>
+  </div>
+</section>
+
+<section aria-labelledby="effects">
+  <h2 id="effects">What each choice is worth <a class="anchor" href="#effects" aria-label="Link to this section">#</a></h2>
+  <p>Points per alliance against the baseline robot, with one standard error on each side. The shaded band is 25 points: inside it, 12 matches can't tell a change from luck.</p>
+  <div class="panel wide"><svg id="fx" role="img" aria-label="Effect of every configuration against the baseline"></svg></div>
+</section>
+
+<section aria-labelledby="matches">
+  <h2 id="matches">Every match, one dot <a class="anchor" href="#matches" aria-label="Link to this section">#</a></h2>
+  <p>Each dot is one match of the red alliance with that change, in bins of 20 points. The tick is the mean, and the line is the baseline mean. A wide row is a robot whose results you can't count on.</p>
+  <div class="tabs" role="group" aria-label="Experiment group" id="tabs"></div>
+  <div class="panel wide"><svg id="hist" role="img" aria-label="Match scores per configuration"></svg></div>
+</section>
+
+<section aria-labelledby="where-points-come-from">
+  <h2 id="where-points-come-from">Where the points come from <a class="anchor" href="#where-points-come-from" aria-label="Link to this section">#</a></h2>
+  <div class="two">
+    <div class="panel" style="display:flex;flex-direction:column;gap:10px"><h3>A robot's 120 s of TELEOP</h3><svg id="time" viewBox="0 0 480 190" role="img" aria-label="Time account"></svg><p class="note">Driving is 73% of the match and launching is 5%. A shorter trip buys more than a faster shooter.</p></div>
+    <div class="panel" style="display:flex;flex-direction:column;gap:10px"><h3>Better decisions, the same robot</h3><svg id="loop" viewBox="0 0 480 190" role="img" aria-label="Combined score after each kept change"></svg><p class="note">Combined score of both alliances on 24 fixed seeds, after each change that was kept. The last step is the lighter, smaller robot.</p></div>
+    <div class="panel" style="display:flex;flex-direction:column;gap:10px"><h3>When one robot defends</h3><svg id="def" viewBox="0 0 480 190" role="img" aria-label="Defense"></svg><p class="note">Points that the defender gives up against points that it takes from the opponent. A weak alliance still lost all 24 matches with a defender. The mixed alliance, a strong robot with a weak partner, went from 0 wins to 15 of 24. The only contact rule in the simulator is the PIN rule, G421, and the opponents here don't adapt to a defender.</p></div>
+    <div class="panel" style="display:flex;flex-direction:column;gap:10px"><h3>Your score doesn't depend on theirs</h3><div class="wide"><table id="indep"></table></div><p class="note">Without defense, an alliance scores the same alone, against itself, and against a stronger opponent. That is why the lab models each alliance from its own robot.</p></div>
+  </div>
+</section>
+
+<footer>
+  <p>The baseline robot is <span id="f-base"></span>, and geared for 600 rpm at the wheel, with a rear-facing shooter and a 95% reliable intake. The meta alliance is two robots with a four-element catapult, <span id="f-meta"></span>, 500 rpm, and intakes at both ends.</p>
+  <p>The simulator uses the listed ball weights but estimates how the balls bounce and roll. It plays no defense unless you choose it, and doesn't check whether a design can be built. The written lessons are in <code>docs/top-ten.md</code>, and the data is in <code>experiments/</code> of the repository.</p>
+</footer>
+</main>
+<footer class="sitefoot"><p>A project of the students and mentors of the NCSSM FTC teams 5064, 8569, and 22377. This site isn't affiliated with or endorsed by <i>FIRST</i>. <i>FIRST</i> and <i>FIRST</i> Tech Challenge are trademarks of For Inspiration and Recognition of Science and Technology.</p></footer>
+
+<script>
+const DATA = {"configs":[{"id":"strat-tips-tips","group":"strategy","label":"Both robots: TIPS only","red":[335,431,409,446,399,427,448,377,391,433,452,393],"blue":[392,430,317,387,428,429,410,372,417,458,397,388],"auto":87.7,"tips":19},{"id":"strat-tips-f30","group":"strategy","label":"Robot 1 TIPS only, partner FLOWERS from 30 s","red":[424,445,390,443,442,387,413,399,416,450,352,409],"blue":[408,438,397,408,409,310,414,348,408,387,387,387],"auto":87.7,"tips":18},{"id":"strat-tips-f45","group":"strategy","label":"Robot 1 TIPS only, partner FLOWERS from 45 s","red":[423,380,378,414,418,401,413,411,421,380,385,393],"blue":[436,390,327,392,355,392,454,387,392,407,391,375],"auto":87.7,"tips":16.9},{"id":"strat-tips-f66","group":"strategy","label":"Robot 1 TIPS only, partner FLOWERS from 66 s","red":[407,387,378,344,360,438,378,416,367,409,343,403],"blue":[414,308,372,431,351,391,407,414,407,429,376,391],"auto":87.7,"tips":15.7},{"id":"strat-f30-f30","group":"strategy","label":"Both robots: FLOWERS from 30 s","red":[401,390,365,406,414,389,385,403,331,413,379,384],"blue":[427,408,309,437,413,375,391,406,375,393,409,394],"auto":87.7,"tips":15.9},{"id":"strat-f45-f45","group":"strategy","label":"Both robots: FLOWERS from 45 s","red":[350,383,402,367,383,356,349,352,340,380,398,343],"blue":[408,392,426,359,427,419,418,378,296,407,392,389],"auto":87.7,"tips":14.1},{"id":"strat-f66-f66","group":"strategy","label":"Both robots: FLOWERS from 66 s","red":[314,329,365,334,342,323,345,396,302,321,329,287],"blue":[411,408,413,329,392,387,388,388,392,286,372,388],"auto":87.7,"tips":12},{"id":"strat-f20-f20","group":"strategy","label":"Both robots: FLOWERS from 20 s","red":[426,381,414,417,385,395,430,377,418,402,341,383],"blue":[387,388,414,437,311,414,389,387,407,428,388,412],"auto":87.7,"tips":16.9},{"id":"strat-tips-f20","group":"strategy","label":"Robot 1 TIPS only, partner FLOWERS from 20 s","red":[379,438,422,427,406,387,419,417,459,426,373,401],"blue":[411,387,438,418,406,388,317,427,388,411,407,409],"auto":87.7,"tips":18.5},{"id":"shoot-dual","group":"shooter","label":"Dual shooter (baseline)","red":[391,433,446,448,399,377,431,409,452,427,335,393],"blue":[417,458,387,410,428,372,430,317,397,429,392,388],"auto":87.7,"tips":19},{"id":"shoot-fifo","group":"shooter","label":"Single shooter, FIFO","red":[437,431,467,395,448,420,407,427,429,429,457,459],"blue":[411,420,452,391,391,386,426,467,475,389,467,405],"auto":96,"tips":20.1},{"id":"shoot-catapult","group":"shooter","label":"Catapult, all at once","red":[429,409,429,435,476,548,469,453,516,468,494,456],"blue":[419,448,447,391,449,468,411,427,423,387,414,356],"auto":86,"tips":21.7},{"id":"shoot-fast","group":"shooter","label":"Dual, 0.15 s between shots","red":[469,459,391,492,430,428,448,435,447,477,414,458],"blue":[434,467,451,411,429,427,374,428,414,405,391,394],"auto":94.3,"tips":20.7},{"id":"shoot-slow","group":"shooter","label":"Dual, 0.6 s between shots","red":[375,357,372,375,389,369,349,397,429,367,354,367],"blue":[427,407,395,426,435,469,412,391,416,397,389,415],"auto":77.7,"tips":17.2},{"id":"shoot-front","group":"shooter","label":"Dual, shooter on the intake side","red":[409,389,390,375,397,367,325,349,348,396,341,388],"blue":[408,440,395,408,428,412,398,431,427,414,371,393],"auto":87.2,"tips":17.1},{"id":"drive-312","group":"drivetrain","label":"312 rpm","red":[434,386,377,408,397,429,392,376,396,431,390,427],"blue":[434,407,408,368,435,395,430,413,429,387,448,429],"auto":96,"tips":18.6},{"id":"drive-435","group":"drivetrain","label":"435 rpm","red":[451,409,460,409,395,467,428,406,407,448,420,438],"blue":[454,414,454,411,429,473,487,402,409,448,421,427],"auto":96,"tips":19.8},{"id":"drive-500","group":"drivetrain","label":"500 rpm","red":[428,434,474,428,472,413,428,407,413,409,431,409],"blue":[450,409,435,389,434,370,378,428,434,415,388,400],"auto":96,"tips":19.9},{"id":"drive-600","group":"drivetrain","label":"600 rpm (baseline)","red":[391,433,446,448,399,377,409,431,335,452,427,393],"blue":[417,458,387,410,428,372,317,430,392,397,429,388],"auto":87.7,"tips":19},{"id":"drive-700","group":"drivetrain","label":"700 rpm","red":[414,396,410,450,426,398,380,388,428,398,387,370],"blue":[412,389,357,387,388,388,425,408,419,413,387,412],"auto":96,"tips":18.6},{"id":"drive-850","group":"drivetrain","label":"850 rpm","red":[368,353,386,429,350,388,417,368,387,408,350,379],"blue":[410,348,396,389,430,435,391,415,348,449,426,413],"auto":76,"tips":17.6},{"id":"mass-7","group":"drivetrain","label":"600 rpm, 7 kg (15.4 lb) robot","red":[451,469,414,390,495,450,408,422,427,377,407,494],"blue":[400,392,388,451,414,392,410,417,410,427,386,449],"auto":89.3,"tips":20.1},{"id":"mass-13","group":"drivetrain","label":"600 rpm, 13 kg (28.7 lb) robot","red":[397,428,390,407,373,389,420,430,349,341,413,388],"blue":[413,407,477,428,371,436,427,469,387,449,368,391],"auto":92.7,"tips":18.1},{"id":"mass-17","group":"drivetrain","label":"600 rpm, 17 kg (37.5 lb) robot","red":[372,368,371,388,348,409,428,389,350,387,373,383],"blue":[368,416,389,392,409,412,437,392,393,396,409,389],"auto":87.7,"tips":17.5},{"id":"mass-17-435","group":"drivetrain","label":"435 rpm, 17 kg robot","red":[356,447,391,391,398,415,395,415,393,388,414,389],"blue":[391,428,428,397,393,428,410,436,407,411,429,428],"auto":91,"tips":18.3},{"id":"size-46","group":"size","label":"18.0 in. (0.457 m), the legal maximum","red":[426,348,416,417,412,427,414,413,379,417,366,413],"blue":[417,450,413,430,415,387,352,400,426,397,388,413],"auto":96,"tips":18.6},{"id":"size-43","group":"size","label":"16.9 in. (0.43 m)","red":[429,412,409,387,394,454,388,389,394,389,430,433],"blue":[455,430,387,417,396,454,394,393,434,453,426,391],"auto":94.3,"tips":18.9},{"id":"size-38","group":"size","label":"15.0 in. (0.381 m, baseline)","red":[391,433,446,448,399,377,409,431,335,427,452,393],"blue":[417,458,387,410,428,372,317,430,392,429,397,388],"auto":87.7,"tips":19},{"id":"size-34","group":"size","label":"13.4 in. (0.34 m)","red":[399,408,427,428,397,432,430,453,397,389,458,413],"blue":[397,438,426,407,409,430,421,368,388,429,447,418],"auto":96,"tips":19.3},{"id":"size-30","group":"size","label":"11.8 in. (0.30 m)","red":[456,467,417,468,455,432,436,450,417,420,428,415],"blue":[422,458,417,348,382,427,390,390,420,338,382,387],"auto":94.3,"tips":20.2},{"id":"size-38-wide-intake","group":"size","label":"15 in. chassis with a full-width intake","red":[414,428,467,429,436,375,467,419,392,389,430,458],"blue":[455,418,388,456,428,430,394,412,397,371,470,387],"auto":92.7,"tips":19.7},{"id":"size-46-wide-intake","group":"size","label":"18 in. chassis with a full-width intake","red":[467,453,393,432,428,460,386,431,408,450,430,410],"blue":[409,416,430,431,370,423,397,428,409,407,388,394],"auto":92.7,"tips":19.9},{"id":"intake-front","group":"intake","label":"Front intake (baseline)","red":[391,446,433,448,399,409,377,431,452,335,427,393],"blue":[417,387,458,410,428,317,372,430,397,392,429,388],"auto":87.7,"tips":19},{"id":"intake-dual","group":"intake","label":"Intakes on the front and the rear","red":[428,435,447,408,469,453,467,393,409,432,447,467],"blue":[427,410,426,430,381,398,349,393,417,387,448,414],"auto":89.3,"tips":20.4},{"id":"intake-dual-front-shooter","group":"intake","label":"Front and rear intakes, shooter at the front","red":[429,438,425,450,453,438,468,410,407,454,411,429],"blue":[428,407,390,408,386,428,460,407,419,441,389,388],"auto":88.9,"tips":20.2},{"id":"shooter-both-ends","group":"intake","label":"Front intake, launches from both ends","red":[389,413,416,411,415,390,391,415,435,412,398,392],"blue":[411,445,437,468,412,392,387,413,413,461,388,438],"auto":87.7,"tips":18.7},{"id":"intake-dual-shooter-both-ends","group":"intake","label":"Front and rear intakes, launches from both ends","red":[440,451,452,436,411,440,426,428,421,469,457,412],"blue":[372,448,448,467,397,375,388,390,357,429,428,448],"auto":89.3,"tips":20.2},{"id":"intake-dual-wide","group":"intake","label":"Front and rear intakes, full width","red":[432,428,417,459,488,430,450,450,452,428,458,440],"blue":[438,388,331,453,413,381,427,412,368,418,411,398],"auto":96,"tips":20.6},{"id":"acc-x1","group":"accuracy","label":"Launch spread x1 (baseline)","red":[446,448,391,433,399,377,409,452,431,427,335,393],"blue":[387,410,417,458,428,372,317,397,430,429,392,388],"auto":87.7,"tips":19},{"id":"acc-x3","group":"accuracy","label":"Launch spread x3","red":[275,289,233,273,289,261,316,206,267,266,307,255],"blue":[408,413,397,432,459,433,375,406,395,436,418,394],"auto":41.8,"tips":11.9},{"id":"acc-x5","group":"accuracy","label":"Launch spread x5","red":[135,175,158,178,158,164,168,135,149,156,197,165],"blue":[411,405,429,369,459,431,388,409,372,374,447,426],"auto":32.2,"tips":6.4},{"id":"acc-x8","group":"accuracy","label":"Launch spread x8","red":[114,100,84,95,112,93,87,91,89,88,94,130],"blue":[374,451,428,407,428,408,389,363,450,429,392,377],"auto":23.9,"tips":3.3},{"id":"acc-x5-flowers","group":"accuracy","label":"Launch spread x5, FLOWERS from 45 s","red":[146,171,155,175,203,144,185,165,199,168,183,190],"blue":[375,429,427,396,392,373,417,388,388,347,392,427],"auto":32.2,"tips":4.5},{"id":"acc-x8-flowers","group":"accuracy","label":"Launch spread x8, FLOWERS from 45 s","red":[147,142,139,144,117,109,107,128,143,136,116,141],"blue":[386,432,394,432,407,386,386,428,387,411,387,367],"auto":23.9,"tips":2.3},{"id":"intake-80","group":"accuracy","label":"Intake succeeds 80% of the time","red":[430,428,447,419,377,375,408,410,333,417,396,414],"blue":[412,449,408,428,338,385,458,389,376,430,389,406],"auto":96,"tips":18.6},{"id":"intake-60","group":"accuracy","label":"Intake succeeds 60% of the time","red":[389,336,350,332,314,392,357,322,349,386,354,388],"blue":[427,419,408,447,391,394,413,416,456,390,432,414],"auto":86,"tips":16.2},{"id":"auto-harvest","group":"auto","label":"right_harvest and left_harvest (baseline)","red":[391,446,433,448,399,409,377,452,431,427,335,393],"blue":[417,387,458,410,428,317,372,397,430,429,392,388],"auto":87.7,"tips":19},{"id":"auto-cycle","group":"auto","label":"right_cycle and left_cycle: lane sweeps, no wall sweeps","red":[391,453,380,408,372,387,438,428,418,389,388,388],"blue":[415,414,427,466,427,412,394,406,381,398,428,411],"auto":76,"tips":18.6},{"id":"auto-harvest-right-only","group":"auto","label":"right_harvest with left_cycle","red":[427,374,408,393,390,426,388,416,419,421,394,434],"blue":[431,410,447,347,373,367,393,431,406,393,407,391],"auto":91,"tips":18.8},{"id":"auto-naive","group":"auto","label":"Both robots run the solo script","red":[380,384,379,361,346,340,372,384,369,345,340,352],"blue":[430,411,413,431,430,397,390,447,373,392,470,469],"auto":33.5,"tips":16.9},{"id":"auto-solo-leave","group":"auto","label":"Right robot solo script, left robot only parks","red":[403,388,362,396,353,376,306,383,378,387,362,403],"blue":[455,407,418,391,417,359,395,395,434,426,427,373],"auto":49.2,"tips":17.4},{"id":"auto-leave-leave","group":"auto","label":"Both robots only LEAVE and PARK","red":[280,347,349,350,340,353,368,370,372,348,351,312],"blue":[452,448,446,432,415,409,389,415,369,387,374,406],"auto":16,"tips":15.7},{"id":"auto-none","group":"auto","label":"No AUTO at all","red":[333,302,325,346,323,319,331,333,376,337,317,332],"blue":[389,412,414,416,413,407,428,397,428,353,391,438],"auto":0,"tips":15.7},{"id":"follow-30-12","group":"follow","label":"Brake 3.0 m/s\u00b2, gain 1.2 (new default)","red":[391,433,446,448,399,409,431,335,377,427,452,393],"blue":[417,458,387,410,428,317,430,392,372,429,397,388],"auto":87.7,"tips":19},{"id":"follow-22-12","group":"follow","label":"Brake 2.2 m/s\u00b2, gain 1.2","red":[388,347,442,414,412,430,408,389,415,413,414,393],"blue":[390,396,428,390,415,418,392,413,433,337,410,414],"auto":96,"tips":18.8},{"id":"follow-40-12","group":"follow","label":"Brake 4.0 m/s\u00b2, gain 1.2","red":[368,456,407,449,429,358,369,426,396,395,411,410],"blue":[409,456,446,390,431,450,449,415,434,395,412,354],"auto":89.3,"tips":18.8},{"id":"follow-50-12","group":"follow","label":"Brake 5.0 m/s\u00b2, gain 1.2","red":[418,349,348,414,396,370,403,411,377,370,396,400],"blue":[429,457,428,451,425,417,428,437,435,426,368,408],"auto":91,"tips":17.8},{"id":"follow-40-06","group":"follow","label":"Brake 4.0 m/s\u00b2, gain 0.6","red":[397,388,389,408,412,375,408,399,369,389,395,398],"blue":[448,428,422,368,390,372,434,429,416,413,400,391],"auto":86,"tips":18.1},{"id":"follow-40-25","group":"follow","label":"Brake 4.0 m/s\u00b2, gain 2.5","red":[438,401,428,440,414,410,455,454,427,390,447,449],"blue":[437,438,417,431,378,434,428,428,426,395,429,390],"auto":96,"tips":19.8},{"id":"path-base","group":"path","label":"Baseline: 8 cm buffer, 3.0 m/s\u00b2 planned braking","red":[391,433,446,448,399,377,409,431,452,427,335,393],"blue":[417,458,387,410,428,372,317,430,397,429,392,388],"auto":87.7,"tips":19},{"id":"path-margin-4","group":"path","label":"4 cm obstacle buffer","red":[429,453,389,421,394,390,418,427,408,472,433,393],"blue":[417,468,390,412,430,400,435,432,428,367,391,427],"auto":92.7,"tips":19.3},{"id":"path-margin-12","group":"path","label":"12 cm obstacle buffer","red":[428,407,449,452,408,451,416,462,440,411,452,378],"blue":[430,447,403,429,405,411,370,435,409,394,446,429],"auto":96,"tips":19.8},{"id":"path-look-far","group":"path","label":"Longer pure-pursuit lookahead (0.35 m)","red":[449,433,393,396,418,408,434,427,367,411,409,427],"blue":[436,430,411,397,428,412,373,436,432,408,410,449],"auto":91,"tips":19.2},{"id":"path-standoff-near","group":"path","label":"Launch from the closest scoring spot","red":[277,353,307,331,294,294,306,369,312,280,317,311],"blue":[328,311,340,308,303,297,289,289,329,238,309,371],"auto":87.7,"tips":14},{"id":"path-standoff-far","group":"path","label":"Launch from the farthest scoring spot","red":[331,277,327,352,260,263,327,348,371,277,355,309],"blue":[252,310,333,294,282,276,295,351,330,327,269,298],"auto":87.7,"tips":14.2}],"loop":{"baseline":{"combined":736,"se":6.6,"red":null,"blue":null,"margin":null,"marginSe":null},"baseline-split":{"combined":735.6,"se":6.6,"red":null,"blue":null,"margin":null,"marginSe":null},"e1-partner-load-eta":{"combined":742,"se":8.9,"red":null,"blue":null,"margin":null,"marginSe":null},"e2-loose-launch-tolerance":{"combined":756.1,"se":6.3,"red":null,"blue":null,"margin":null,"marginSe":null},"e3-decel-4":{"combined":743.6,"se":10.2,"red":null,"blue":null,"margin":null,"marginSe":null},"e4-wall-lanes-closer":{"combined":773.6,"se":7.9,"red":null,"blue":null,"margin":null,"marginSe":null},"e5-waittip-refit-lanes":{"combined":776.4,"se":7.8,"red":null,"blue":null,"margin":null,"marginSe":null},"e6a-park-margin":{"combined":768.3,"se":6.7,"red":null,"blue":null,"margin":null,"marginSe":null},"e6b-harvest-scripts":{"combined":757.7,"se":9.1,"red":null,"blue":null,"margin":null,"marginSe":null},"e7-shoot-at-0.35":{"combined":731.3,"se":7.7,"red":null,"blue":null,"margin":null,"marginSe":null},"e8-right-wall-sweep":{"combined":779.8,"se":10,"red":null,"blue":null,"margin":null,"marginSe":null},"e9-under-hive-timed":{"combined":774.3,"se":12.5,"red":null,"blue":null,"margin":null,"marginSe":null},"e10-sweep-from-center":{"combined":776,"se":8.2,"red":null,"blue":null,"margin":null,"marginSe":null},"e11-rear-wall-grab":{"combined":801,"se":7.6,"red":null,"blue":null,"margin":null,"marginSe":null},"e12-left-pocket":{"combined":786.3,"se":8.1,"red":null,"blue":null,"margin":null,"marginSe":null},"e13-left-pocket-later":{"combined":803.8,"se":7.1,"red":null,"blue":null,"margin":null,"marginSe":null},"e14a-park-intake":{"combined":790.9,"se":7.9,"red":null,"blue":null,"margin":null,"marginSe":null},"e14b-left-pattern":{"combined":790.9,"se":8.9,"red":null,"blue":null,"margin":null,"marginSe":null},"e15-fire-all":{"combined":794.6,"se":6.5,"red":null,"blue":null,"margin":null,"marginSe":null},"e16-endgame-value":{"combined":800.4,"se":8.9,"red":null,"blue":null,"margin":null,"marginSe":null},"e17-small-light-fast-all-four":{"combined":832.3,"se":7.4,"red":null,"blue":null,"margin":null,"marginSe":null},"e18-new-default-robot":{"combined":832.3,"se":7.4,"red":null,"blue":null,"margin":null,"marginSe":null},"e19-dual-intake-all-four":{"combined":851,"se":7.4,"red":null,"blue":null,"margin":null,"marginSe":null},"e18b-default-margin":{"combined":832.3,"se":7.4,"red":416.8,"blue":415.6,"margin":1.2,"marginSe":8.6},"e20-dual-intake-red-only":{"combined":841.1,"se":6,"red":429.3,"blue":411.8,"margin":17.6,"marginSe":5.8},"e21-tip-past-level-and-spot-swap":{"combined":782.5,"se":7.8,"red":401,"blue":381.5,"margin":19.4,"marginSe":8.4},"e21a-spot-swap-only":{"combined":773.1,"se":9.6,"red":388.9,"blue":384.2,"margin":4.8,"marginSe":10.5},"e21b-tip-past-level-only":{"combined":814.3,"se":9.1,"red":409.8,"blue":404.5,"margin":5.2,"marginSe":6.8},"e22-swap-when-crossed":{"combined":829,"se":8.2,"red":416,"blue":413,"margin":3,"marginSe":8.1},"e23-left-waits-for-cell":{"combined":829,"se":8.2,"red":416,"blue":413,"margin":3,"marginSe":8.1},"e24-meta-build-red-only":{"combined":919.2,"se":10.1,"red":507.5,"blue":411.7,"margin":95.8,"marginSe":9},"e25-dual-shooter-red":{"combined":814.7,"se":7.4,"red":412.2,"blue":402.5,"margin":9.8,"marginSe":8.3},"e26-dual-shooter-dual-intake-red":{"combined":833.8,"se":11.5,"red":425.5,"blue":408.3,"margin":17.3,"marginSe":7.5},"e27-referee-baseline":{"combined":829,"se":8.2,"red":416,"blue":413,"margin":3,"marginSe":8.1},"e28-full-defense-left-robot":{"combined":650.3,"se":7.5,"red":323.9,"blue":326.4,"margin":-2.5,"marginSe":7},"e29-opportunistic-both":{"combined":808.3,"se":6.6,"red":407.3,"blue":400.9,"margin":6.4,"marginSe":7.9},"e30-weak-red-both-score":{"combined":678.8,"se":9.8,"red":277.1,"blue":401.7,"margin":-124.6,"marginSe":6.4},"e31-weak-red-one-defends":{"combined":538.8,"se":5.7,"red":209,"blue":329.9,"margin":-120.9,"marginSe":6.8},"e32-very-weak-red-both-score":{"combined":560.6,"se":8.8,"red":162.5,"blue":398.1,"margin":-235.7,"marginSe":8.1},"e33-very-weak-red-one-defends":{"combined":462.5,"se":7.4,"red":133.1,"blue":329.5,"margin":-196.4,"marginSe":6.8},"e34-baseline-alone":{"combined":418.8,"se":5.1,"red":409.7,"blue":9.1,"margin":400.6,"marginSe":5.1},"e35-meta-alone":{"combined":513.3,"se":8.5,"red":504.1,"blue":9.2,"margin":494.9,"marginSe":8.7},"e36-meta-vs-meta":{"combined":1017.4,"se":11,"red":511.8,"blue":505.6,"margin":6.3,"marginSe":7.6},"e37-baseline-vs-meta":{"combined":917,"se":7.7,"red":411.6,"blue":505.4,"margin":-93.8,"marginSe":10.1},"e38-meta-plus-weak-both-score":{"combined":723.6,"se":7.3,"red":313.6,"blue":410,"margin":-96.5,"marginSe":8.8},"e39-meta-plus-weak-defender":{"combined":674.7,"se":9,"red":335.1,"blue":339.6,"margin":-4.5,"marginSe":7.1},"e40-meta-old-tip-test":{"combined":1017.4,"se":11,"red":511.8,"blue":505.6,"margin":6.3,"marginSe":7.6},"e41-meta-tip-by-motion":{"combined":1032,"se":8.6,"red":512.3,"blue":519.8,"margin":-7.5,"marginSe":9.8},"e42-baseline-tip-by-motion":{"combined":816,"se":6.9,"red":407.8,"blue":408.3,"margin":-0.5,"marginSe":7.7},"e43-elevation-error-x3":{"combined":760,"se":7.3,"red":354.5,"blue":405.5,"margin":-51.1,"marginSe":8.4},"e44-azimuth-error-x3":{"combined":792.2,"se":7.9,"red":391.6,"blue":400.6,"margin":-9,"marginSe":6.9},"e45-speed-error-x3":{"combined":707.1,"se":8.7,"red":307.6,"blue":399.5,"margin":-92,"marginSe":8.8},"e46-all-errors-x3":{"combined":662.7,"se":6.4,"red":260.2,"blue":402.5,"margin":-142.3,"marginSe":6.8},"e47-andymark-masses-baseline":{"combined":820.3,"se":7.2,"red":411.3,"blue":409,"margin":2.3,"marginSe":8.9}},"matches":{"design":780,"loop":1284,"first":1524}};
+const $ = id => document.getElementById(id), NS = 'http://www.w3.org/2000/svg';
+const el = (tag, attrs, text) => { const e = document.createElementNS(NS, tag); for (const k in attrs) e.setAttribute(k, attrs[k]); if (text !== undefined) e.textContent = text; return e; };
+const mean = v => v.reduce((a, b) => a + b, 0) / v.length, sd = v => { const m = mean(v); return Math.sqrt(v.reduce((a, b) => a + (b - m) ** 2, 0) / Math.max(1, v.length - 1)); }, se = v => sd(v) / Math.sqrt(v.length);
+const cfg = id => DATA.configs.find(c => c.id === id), BASE = mean(cfg('shoot-dual').red), BASE_SE = se(cfg('shoot-dual').red);
+const delta = id => mean(cfg(id).red) - BASE, lerp = (pts, x) => { if (x <= pts[0][0]) return pts[0][1]; for (let i = 1; i < pts.length; i++) if (x <= pts[i][0]) { const [x0, y0] = pts[i - 1], [x1, y1] = pts[i]; return y0 + (y1 - y0) * (x - x0) / (x1 - x0); } return pts[pts.length - 1][1]; };
+$('nmatches').textContent = (DATA.matches.design + DATA.matches.loop + DATA.matches.first).toLocaleString('en-US');
+
+// ---------- the estimate ----------
+const KG = 0.45359237, IN = 0.0254;
+// Display units: metric by default, shared with the rest of the site through the browser's storage.
+let UNITS = 'metric'; try { if (localStorage.getItem('biobuzz.units') === 'us') UNITS = 'us'; } catch {}
+const massText = kg => (UNITS === 'us' ? `${Math.round(kg / KG)} lb` : `${kg} kg`), sizeText = cm => (UNITS === 'us' ? `${(cm / 2.54).toFixed(1)} in.` : `${cm} cm`);
+// The labels of the configurations carry both units. This keeps the one that the reader chose.
+const unitLabel = s => s.replace(/(\d+(?:\.\d+)?) in\. \((0\.\d+) m(, baseline)?\)/, (m, a, b, c) => (UNITS === 'us' ? `${a} in.` : `${Math.round(b * 100)} cm`) + (c ? ' (baseline)' : '')).replace(/(\d+) kg \(([\d.]+) lb\)/, (m, a, b) => (UNITS === 'us' ? `${b} lb` : `${a} kg`)).replace(/(\d+) kg robot/, (m, a) => (UNITS === 'us' ? `${Math.round(a / KG)} lb robot` : `${a} kg robot`)).replace(/(\d+) in\. chassis/, (m, a) => (UNITS === 'us' ? `${a} in. chassis` : `${Math.round(a * 2.54)} cm chassis`));
+// Gains shrink as they stack. The factor is fitted to the combined build: parts that sum to 126 points measured 90.
+const STACK = 0.0023;
+function estimate(c) {
+  const parts = [];
+  const add = (name, v) => { if (Math.abs(v) >= 0.5) parts.push([name, v]); };
+  add('release', { dual: 0, cat: delta('shoot-catapult'), fast: delta('shoot-fast'), fifo: delta('shoot-fifo'), slow: delta('shoot-slow') }[c.release]);
+  const dual = c.intake === 'dual' || c.intake === 'dualwide';
+  // With intakes at both ends, the shooter's side stops mattering: 434 at the front against 438 at the rear.
+  if (c.side === 'front') add('shooter side', dual ? delta('intake-dual-front-shooter') - delta('intake-dual') : delta('shoot-front'));
+  add('mass', lerp([[7, delta('mass-7')], [10, 0], [13, delta('mass-13')], [17, delta('mass-17')]], c.mass)); // kilograms
+  add('size', lerp([[0.30, delta('size-30')], [0.34, delta('size-34')], [0.381, 0], [0.43, delta('size-43')], [0.457, delta('size-46')]], c.size / 100)); // The slider is in centimeters.
+  // Gearing is flat from 312 rpm to 700 rpm: every row is inside the noise. Only 850 rpm loses points.
+  add('gearing', lerp([[700, 0], [850, delta('drive-850')]], c.rpm));
+  add('intake', { front: 0, frontwide: delta('size-38-wide-intake'), dual: delta('intake-dual'), dualwide: delta('intake-dual-wide') }[c.intake]);
+  add('pickup success', lerp([[60, delta('intake-60')], [80, delta('intake-80')], [95, 0]], c.rel));
+  add('AUTO', { pair: 0, sololeave: delta('auto-solo-leave'), solo: delta('auto-naive'), leave: delta('auto-leave-leave'), none: delta('auto-none') }[c.auto]);
+  add('TELEOP plan', { tips: 0, p30: delta('strat-tips-f30'), p45: delta('strat-tips-f45'), b30: delta('strat-f30-f30'), b45: delta('strat-f45-f45'), b66: delta('strat-f66-f66') }[c.teleop]);
+  const pos = parts.filter(p => p[1] > 0).reduce((a, p) => a + p[1], 0), neg = parts.filter(p => p[1] < 0).reduce((a, p) => a + p[1], 0);
+  let m = BASE + pos * Math.max(0.6, 1 - STACK * pos) + neg;
+  const spreadF = lerp([[1, 1], [3, mean(cfg('acc-x3').red) / BASE], [5, mean(cfg('acc-x5').red) / BASE], [8, mean(cfg('acc-x8').red) / BASE]], c.spread);
+  m *= spreadF; if (c.spread > 1) parts.push(['launch spread', m - m / spreadF]);
+  if (c.standoff === 'edge') { const f = mean(cfg('path-standoff-near').red.concat(cfg('path-standoff-near').blue)) / mean(cfg('path-base').red.concat(cfg('path-base').blue)); parts.push(['window edge', m * f - m]); m *= f; }
+  return { mean: Math.max(40, m), parts };
+}
+const sdOf = m => 7 + 0.07 * m;
+// A full-time defender gives up 22% of its alliance's score and takes 19% of the opponent's: 92 of 416 and 87 of 413.
+const DEF_OWN = 0.78, DEF_OPP = 0.81;
+const META = { release: 'cat', side: 'rear', standoff: 'mid', mass: 7, size: 30.5, rpm: 500, intake: 'dual', rel: 95, auto: 'pair', teleop: 'tips', spread: 1, defense: 'none' };
+const BASELINE = { release: 'dual', side: 'rear', standoff: 'mid', mass: 10, size: 38.1, rpm: 600, intake: 'front', rel: 95, auto: 'pair', teleop: 'tips', spread: 1, defense: 'none' };
+const phi = z => { const t = 1 / (1 + 0.3275911 * Math.abs(z) / Math.SQRT2), y = 1 - (((((1.061405429 * t - 1.453152027) * t) + 1.421413741) * t - 0.284496736) * t + 0.254829592) * t * Math.exp(-z * z / 2); return 0.5 * (1 + Math.sign(z) * y); };
+const pdf = (x, m, s) => Math.exp(-((x - m) ** 2) / (2 * s * s)) / (s * Math.sqrt(2 * Math.PI));
+
+let opponent = 'baseline';
+const OPPS = [['none', 'No opponent'], ['same', 'The same alliance'], ['baseline', 'The baseline alliance'], ['meta', 'The meta alliance']];
+// The three launcher errors combine into one effective multiple of the reference launcher. The weights come from three
+// measurements at 3 times the reference, one error at a time: launch speed cost 109 points, elevation 62, and azimuth 25.
+const REF = { elev: 1.0, azim: 1.2, speed: 0.08 }, WEIGHT = { elev: 62 / 196, azim: 25 / 196, speed: 109 / 196 };
+const effectiveSpread = (e, a, v) => Math.sqrt(Math.max(1, 1 + WEIGHT.elev * ((e / REF.elev) ** 2 - 1) + WEIGHT.azim * ((a / REF.azim) ** 2 - 1) + WEIGHT.speed * ((v / REF.speed) ** 2 - 1)));
+const speedIn = () => +$('speed').value * (UNITS === 'us' ? 0.3048 : 1);
+function readForm() { const v = id => $(id).value; return { spread: Math.min(8, effectiveSpread(+v('elev'), +v('azim'), speedIn())), release: v('release'), side: v('side'), standoff: v('standoff'), mass: +v('mass'), size: +v('size'), rpm: +v('rpm'), intake: v('intake'), rel: +v('rel'), auto: v('auto'), teleop: v('teleop'), defense: v('defense') }; }
+function curve(svg, x0, x1, W, top, H, m, s, stroke, fill, peak) {
+  const X = x => 40 + (x - x0) / (x1 - x0) * (W - 60), Y = p => top + H - p / peak * H; let d = '';
+  for (let i = 0; i <= 160; i++) { const x = x0 + (x1 - x0) * i / 160; d += `${i ? 'L' : 'M'}${X(x).toFixed(1)},${Y(pdf(x, m, s)).toFixed(1)}`; }
+  svg.append(el('path', { d: `${d}L${X(x1)},${top + H}L${X(x0)},${top + H}Z`, fill, stroke: 'none' }), el('path', { d, fill: 'none', stroke, 'stroke-width': 2 }));
+  svg.append(el('line', { x1: X(m), x2: X(m), y1: Y(pdf(m, m, s)), y2: top + H, stroke, 'stroke-width': 1, 'stroke-dasharray': '3 3' }));
+  return X;
+}
+function axis(svg, X, x0, x1, y, step, fmt) { svg.append(el('line', { x1: X(x0), x2: X(x1), y1: y, y2: y, stroke: 'var(--grid)' })); for (let t = Math.ceil(x0 / step) * step; t <= x1; t += step) { svg.append(el('line', { x1: X(t), x2: X(t), y1: y, y2: y + 4, stroke: 'var(--grid)' })); const tx = el('text', { x: X(t), y: y + 16, 'text-anchor': 'middle' }, fmt ? fmt(t) : t); svg.append(tx); } }
+function update() {
+  const c = readForm(); $('o-spread').textContent = `Together these act like ${c.spread.toFixed(1)} times the reference launcher. Launch speed matters most: at 3 times the reference, it alone costs 109 points, elevation 62, and azimuth 25.`; $('o-mass').textContent = massText(c.mass); $('o-size').textContent = sizeText(c.size); $('o-rpm').textContent = `${c.rpm} rpm`; $('o-rel').textContent = `${c.rel}%`;
+  const mine = estimate(c); let my = mine.mean, opp = opponent === 'none' ? null : estimate(opponent === 'same' ? c : opponent === 'meta' ? META : BASELINE).mean;
+  if (c.defense === 'full') { mine.parts.push(['defender gives up', my * DEF_OWN - my]); my *= DEF_OWN; if (opp !== null) opp *= DEF_OPP; }
+  if (opponent === 'same' && c.defense === 'full') my *= DEF_OPP; // The mirror alliance defends too.
+  const sMy = sdOf(my), sOpp = opp === null ? 0 : sdOf(opp);
+  $('s-you').textContent = Math.round(my); $('s-opp').textContent = opp === null ? '–' : Math.round(opp);
+  const dm = opp === null ? null : my - opp, ds = Math.hypot(sMy, sOpp), win = opp === null ? null : phi(dm / ds);
+  $('s-margin').textContent = dm === null ? '–' : `${dm >= 0 ? '+' : '-'}${Math.abs(Math.round(dm))}`; $('s-win').textContent = win === null ? '–' : `${Math.round(100 * Math.min(0.99, Math.max(0.01, win)))}%`;
+  const svg = $('dist'); svg.replaceChildren(); const lo = Math.min(my - 3.2 * sMy, opp === null ? 1e9 : opp - 3.2 * sOpp), hi = Math.max(my + 3.2 * sMy, opp === null ? -1e9 : opp + 3.2 * sOpp), x0 = Math.max(0, Math.floor(lo / 50) * 50), x1 = Math.ceil(hi / 50) * 50;
+  const peak = Math.max(pdf(my, my, sMy), opp === null ? 0 : pdf(opp, opp, sOpp)) * 1.12; let X;
+  if (opp !== null) curve(svg, x0, x1, 680, 24, 180, opp, sOpp, 'var(--blue)', 'var(--opp-fill)', peak);
+  X = curve(svg, x0, x1, 680, 24, 180, my, sMy, 'var(--you)', 'var(--you-fill)', peak); axis(svg, X, x0, x1, 204, (x1 - x0) > 500 ? 100 : 50);
+  svg.append(el('text', { x: X(my), y: 16, 'text-anchor': 'middle', class: 'lbl' }, `you ${Math.round(my)} ± ${Math.round(sMy)}`)); if (opp !== null && Math.abs(X(opp) - X(my)) > 90) svg.append(el('text', { x: X(opp), y: 16, 'text-anchor': 'middle', class: 'lbl' }, `opponent ${Math.round(opp)} ± ${Math.round(sOpp)}`));
+  svg.append(el('text', { x: 360, y: 240, 'text-anchor': 'middle' }, 'match score, points'));
+  const ms = $('margin'); ms.replaceChildren();
+  if (dm !== null) { const a = Math.floor((dm - 3.2 * ds) / 50) * 50, b = Math.ceil((dm + 3.2 * ds) / 50) * 50, pk = pdf(dm, dm, ds) * 1.15, Xm = x => 40 + (x - a) / (b - a) * 620, Ym = p => 84 - p / pk * 66; let dWin = '', dAll = '';
+    for (let i = 0; i <= 160; i++) { const x = a + (b - a) * i / 160, pt = `${Xm(x).toFixed(1)},${Ym(pdf(x, dm, ds)).toFixed(1)}`; dAll += `${i ? 'L' : 'M'}${pt}`; if (x >= 0) dWin += `${dWin ? 'L' : `M${Xm(Math.max(0, a)).toFixed(1)},84L`}${pt}`; }
+    if (dWin) ms.append(el('path', { d: `${dWin}L${Xm(b)},84Z`, fill: 'var(--you-fill)', stroke: 'none' })); ms.append(el('path', { d: dAll, fill: 'none', stroke: 'var(--ink)', 'stroke-width': 1.5 }));
+    if (a < 0 && b > 0) ms.append(el('line', { x1: Xm(0), x2: Xm(0), y1: 12, y2: 84, stroke: 'var(--ink)', 'stroke-width': 1 })); axis(ms, Xm, a, b, 84, (b - a) > 500 ? 100 : 50, t => (t > 0 ? `+${t}` : t)); ms.append(el('text', { x: 360, y: 116, 'text-anchor': 'middle' }, 'your score minus theirs: the shaded part is a win')); }
+  else ms.append(el('text', { x: 340, y: 60, 'text-anchor': 'middle' }, 'Pick an opponent to see the margin.'));
+  $('parts').replaceChildren(...[['baseline', BASE], ...mine.parts].map(([n, v], i) => { const s = document.createElement('span'); s.innerHTML = `${n} <b>${i ? (v >= 0 ? '+' : '-') + Math.abs(Math.round(v)) : Math.round(v)}</b>`; return s; }));
+}
+$('opps').append(...OPPS.map(([k, t]) => { const b = document.createElement('button'); b.type = 'button'; b.textContent = t; b.id = `opp-${k}`; b.setAttribute('aria-pressed', String(k === opponent)); b.onclick = () => { opponent = k; for (const q of $('opps').children) q.setAttribute('aria-pressed', String(q === b)); update(); }; return b; }));
+$('form').addEventListener('input', update);
+const setSpeedField = mps => { $('speed').value = UNITS === 'us' ? (mps / 0.3048).toFixed(2) : mps.toFixed(2); $('l-speed').textContent = `Launch speed, ${UNITS === 'us' ? 'ft/s' : 'm/s'}`; };
+document.querySelectorAll('[data-err]').forEach(b => { b.onclick = () => { const k = +b.dataset.err; $('elev').value = (REF.elev * k).toFixed(1); $('azim').value = (REF.azim * k).toFixed(1); setSpeedField(REF.speed * k); update(); }; });
+
+// ---------- what each choice is worth ----------
+const GROUPS = [['accuracy', 'Launcher and intake reliability'], ['auto', 'AUTO'], ['strategy', 'TELEOP plan'], ['shooter', 'Shooter'], ['drivetrain', 'Gearing and mass'], ['size', 'Size'], ['intake', 'Intake and shooter layout']];
+const isBase = c => Math.abs(mean(c.red) - BASE) < 1e-9;
+function drawEffects() {
+  const svg = $('fx'), rows = []; for (const [g, title] of GROUPS) { rows.push({ title }); for (const c of DATA.configs.filter(q => q.group === g && !isBase(q)).sort((a, b) => mean(b.red) - mean(a.red))) rows.push({ c }); }
+  const W = 1040, L = 330, R = 60, rowH = 19, H = rows.length * rowH + 50, lo = -330, hi = 70, X = v => L + (v - lo) / (hi - lo) * (W - L - R); svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
+  svg.append(el('rect', { x: X(-25), y: 22, width: X(25) - X(-25), height: H - 50, fill: 'var(--noise)' })); for (let t = -300; t <= 50; t += 50) { svg.append(el('line', { x1: X(t), x2: X(t), y1: 22, y2: H - 28, stroke: t === 0 ? 'var(--ink)' : 'var(--faint)', 'stroke-width': 1 })); svg.append(el('text', { x: X(t), y: H - 12, 'text-anchor': 'middle' }, t > 0 ? `+${t}` : t)); }
+  rows.forEach((r, i) => { const y = 34 + i * rowH; if (r.title) { svg.append(el('text', { x: 8, y: y + 4, class: 'lbl', style: 'font-family:var(--display);font-size:15px;font-weight:600;text-transform:uppercase' }, r.title)); return; }
+    const d = mean(r.c.red) - BASE, e = Math.hypot(se(r.c.red), BASE_SE), col = Math.abs(d) < 25 ? 'var(--dim)' : d > 0 ? 'var(--good)' : 'var(--bad)';
+    svg.append(el('text', { x: L - 12, y: y + 4, 'text-anchor': 'end', class: 'lbl' }, (l => (l.length > 46 ? l.slice(0, 45) + '…' : l))(unitLabel(r.c.label))));
+    svg.append(el('line', { x1: X(Math.max(lo, d - e)), x2: X(Math.min(hi, d + e)), y1: y, y2: y, stroke: col, 'stroke-width': 2 }), el('circle', { cx: X(Math.max(lo, d)), cy: y, r: 4.5, fill: col }));
+    svg.append(el('text', { x: W - 8, y: y + 4, 'text-anchor': 'end', style: `fill:${col}` }, `${d >= 0 ? '+' : '-'}${Math.abs(Math.round(d))}`)); });
+}
+// ---------- every match, one dot ----------
+let histGroup = 'shooter';
+function drawHist() {
+  const svg = $('hist'); svg.replaceChildren(); const list = DATA.configs.filter(c => c.group === histGroup), all = list.flatMap(c => c.red), lo = Math.floor(Math.min(...all) / 20) * 20, hi = Math.ceil(Math.max(...all) / 20) * 20 + 20;
+  const W = 1040, L = 330, rowH = 46, H = list.length * rowH + 44, X = v => L + (v - lo) / (hi - lo) * (W - L - 30); svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
+  for (let t = Math.ceil(lo / 50) * 50; t <= hi; t += 50) { svg.append(el('line', { x1: X(t), x2: X(t), y1: 8, y2: H - 30, stroke: 'var(--faint)' })); svg.append(el('text', { x: X(t), y: H - 12, 'text-anchor': 'middle' }, t)); }
+  svg.append(el('line', { x1: X(BASE), x2: X(BASE), y1: 8, y2: H - 30, stroke: 'var(--blue)', 'stroke-dasharray': '4 3' }));
+  list.forEach((c, i) => { const y = 8 + (i + 1) * rowH - 8, m = mean(c.red), bins = {}; svg.append(el('line', { x1: L, x2: W - 30, y1: y, y2: y, stroke: 'var(--grid)' }));
+    svg.append(el('text', { x: L - 12, y: y - 12, 'text-anchor': 'end', class: 'lbl' }, (l => (l.length > 46 ? l.slice(0, 45) + '…' : l))(unitLabel(c.label)))); svg.append(el('text', { x: L - 12, y: y + 2, 'text-anchor': 'end' }, `mean ${Math.round(m)} · sd ${Math.round(sd(c.red))}`));
+    for (const v of c.red) { const b = Math.floor(v / 20) * 20, k = (bins[b] = (bins[b] ?? 0) + 1); svg.append(el('circle', { cx: X(b + 10), cy: y - 6 - (k - 1) * 9, r: 4, fill: isBase(c) ? 'var(--blue)' : 'var(--red)', 'fill-opacity': .85 })); }
+    svg.append(el('line', { x1: X(m), x2: X(m), y1: y - 2, y2: y + 7, stroke: 'var(--ink)', 'stroke-width': 2 })); });
+}
+$('tabs').append(...GROUPS.map(([g, t]) => { const b = document.createElement('button'); b.type = 'button'; b.textContent = t; b.id = `tab-${g}`; b.setAttribute('aria-pressed', String(g === histGroup)); b.onclick = () => { histGroup = g; for (const q of $('tabs').children) q.setAttribute('aria-pressed', String(q === b)); drawHist(); }; return b; }));
+
+// ---------- small charts ----------
+function drawTime() { const svg = $('time'), parts = [['Driving to elements', 49, 'var(--you)'], ['Driving to the launch spot', 38, 'var(--blue)'], ['Slowing onto the spot', 13, 'var(--red)'], ['Launching', 6, 'var(--good)'], ['Waiting for the CELL', 4, 'var(--dim)'], ['Collision recovery', 3, 'var(--bad)'], ['PARK', 6, 'var(--grid)']], total = parts.reduce((a, p) => a + p[1], 0); let x = 10;
+  for (const [, v, col] of parts) { const w = v / total * 460; svg.append(el('rect', { x, y: 10, width: Math.max(1, w - 1.5), height: 34, fill: col })); x += w; }
+  parts.forEach(([n, v, col], i) => { const cx = 10 + (i % 2) * 235, cy = 66 + Math.floor(i / 2) * 28; svg.append(el('rect', { x: cx, y: cy, width: 11, height: 11, fill: col }), el('text', { x: cx + 18, y: cy + 10, class: 'lbl' }, `${n}`), el('text', { x: cx + 222, y: cy + 10, 'text-anchor': 'end' }, `${v} s`)); }); }
+function drawLoop() { const svg = $('loop'), steps = [['start', 'baseline'], ['partner load', 'e1-partner-load-eta'], ['launch tolerance', 'e2-loose-launch-tolerance'], ['wall sweeps', 'e4-wall-lanes-closer'], ['rear wall grab', 'e11-rear-wall-grab'], ['endgame by value', 'e16-endgame-value'], ['lighter robot', 'e18-new-default-robot']].filter(s => DATA.loop[s[1]]);
+  const v = steps.map(s => DATA.loop[s[1]].combined), lo = 700, hi = 860, X = i => 44 + i * (420 / (steps.length - 1)), Y = q => 130 - (q - lo) / (hi - lo) * 112;
+  for (let t = 700; t <= 850; t += 50) { svg.append(el('line', { x1: 40, x2: 470, y1: Y(t), y2: Y(t), stroke: 'var(--faint)' }), el('text', { x: 34, y: Y(t) + 4, 'text-anchor': 'end' }, t)); }
+  svg.append(el('path', { d: v.map((q, i) => `${i ? 'L' : 'M'}${X(i)},${Y(q)}`).join(''), fill: 'none', stroke: 'var(--you)', 'stroke-width': 2.5 }));
+  steps.forEach((s, i) => { const d = DATA.loop[s[1]]; svg.append(el('line', { x1: X(i), x2: X(i), y1: Y(d.combined - d.se), y2: Y(d.combined + d.se), stroke: 'var(--you)' }), el('circle', { cx: X(i), cy: Y(d.combined), r: 4, fill: 'var(--you)' }), el('text', { x: X(i), y: Y(d.combined) - 10, 'text-anchor': 'middle', class: 'lbl' }, Math.round(d.combined)));
+    const t = el('text', { x: X(i), y: 146, 'text-anchor': 'end', transform: `rotate(-32 ${X(i)} 146)` }, s[0]); svg.append(t); }); }
+function drawDefense() { const svg = $('def'), L = DATA.loop, pair = (a, b) => (L[a] && L[b] ? { give: L[a].red - L[b].red, take: L[a].blue - L[b].blue } : null);
+  const rows = [['Equal robots', pair('e27-referee-baseline', 'e28-full-defense-left-robot')], ['Your spread is 3 x', pair('e30-weak-red-both-score', 'e31-weak-red-one-defends')], ['Your spread is 5 x', pair('e32-very-weak-red-both-score', 'e33-very-weak-red-one-defends')], ['Strong robot, weak partner', pair('e38-meta-plus-weak-both-score', 'e39-meta-plus-weak-defender')]].filter(r => r[1]), X = q => 170 + q / 100 * 250;
+  for (let t = 0; t <= 100; t += 25) { svg.append(el('line', { x1: X(t), x2: X(t), y1: 8, y2: 150, stroke: 'var(--faint)' }), el('text', { x: X(t), y: 166, 'text-anchor': 'middle' }, t)); }
+  rows.forEach(([n, p], i) => { const y = 10 + i * 36, net = p.take - p.give; svg.append(el('text', { x: 160, y: y + 10, 'text-anchor': 'end', class: 'lbl' }, n), el('text', { x: 160, y: y + 24, 'text-anchor': 'end', style: `fill:${net > 15 ? 'var(--good)' : 'var(--dim)'}` }, `margin ${net >= 0 ? '+' : '-'}${Math.abs(Math.round(net))}`));
+    // A weak scorer can cost its partner points, so an alliance can gain points when that robot stops scoring.
+    const g = Math.abs(p.give); svg.append(el('rect', { x: X(0), y, width: X(g) - X(0), height: 12, fill: p.give >= 0 ? 'var(--red)' : 'var(--you)' }), el('rect', { x: X(0), y: y + 14, width: X(p.take) - X(0), height: 12, fill: 'var(--good)' }));
+    svg.append(el('text', { x: X(g) + 5, y: y + 10 }, `${p.give >= 0 ? 'gives up' : 'own score rises'} ${Math.round(g)}`), el('text', { x: X(p.take) + 5, y: y + 25 }, `takes ${Math.round(p.take)}`)); });
+  svg.append(el('text', { x: 295, y: 184, 'text-anchor': 'middle' }, 'points per match')); }
+function drawIndep() { const L = DATA.loop, r = k => (L[k] ? Math.round(L[k].red) : '–'), b = k => (L[k] ? Math.round(L[k].blue) : '–');
+  $('indep').innerHTML = `<tr><th>Alliance</th><th>Alone</th><th>Against itself</th><th>Against the other</th></tr><tr><td>Baseline</td><td>${r('e34-baseline-alone')}</td><td>${r('e18b-default-margin')}</td><td>${r('e37-baseline-vs-meta')}</td></tr><tr><td>Meta</td><td>${r('e35-meta-alone')}</td><td>${r('e36-meta-vs-meta')}</td><td>${b('e37-baseline-vs-meta')}</td></tr>`; }
+const redraw = () => { $('f-base').textContent = `${sizeText(38)} square, ${massText(10)}`; $('f-meta').textContent = `${sizeText(30)}, ${massText(7)}`; update(); $('fx').replaceChildren(); drawEffects(); drawHist(); };
+// The site's navigation carries the units switch and announces a change with this event.
+addEventListener('biobuzz-units', e => { const mps = speedIn(); UNITS = e.detail; setSpeedField(mps); redraw(); });
+const start = () => { setSpeedField(0.08); $('f-base').textContent = `${sizeText(38)} square, ${massText(10)}`; $('f-meta').textContent = `${sizeText(30)}, ${massText(7)}`; update(); drawEffects(); drawHist(); drawTime(); drawLoop(); drawDefense(); drawIndep(); };
+start();
+</script>
+
+</html>

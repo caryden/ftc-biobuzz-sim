@@ -1,0 +1,120 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>BIOBUZZ Sim</title>
+<style>
+  :root { --bg: rgba(16,19,24,.82); --line: rgba(255,255,255,.1); --fg: #e9ecf1; --dim: #98a1ae; --red: #ef4a3c; --blue: #4d7dff; --pollen: #f2c81e; --ok: #41e07f; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #14171c; color: var(--fg); font: 13px/1.4 ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif; }
+  canvas { position: fixed; inset: 0; width: 100%; height: 100%; display: block; }
+  .panel { position: fixed; background: var(--bg); border: 1px solid var(--line); border-radius: 10px; backdrop-filter: blur(8px); padding: 10px 12px; }
+  /* The scoreboard follows the FTC audience display: alliance blocks, solid score boxes, and a white timer in the middle. */
+  #top { top: 12px; left: 50%; transform: translateX(-50%); display: flex; align-items: stretch; padding: 0; overflow: hidden; border-radius: 8px; }
+  #top .teams { display: flex; flex-direction: column; justify-content: center; padding: 0 12px; font: 700 12px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; color: #fff; }
+  #top .score { font: 800 34px/1 ui-sans-serif, system-ui, sans-serif; min-width: 92px; display: flex; align-items: center; justify-content: center; color: #fff; font-variant-numeric: tabular-nums; }
+  #top .teams.red { background: #a3241b; } #top .score.red { background: var(--red); } #top .teams.blue { background: #1f3f9e; } #top .score.blue { background: var(--blue); }
+  #top .mid { background: #f4f5f7; color: #14171c; padding: 5px 16px 4px; min-width: 128px; }
+  #clock { font: 800 32px/1 ui-sans-serif, system-ui, sans-serif; text-align: center; font-variant-numeric: tabular-nums; }
+  #phase { font-size: 10px; letter-spacing: .12em; text-transform: uppercase; color: #565d68; text-align: center; font-weight: 700; margin-top: 2px; }
+  #left { top: 12px; left: 12px; width: 264px; }
+  #right { top: 12px; right: 12px; width: 232px; }
+  h2 { margin: 0 0 6px; font-size: 11px; letter-spacing: .12em; text-transform: uppercase; color: var(--dim); font-weight: 600; }
+  table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+  /* Score tables put the category in the middle, with red at one side and blue at the other, as FTC match results do. */
+  table.ftc td { padding: 2px 4px; text-align: center; color: var(--dim); white-space: nowrap; } table.ftc td.r, table.ftc td.b { width: 50px; font-weight: 700; color: #fff; }
+  table.ftc td.r { background: rgba(239,74,60,.30); } table.ftc td.b { background: rgba(77,125,255,.30); }
+  table.ftc tr.head td.r { background: var(--red); } table.ftc tr.head td.b { background: var(--blue); } table.ftc tr.head td { font-size: 11px; letter-spacing: .1em; }
+  table.ftc tr.total td { border-top: 1px solid var(--line); font-size: 15px; color: #fff; font-weight: 800; } table.ftc tr.total td.r { background: var(--red); } table.ftc tr.total td.b { background: var(--blue); }
+  table.ftc tr.rprow td.r, table.ftc tr.rprow td.b { color: var(--ok); } table.ftc tr.sep td { border-top: 1px solid var(--line); }
+  #final { top: 50%; left: 50%; transform: translate(-50%,-50%); width: 440px; padding: 0; overflow: hidden; }
+  #final .win { padding: 10px; text-align: center; font: 800 20px/1.2 ui-sans-serif, system-ui, sans-serif; letter-spacing: .06em; color: #fff; }
+  #final .big { display: flex; } #final .big div { flex: 1; text-align: center; font: 800 46px/1.3 ui-sans-serif, system-ui, sans-serif; color: #fff; font-variant-numeric: tabular-nums; }
+  #final .body { padding: 8px 12px 12px; } #final .btns { display: flex; gap: 8px; margin-top: 8px; } #final .btns button { margin: 0; }
+  label { display: flex; justify-content: space-between; align-items: center; margin: 5px 0; color: var(--dim); }
+  select, button { background: #232831; color: var(--fg); border: 1px solid var(--line); border-radius: 6px; padding: 4px 8px; font: inherit; }
+  button { cursor: pointer; width: 100%; margin-top: 6px; } button.primary { background: var(--ok); color: #0b1a10; border-color: var(--ok); font-weight: 700; }
+  textarea { width: 100%; background: #232831; color: var(--fg); border: 1px solid var(--line); border-radius: 6px; padding: 6px; font: 12px/1.35 inherit; resize: vertical; }
+  #right { width: 264px; max-height: calc(100vh - 24px); overflow: auto; }
+  #bottom { bottom: 12px; left: 50%; transform: translateX(-50%); display: flex; align-items: center; gap: 16px; }
+  #carry { display: flex; gap: 6px; } #carry i { width: 22px; height: 22px; border-radius: 50%; border: 2px dashed var(--line); display: block; }
+  #carry i.pollen { background: var(--pollen); border: 0; } #carry i.nectar_red { background: var(--red); border: 0; } #carry i.nectar_blue { background: var(--blue); border: 0; }
+  #telemetry { color: var(--dim); font-variant-numeric: tabular-nums; white-space: nowrap; }
+  #log { bottom: 12px; left: 12px; width: 300px; min-height: 40px; color: var(--dim); } #log div:last-child { color: var(--fg); }
+  #help { bottom: 12px; right: 12px; width: 300px; color: var(--dim); font-size: 12px; } #help b { color: var(--fg); font-weight: 600; }
+  #banner { top: 42%; left: 50%; transform: translate(-50%,-50%); font-size: 18px; text-align: center; padding: 16px 26px; } #banner small { display: block; color: var(--dim); font-size: 13px; margin-top: 4px; }
+  /* The review timeline is one row at the bottom edge, so that it covers the floor in front of the FIELD and not the FIELD. */
+  #review { bottom: 10px; left: 12px; right: 12px; display: flex; align-items: center; gap: 8px; padding: 6px 10px; }
+  #review button { width: auto; margin: 0; } #review input[type=text] { width: 64px; text-align: center; }
+  #track { position: relative; flex: 1; display: flex; align-items: center; height: 26px; } #track input { width: 100%; margin: 0; }
+  #marks { position: absolute; left: 8px; right: 8px; top: 0; height: 0; } #marks i { position: absolute; top: -3px; width: 10px; height: 10px; margin-left: -5px; border-radius: 50%; border: 2px solid #14171c; cursor: pointer; }
+  #scrubtime { font: 700 13px ui-monospace, SFMono-Regular, Menlo, monospace; min-width: 118px; text-align: center; } #nsaved { color: var(--dim); font-size: 11px; max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  input[type=text] { background: #232831; color: var(--fg); border: 1px solid var(--line); border-radius: 6px; padding: 4px 8px; font: inherit; }
+  #notepop { width: 300px; z-index: 5; } #notepop h2 { color: var(--fg); } #notepop .btns { display: flex; gap: 6px; margin-top: 6px; } #notepop .btns button { margin: 0; }
+  body.reviewing #botcfg, body.reviewing #right, body.reviewing #bottom, body.reviewing #log, body.reviewing #help, body.reviewing #banner, body.reviewing #final { display: none !important; }
+  body.reviewing canvas { cursor: crosshair; }
+  #botlist .bot { display: flex; align-items: center; gap: 6px; margin: 4px 0; } #botlist .bot b { min-width: 52px; font: 700 12px ui-monospace, SFMono-Regular, Menlo, monospace; padding: 1px 5px; border-radius: 4px; color: #fff; text-align: center; }
+  #botlist .bot span { flex: 1; color: var(--dim); font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  button.gear { width: 22px; height: 22px; margin: 0; padding: 0; line-height: 1; border-radius: 5px; font-size: 14px; } #top .teams div { display: flex; align-items: center; justify-content: space-between; gap: 6px; margin: 1px 0; }
+  #top .teams button.gear { background: rgba(0,0,0,.25); border-color: rgba(255,255,255,.25); color: #fff; width: 18px; height: 18px; font-size: 12px; }
+  body.playing button.gear { display: none; }
+  #botcfg { top: 84px; left: 50%; transform: translateX(-50%); width: 300px; z-index: 6; } #botcfg h2 { color: var(--fg); } #botcfg input { width: 120px; } #botcfg select { max-width: 176px; } #botcfg label { gap: 8px; white-space: nowrap; } #botcfg .btns { display: flex; gap: 6px; margin-top: 8px; } #botcfg .btns button { margin: 0; }
+  input[type=number] { background: #232831; color: var(--fg); border: 1px solid var(--line); border-radius: 6px; padding: 4px 8px; font: inherit; }
+  .errhead { display: flex; justify-content: space-between; align-items: center; margin: 8px 0 2px; color: var(--fg); font-size: 12px; } .chips { display: flex; gap: 4px; } .chips button { width: auto; margin: 0; padding: 2px 9px; border-radius: 999px; font-size: 11px; }
+  .hidden { display: none !important; }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="top" class="panel"><div class="teams red" id="tred"></div><div class="score red" id="sred">0</div><div class="mid"><div id="clock">2:00</div><div id="phase">Ready</div></div><div class="score blue" id="sblue">0</div><div class="teams blue" id="tblue"></div></div>
+<div id="left" class="panel"><h2>Score</h2><table id="scoretable" class="ftc"></table></div>
+<div id="right" class="panel"><h2>Game setup</h2>
+  <label>Match <select id="mode"><option value="full">Full 2:30</option><option value="teleop">TELEOP 2:00</option><option value="auto">AUTO 0:30</option></select></label>
+  <label title="In a playoff MATCH there are no ranking points, so the planner maximizes points alone.">Stage <select id="stage"><option value="qual">Qualification</option><option value="playoff">Playoff</option></select></label>
+  <div id="botlist"></div>
+  <h2 style="margin-top:12px">Options</h2>
+  <label>Camera <select id="camera"><option value="driver">Driver station</option><option value="overhead">Overhead</option><option value="chase">Chase</option><option value="audience">Audience</option></select></label>
+  <label>Units <select id="units"><option value="metric">Metric</option><option value="us">US</option></select></label>
+  <label>Sound <select id="sound"><option value="on">On</option><option value="off">Off</option></select></label>
+  <label>Referee <select id="referee"><option value="rule">PINS (G421)</option><option value="off">Off</option></select></label>
+  <button id="start" class="primary">Start match (Enter)</button><button id="reset">Reset field (R)</button><button id="reviewbtn">Review match (V)</button>
+</div>
+<div id="botcfg" class="panel hidden"><h2 id="bchead"></h2>
+  <label>Number plate <input id="bcplate" type="text" maxlength="6"></label>
+  <label id="bcdriverrow">Driver <select id="bcdriver"><option value="planner">Planner</option><option value="pad1">Controller 1</option><option value="pad2">Controller 2</option></select></label>
+  <label id="bcdriverow">Stick frame <select id="bcdrive"><option value="field">Field-centric</option><option value="robot">Robot-centric</option></select></label>
+  <label>Shooter <select id="bcshooter"><option value="dual">Dual, by type</option><option value="fifo">Single, FIFO</option><option value="catapult">Catapult, all 4</option></select></label>
+  <label>Intake <select id="bcintake"><option value="front">Front</option><option value="dual">Front and rear</option></select></label>
+  <label>Launches from <select id="bcends"><option value="one">The rear end</option><option value="both">Both ends</option></select></label>
+  <label>AUTO plan <select id="bcauto"></select></label>
+  <label>TELEOP plan <select id="bcplan"><option value="0">Keep tipping</option><option value="30">FLOWERS from 30 s</option><option value="45">FLOWERS from 45 s</option><option value="66">FLOWERS from 66 s</option></select></label>
+  <div class="errhead"><span title="How much one shot differs from the next, as one standard deviation. Measure it: launch 20 elements from one spot.">Launcher error, 1 SD</span><span class="chips"><button type="button" data-err="1">1x</button><button type="button" data-err="3">3x</button><button type="button" data-err="5">5x</button></span></div>
+  <label>Elevation, ° <input id="bcelev" type="number" min="0" max="15" step="0.1"></label>
+  <label>Azimuth, ° <input id="bcazim" type="number" min="0" max="15" step="0.1"></label>
+  <label><span id="bcspeedlabel">Launch speed, m/s</span> <input id="bcspeed" type="number" min="0" step="0.01"></label>
+  <label>Intake success, % <input id="bcintakep" type="number" min="20" max="100" step="1"></label>
+  <label>Defense <select id="bcdefense"><option value="none">None</option><option value="opportunistic">Opportunistic bumps</option><option value="full">Full defense</option></select></label>
+  <label>Drive motor, rpm <input id="bcrpm" type="number" min="100" max="1200" step="1" list="rpmlist"></label>
+  <datalist id="rpmlist"><option value="223"><option value="312"><option value="435"><option value="1150"></datalist>
+  <label><span id="bcsizelabel">Chassis, square, cm</span> <input id="bcsize" type="number" step="0.1"></label>
+  <label><span id="bcmasslabel">Mass, kg</span> <input id="bcmass" type="number" step="0.1"></label>
+  <div id="bcnote" style="color:var(--dim);font-size:11px;margin-top:4px"></div>
+  <div class="btns"><button id="bcdone" class="primary">Done</button><button id="bcdefault" title="A four-element catapult, 30 cm (12 in.), 7 kg (15.4 lb), 500 rpm, and intakes at both ends.">Meta build</button><button id="bcbaseline" title="The reference robot of the experiments: 38 cm (15 in.), 10 kg (22 lb), 600 rpm, two at a time, and a front intake.">Baseline</button></div>
+</div>
+<div id="bottom" class="panel"><div id="carry"></div><div id="telemetry"></div></div>
+<div id="log" class="panel"></div>
+<div id="help" class="panel"><b>Left stick</b> drive and strafe · <b>Right stick</b> turn<br><b>LB</b> shoot NECTAR · <b>RB</b> shoot POLLEN<br><b>LT</b> place POLLEN · <b>RT</b> place NECTAR in a FLOWER<br><b>Gear icon</b> or <b>right-click a robot</b> robot config · <a href="/" style="color:var(--fg)">NCSSM FTC home</a> · <b>C</b> camera · <b>M</b> mark this moment · <b>V</b> review, then click a robot to add a note<br><span id="pad"></span></div>
+<div id="review" class="panel hidden">
+  <button id="rplay">Play</button><select id="rspeed"><option value="0.5">0.5x</option><option value="1" selected>1x</option><option value="2">2x</option><option value="4">4x</option></select>
+  <div id="track"><input id="scrub" type="range" min="0" max="100" value="0" step="1"><div id="marks"></div></div>
+  <span id="scrubtime"></span><input id="rgoto" type="text" placeholder="0:50" title="Type a match clock time, for example 0:50, and press Enter to go to that moment.">
+  <span id="nsaved">Click a robot to add a note.</span><button id="nexport" title="Downloads the notes as Markdown and the match trace as JSON.">Export</button><button id="ncopy" title="Copies the path of the annotation file in the repository.">Copy notes path</button><button id="rexit">Back to live</button>
+</div>
+<div id="notepop" class="panel hidden"><h2 id="nhead"></h2><textarea id="ntext" rows="3" placeholder="What happened here?"></textarea>
+  <div class="btns"><button id="nsave" class="primary">Save (Enter)</button><button id="ndel">Delete</button><button id="ncancel">Cancel (Esc)</button></div></div>
+<div id="final" class="panel hidden"></div>
+<div id="banner" class="panel hidden"></div>
+<script type="module" src="/src/main.ts"></script>
+</body>
+</html>

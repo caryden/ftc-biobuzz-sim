@@ -1,0 +1,11 @@
+# Cloudflare Pages project for the NCSSM FTC BIOBUZZ site. Deploy with `sh scripts/deploy.sh`, which checks the account.
+name = "ncssm-ftc-biobuzz"
+pages_build_output_dir = "dist"
+compatibility_date = "2026-09-01"
+
+# The match counter. D1 increments atomically, which Workers KV can't do: two matches that end together would both
+# read the same count from KV and write the same count back.
+[[d1_databases]]
+binding = "DB"
+database_name = "biobuzz"
+database_id = "de05c20b-a82d-4fa2-87b9-0a0e288dad7f"

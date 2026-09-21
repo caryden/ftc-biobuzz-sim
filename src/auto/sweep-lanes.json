@@ -1,0 +1,46 @@
+{
+ "note": "Sweep waypoints in red-alliance field meters, written by scripts/plan-sweeps.ts from simulated spill snapshots.",
+ "solo": [
+  [
+   -0.515,
+   -0.965
+  ],
+  [
+   -1.565,
+   -0.965
+  ]
+ ],
+ "right": [
+  [
+   -1.415,
+   1.543
+  ],
+  [
+   -0.365,
+   1.543,
+   "audience"
+  ],
+  [
+   -0.515,
+   0.985
+  ],
+  [
+   -1.565,
+   1.135
+  ]
+ ],
+ "left": [
+  [
+   -1.565,
+   -1.115
+  ],
+  [
+   -1.565,
+   -0.515
+  ],
+  [
+   -0.365,
+   -1.115
+  ]
+ ]
+}

@@ -1,0 +1,36 @@
+{
+ "trace": "20260920-131052",
+ "settings": {
+  "match": "full",
+  "driver": "jev",
+  "auto": "cycle_and_park",
+  "partners": "on",
+  "opponent": "scripted",
+  "partnerPlan": "45",
+  "shooter": "dual",
+  "strategy": "Keep tipping the HIVE for the whole MATCH. Never work FLOWERS. Use own NECTAR for TIPS."
+ },
+ "notes": [
+  {
+   "t": 123.69,
+   "clock": 34.32,
+   "phase": "teleop",
+   "robot": "R1",
+   "text": "figting partner when it has no elements.  I think it is ignoring its partner location when planning an intake path."
+  },
+  {
+   "t": 132.65,
+   "clock": 25.36,
+   "phase": "teleop",
+   "robot": "R1",
+   "text": "drives away from intaking a lot of element right in front of it??"
+  },
+  {
+   "t": 161.81,
+   "clock": 0,
+   "phase": "post",
+   "robot": "R1",
+   "text": "pinning/fighting partner preventing park."
+  }
+ ]
+}

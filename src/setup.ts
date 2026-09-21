@@ -1,0 +1,96 @@
+import { fmtMass, fmtSize, fmtSpeed, type Units } from './units';
+import { DEFAULT_ROBOT, setDriveRpm, setMass, setSquareSize, type RobotConfig, type ShooterType } from './sim/config';
+
+export type DriverKind = 'planner' | 'pad1' | 'pad2';
+/** Everything that a team sets for one robot before a MATCH. The robot config popup edits it. */
+export interface BotSetup {
+  /** The number plate text, for example a team number. */ plate: string;
+  driver: DriverKind;
+  /** For a human driver: whether the sticks move the robot in the driver's frame or in the robot's frame. Default: field. */ stickFrame: 'field' | 'robot';
+  shooter: ShooterType;
+  /** An AUTO script name, `default` for the script that fits the robot's start position, or `none`. */ auto: string;
+  /** The TELEOP plan: FLOWER work starts when this many seconds remain. 0 means TIPS only. */ flowerStartSec: number;
+  /** The drive motor's free speed at the wheel, in rpm. Default: 600. */ driveRpm: number;
+  /** The side of the square chassis, in inches. Default: 15. R101 allows 18. */ sizeIn: number;
+  /** The robot mass, in pounds. Default: 22. R102 allows 42. */ massLb: number;
+  /** If true, the robot has an intake on the rear face too. Default: false. */ dualIntake: boolean;
+  /** If true, the robot can launch out of either end. Default: false. */ dualShooter: boolean;
+  /**
+   * The launcher's shot-to-shot error, as one standard deviation: elevation and azimuth in degrees, and launch speed in
+   * meters per second. The values are for POLLEN. NECTAR scales by the same ratios from its own reference errors.
+   * Default: the reference launcher, 1.0 degree, 1.2 degrees, and 0.08 m/s.
+   */
+  errElevDeg: number; errAzimDeg: number; errSpeed: number;
+  /** The probability that the intake takes an element that it reaches, from 0 to 1. A miss costs a retry. Default: 0.95. */ intakeP: number;
+  /** The defense policy in TELEOP. See `Coach.defense`. Default: none. */ defense: 'none' | 'full' | 'opportunistic';
+}
+
+/** The robots in `sim.robots` order: R0, R1, B0, B1. */
+export const BOT_IDS = ['R0', 'R1', 'B0', 'B1'] as const;
+// The storage key changed when the simulator's default became the meta build, so that a browser with the old default gets the new one.
+const IN = 0.0254, LB = 0.45359237, KEY = 'biobuzz.bots.v2';
+/**
+ * The default robot is small, light, and fast: 15 in., 22 lb, and 600 rpm. Over 24 seeds with the planner on all four
+ * robots, it scores 31.9 combined points more than the reference robot in `DEFAULT_ROBOT` (16.9 in., 28.7 lb, 435 rpm),
+ * with a standard error of 10.0, and it stalls less. See e17 in experiments/policy-loop.md.
+ */
+export const DEFAULT_SETUP = { driveRpm: 600, sizeIn: 15, massLb: 22 };
+/** The reference launcher's errors, from `DEFAULT_ROBOT.shooter.pollen`. The 1x, 3x, and 5x chips in the robot config multiply them. */
+export const REF_ERR = { errElevDeg: DEFAULT_ROBOT.shooter.pollen.elevationDeg.std, errAzimDeg: DEFAULT_ROBOT.shooter.pollen.yawStdDeg, errSpeed: DEFAULT_ROBOT.shooter.pollen.speed.std };
+export const defaultBot = (i: number): BotSetup => ({ plate: BOT_IDS[i], driver: 'planner', stickFrame: 'field', shooter: 'dual', auto: 'default', flowerStartSec: 0, dualIntake: false, dualShooter: false, defense: 'none', ...REF_ERR, intakeP: DEFAULT_ROBOT.intake.successP, ...DEFAULT_SETUP });
+
+/**
+ * The robot that the simulator opens with: the combined build that the experiments point to. It is a four-element
+ * catapult, 12 in., 15.4 lb, and 500 rpm, with intakes at both ends. Red with this build beat the baseline robot by 96
+ * points over 24 seeds (e24 in experiments/policy-loop.md). `defaultBot` stays the baseline of every experiment, so the
+ * tables in the Match Lab and in the post keep their reference.
+ */
+export const metaBot = (i: number): BotSetup => ({ ...defaultBot(i), shooter: 'catapult', driveRpm: 500, sizeIn: 12, massLb: 15.4, dualIntake: true });
+
+/** The team numbers that the simulator deals to the four robots: the three NCSSM teams, and 772, a friend team that one of our mentors also works with. */
+export const TEAM_NUMBERS = ['5064', '8569', '22377', '772'];
+
+/** Loads the four robot setups from the browser's storage. Missing or unreadable entries fall back to the defaults. */
+export function loadBots(): BotSetup[] {
+  let saved: Partial<BotSetup>[] = []; try { saved = JSON.parse(localStorage.getItem(KEY) ?? '[]'); } catch { saved = []; }
+  // A browser with no stored setups gets the team numbers as number plates, in a random order on every visit. The
+  // shuffle only names the robots: R0, R1, B0, and B1 stay the robot ids in traces, and match seeds don't depend on it.
+  const plates = [...TEAM_NUMBERS]; for (let i = plates.length - 1; i > 0; i--) { const k = Math.floor(Math.random() * (i + 1)); [plates[i], plates[k]] = [plates[k], plates[i]]; }
+  return BOT_IDS.map((_, i) => sanitize({ ...metaBot(i), plate: plates[i], ...(saved[i] ?? {}) }, i));
+}
+export function saveBots(bots: BotSetup[]) { try { localStorage.setItem(KEY, JSON.stringify(bots)); } catch { /* Storage is a convenience. The setups still apply to this page. */ } }
+
+/** AUTO script names from before September 20, 2026, which a stored setup can still hold. */
+const RENAMED: Record<string, string> = { lead_with_partner: 'right_cycle', partner_rear: 'left_cycle', partner_rear_no_park: 'left_cycle_no_park', lead_harvest: 'right_harvest', partner_harvest: 'left_harvest' };
+/** Gets the start position of robot `i`, as its drivers see it: R0 and B0 start at the right, on the alliance wall, and R1 and B1 at the left, on the rear wall (red) or the audience wall (blue). */
+export const startSide = (i: number): 'right' | 'left' => (i % 2 === 0 ? 'right' : 'left');
+
+/** Clamps a setup to what the simulator accepts. Only the red robots can have a human driver. */
+export function sanitize(b: BotSetup, i: number): BotSetup {
+  // A setup that was stored with the single `spreadX` multiplier maps to the three errors.
+  const old = (b as unknown as { spreadX?: number }).spreadX; if (old) b = { ...b, errElevDeg: REF_ERR.errElevDeg * old, errAzimDeg: REF_ERR.errAzimDeg * old, errSpeed: REF_ERR.errSpeed * old };
+  const num = (v: number, lo: number, hi: number, d: number) => (Number.isFinite(v) ? Math.min(hi, Math.max(lo, v)) : d);
+  return { ...b, auto: RENAMED[b.auto] ?? b.auto, plate: (b.plate || BOT_IDS[i]).trim().slice(0, 6) || BOT_IDS[i], driver: i < 2 ? b.driver : 'planner', driveRpm: Math.round(num(b.driveRpm, 100, 1200, DEFAULT_SETUP.driveRpm)), sizeIn: Math.round(num(b.sizeIn, 10, 18, DEFAULT_SETUP.sizeIn) * 10) / 10, massLb: Math.round(num(b.massLb, 10, 42, DEFAULT_SETUP.massLb) * 10) / 10,
+    errElevDeg: Math.round(num(b.errElevDeg, 0, 15, REF_ERR.errElevDeg) * 100) / 100, errAzimDeg: Math.round(num(b.errAzimDeg, 0, 15, REF_ERR.errAzimDeg) * 100) / 100, errSpeed: Math.round(num(b.errSpeed, 0, 1.5, REF_ERR.errSpeed) * 1000) / 1000,
+    intakeP: Math.round(num(b.intakeP, 0.2, 1, DEFAULT_ROBOT.intake.successP) * 100) / 100 };
+}
+
+/** Assigns a driver to robot `i`. A controller drives one robot, so the robot that had it goes back to the planner. */
+export function assignDriver(bots: BotSetup[], i: number, driver: DriverKind) {
+  if (driver !== 'planner') bots.forEach((b, k) => { if (k !== i && b.driver === driver) b.driver = 'planner'; });
+  bots[i].driver = i < 2 ? driver : 'planner';
+}
+
+/** Builds the simulator's robot configuration from a setup. */
+export function robotConfig(b: BotSetup): RobotConfig {
+  const c = structuredClone(DEFAULT_ROBOT); c.shooter.type = b.shooter; setDriveRpm(c, b.driveRpm); setSquareSize(c, b.sizeIn * IN); setMass(c, b.massLb * LB); c.intake.dualSided = !!b.dualIntake; c.shooter.dualSided = !!b.dualShooter;
+  for (const lp of [c.shooter.pollen, c.shooter.nectar]) { lp.elevationDeg.std *= b.errElevDeg / REF_ERR.errElevDeg; lp.yawStdDeg *= b.errAzimDeg / REF_ERR.errAzimDeg; lp.speed.std *= b.errSpeed / REF_ERR.errSpeed; }
+  c.intake.successP = b.intakeP;
+  return c;
+}
+
+/** Describes a setup in one line, for the setup panel and the trace. The trace always uses metric units. */
+export function describe(b: BotSetup, units: Units = 'metric'): string {
+  const driver = b.driver === 'planner' ? 'Planner' : `Controller ${b.driver === 'pad1' ? 1 : 2}, ${b.stickFrame}-centric`;
+  return `${driver} · ${b.shooter} · AUTO ${b.auto.replace(/_/g, ' ')} · ${b.flowerStartSec ? `FLOWERS from ${b.flowerStartSec} s` : 'tips only'} · ${b.driveRpm} rpm · ${fmtSize(b.sizeIn, units)} · ${fmtMass(b.massLb, units)}${b.dualIntake ? ' · dual intake' : ''}${b.dualShooter ? ' · launches from both ends' : ''}${b.defense !== 'none' ? ` · ${b.defense} defense` : ''}${b.errElevDeg !== REF_ERR.errElevDeg || b.errAzimDeg !== REF_ERR.errAzimDeg || b.errSpeed !== REF_ERR.errSpeed ? ` · launch error ${b.errElevDeg}°, ${b.errAzimDeg}°, ${fmtSpeed(b.errSpeed, units === 'us' ? 'usft' : units)}` : ''}${b.intakeP !== DEFAULT_ROBOT.intake.successP ? ` · intake ${Math.round(100 * b.intakeP)}%` : ''}`;
+}
