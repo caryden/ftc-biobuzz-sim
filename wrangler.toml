@@ -9,3 +9,14 @@ compatibility_date = "2026-09-01"
 binding = "DB"
 database_name = "biobuzz"
 database_id = "de05c20b-a82d-4fa2-87b9-0a0e288dad7f"
+
+# A preview deployment, which Cloudflare builds for every pull request, gets no database binding, so that a preview
+# can't change the real count. functions/api/matches.js answers with a null count when DB is missing.
+[env.preview.vars]
+MATCH_COUNTER = "off"
+
+# Production repeats the binding, because a file that defines one environment must define the bindings of each.
+[[env.production.d1_databases]]
+binding = "DB"
+database_name = "biobuzz"
+database_id = "de05c20b-a82d-4fa2-87b9-0a0e288dad7f"
