@@ -75,6 +75,7 @@ The results are in [experiments/](experiments/README.md). Every number on the si
 | `experiments/` | Results and logs of every measured change |
 | `traces/` | Annotated matches that drove the planner fixes |
 | `functions/`, `db/`, `wrangler.toml` | The match counter on Cloudflare Pages and D1 |
+| `.github/workflows/ci.yml` | The checks that every pull request must pass |
 | `docs/` | The lessons, the simulator description, the HIVE calibration, and the backlog |
 
 ## The site
@@ -83,13 +84,25 @@ The results are in [experiments/](experiments/README.md). Every number on the si
 `python3 scripts/build-site.py` and committed under `public/`, so the build needs no Python. Run that script after you
 change `docs/top-ten.md`, the template, or the result files.
 
-The home page shows a live count of simulated matches. `functions/api/matches.js` is a Cloudflare Pages Function that
-keeps the count in a D1 database, because D1 increments atomically. It stores a visitor's address only as a salted
-hash, for one day.
+The home page shows a live count of simulated matches and of the countries that they came from.
+`functions/api/matches.js` is a Cloudflare Pages Function that keeps the counts in a D1 database, because D1 increments
+atomically. It stores a visitor's address only as a salted hash, for one day, and a country only as a count per
+two-letter code.
 
-To deploy your own copy to Cloudflare Pages, create a D1 database, put its ID in `wrangler.toml`, run
-`wrangler d1 execute DB_NAME --remote --file db/schema.sql`, and then run `sh scripts/deploy.sh`. The script deploys
-only to the account that you name in `CF_ACCOUNT_NAME`, as a guard against a login to the wrong account.
+### Deployment
+
+Cloudflare Pages deploys the site by its Git integration: a merge to `main` deploys to production, and every pull
+request gets a preview URL. Branch protection requires the **Build and test** check, so a change that fails its tests
+can't reach `main`. The Pages project uses the build command `npm run build` and the output directory `dist`.
+`.node-version` pins Node.js 22, and `wrangler.toml` supplies the D1 binding. A preview gets no database binding, so a
+preview can't change the real count.
+
+To deploy your own copy, follow these steps:
+
+1. To create the database, run `wrangler d1 create DB_NAME`, and put the ID that it prints in `wrangler.toml`.
+2. To create the tables, run `wrangler d1 execute DB_NAME --remote --file db/schema.sql`.
+3. In the Cloudflare dashboard, go to **Workers & Pages**, create a Pages project from your fork, and set the build
+   command and the output directory as described earlier.
 
 ## Sources
 

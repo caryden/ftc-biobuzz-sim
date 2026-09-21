@@ -5,3 +5,7 @@ INSERT OR IGNORE INTO counter (name, n) VALUES ('matches', 3468);
 -- One row per visitor, to count at most one match per 25 s from one address. `who` is a salted hash, not an address.
 CREATE TABLE IF NOT EXISTS recent (who TEXT PRIMARY KEY, at INTEGER NOT NULL);
 CREATE TABLE IF NOT EXISTS secret (name TEXT PRIMARY KEY, value TEXT NOT NULL);
+-- Finished matches per country. `code` is the two-letter country code that Cloudflare attaches to a request. Nothing
+-- about the visitor is stored with it. The count starts when this table is created: the matches that seeded the
+-- counter have no country.
+CREATE TABLE IF NOT EXISTS countries (code TEXT PRIMARY KEY, n INTEGER NOT NULL);

@@ -41,6 +41,7 @@
     <div class="eyebrow"><i>FIRST</i> Tech Challenge 2026-2027 · BIOBUZZ</div>
     <h1><span id="count">3,468</span> matches played so far…</h1>
     <p class="lede">We are the students and mentors of the three FTC teams at NCSSM. We built a physics simulator of this season's game, ran thousands of matches in it, and changed one thing at a time. This is what we learned, and the tools that we used, for any team that wants them.</p>
+    <p class="eyebrow" id="where" hidden></p>
     <div class="teams" aria-label="Our teams"><b>5064</b><b>8569</b><b>22377</b></div>
   </header>
 
@@ -65,7 +66,11 @@
     function apply(v) { document.documentElement.dataset.units = v; document.querySelectorAll('[data-setunits]').forEach(function (b) { b.setAttribute('aria-pressed', String(b.dataset.setunits === v)); }); }
     apply(u); document.addEventListener('click', function (e) { var b = e.target.closest('[data-setunits]'); if (!b) return; try { localStorage.setItem('biobuzz.units', b.dataset.setunits); } catch (err) {} apply(b.dataset.setunits); }); })();
   // The live count of simulated matches: ours, plus every match that a visitor finishes in the simulator.
-  fetch('/api/matches').then(r => (r.ok ? r.json() : null)).then(d => { if (d && d.count) { document.getElementById('count').textContent = d.count.toLocaleString('en-US'); } }).catch(() => {});
+  fetch('/api/matches').then(r => (r.ok ? r.json() : null)).then(d => {
+    if (d && d.count) document.getElementById('count').textContent = d.count.toLocaleString('en-US');
+    // Countries are counted from finished matches only, as a two-letter code, with nothing about the visitor.
+    if (d && d.countries > 0) { var w = document.getElementById('where'); w.textContent = 'Visitors have played in ' + d.countries + (d.countries === 1 ? ' country' : ' countries') + ' so far'; w.hidden = false; }
+  }).catch(() => {});
 </script>
 </body>
 </html>
