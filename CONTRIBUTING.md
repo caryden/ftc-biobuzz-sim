@@ -73,7 +73,9 @@ The notes file records what every robot was doing at each marked moment, which i
 - Keep one purpose per pull request.
 - Write the commit subject in the imperative, under 72 characters. In the body, say what changed and why, how you
   verified it, and what you left untested.
-- `npm test` and `npx tsc --noEmit` must pass.
+- `npm test` and `npx tsc --noEmit` must pass. CI runs both, checks that the generated pages are fresh, and builds the
+  site. `main` accepts a pull request only when that check is green.
+- Cloudflare builds a preview of the site for every pull request, and the preview's URL appears on the pull request.
 - By contributing, you agree that your contribution is licensed under the MIT license in `LICENSE`.
 
 ## Conduct

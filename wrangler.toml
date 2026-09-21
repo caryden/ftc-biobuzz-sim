@@ -1,4 +1,4 @@
-# Cloudflare Pages project for the NCSSM FTC BIOBUZZ site. Deploy with `sh scripts/deploy.sh`, which checks the account.
+# The Cloudflare Pages project of the site. Cloudflare's Git integration builds and deploys it, and reads this file.
 name = "ncssm-ftc-biobuzz"
 pages_build_output_dir = "dist"
 compatibility_date = "2026-09-01"

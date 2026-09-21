@@ -14,8 +14,7 @@
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
     "test": "vitest run",
-    "site": "python3 scripts/build-site.py",
-    "deploy": "sh scripts/deploy.sh"
+    "site": "python3 scripts/build-site.py"
   },
   "dependencies": {
     "@dimforge/rapier3d-compat": "^0.14.0",

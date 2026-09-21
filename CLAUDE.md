@@ -12,4 +12,5 @@ Instructions for an AI coding agent that works in this repository. People: read 
 - After a change to `docs/top-ten.md`, `scripts/results-page.template.html`, or the result files, run
   `python3 scripts/build-site.py` and commit the pages under `public/`.
 - Match annotations are in `traces/*.annotations.md`. The newest file is the match that was reviewed last.
-- Never deploy without the account guard: `sh scripts/deploy.sh` reads the account name from `.deploy.env`.
+- `main` is protected: every change goes in by a pull request, and the **Build and test** check must pass. Cloudflare
+  Pages deploys `main` by its Git integration. Don't deploy by hand.
