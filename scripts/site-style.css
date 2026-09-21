@@ -7,6 +7,7 @@ body { margin: 0; background: var(--ground); color: var(--ink); font: 16px/1.6 v
 .sitenav { max-width: 1080px; margin-inline: auto; display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 22px; padding-block: 16px; border-bottom: 1px solid var(--grid); font: 500 13px var(--mono); letter-spacing: .04em; }
 .sitenav a { color: var(--dim); text-decoration: none; } .sitenav a:hover, .sitenav a[aria-current="page"] { color: var(--ink); } .sitenav .brand { font: 700 20px var(--display); letter-spacing: .02em; text-transform: uppercase; color: var(--ink); margin-right: auto; }
 a { color: var(--blue); } a:focus-visible { outline: 2px solid var(--you); outline-offset: 2px; }
+.sitenav .gh { display: inline-flex; align-self: center; color: var(--dim); } .sitenav .gh:hover { color: var(--ink); }
 .sitefoot { max-width: 1080px; margin: 48px auto 0; border-top: 1px solid var(--grid); padding-top: 16px; color: var(--dim); font-size: 13px; }
 /* Display units. Metric shows unless the reader chose US. The switch is in the site navigation. */
 :root:not([data-units="us"]) .u-us { display: none; } :root[data-units="us"] .u-si { display: none; }
