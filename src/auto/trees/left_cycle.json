@@ -1,0 +1,208 @@
+{
+ "kind": "bt.tree",
+ "name": "left_cycle",
+ "env": "onboard",
+ "note": "For the left start position, on the rear wall: fill the rear CELL for the second TIP, sweep the rear spill, and PARK.",
+ "defs": {
+  "len": "bots.me.dimensions.length",
+  "flip": "if(bots.me.shooter.facing == 'front', 180, 0)",
+  "hiveX": "-0.3237",
+  "stand": "len / 2 + field.flowerHalfSize + 0.02",
+  "rearFlower": "pose(-0.5942, -1.7282 + stand, 90)",
+  "park": "pose(-(field.half - len / 2 - 0.09), -0.8954, 180)",
+  "angledRear": "pose(hiveX - 0.62, -1.17, 129.4 + flip)",
+  "parkLeft": "pose(park.x, -0.8954 - 0.33, park.headingDeg)"
+ },
+ "root": {
+  "sequence": {
+   "children": [
+    {
+     "id": "steps",
+     "parallel": {
+      "policy": "any",
+      "children": [
+       {
+        "id": "finish",
+        "note": "When the clock shows 3 s, the last step starts, whatever step is running then.",
+        "ref": "auto.clockAtMost",
+        "params": {
+         "sec": 3
+        }
+       },
+       {
+        "sequence": {
+         "children": [
+          {
+           "id": "s1",
+           "ref": "auto.drive",
+           "params": {
+            "pose": "angledRear",
+            "timeoutSec": 3
+           }
+          },
+          {
+           "id": "s2",
+           "note": "The camera wait keeps the robot from launching at the CELL before its partner's TIP raises it.",
+           "ref": "auto.waitCell",
+           "params": {
+            "cell": "rear",
+            "timeoutSec": 8
+           }
+          },
+          {
+           "id": "s3",
+           "ref": "auto.shoot",
+           "params": {
+            "count": 4,
+            "timeoutSec": 2.5,
+            "cell": "rear"
+           }
+          },
+          {
+           "id": "s4",
+           "ref": "auto.drive",
+           "params": {
+            "pose": "offset(rearFlower, 0, 0.2)",
+            "timeoutSec": 3
+           }
+          },
+          {
+           "id": "s5",
+           "ref": "auto.drive",
+           "params": {
+            "pose": "rearFlower",
+            "intake": "pollen",
+            "timeoutSec": 1.5
+           }
+          },
+          {
+           "id": "s6",
+           "ref": "auto.push",
+           "params": {
+            "power": 0.35,
+            "intake": "pollen",
+            "timeoutSec": 2.2
+           }
+          },
+          {
+           "id": "s7",
+           "ref": "auto.drive",
+           "params": {
+            "pose": "angledRear",
+            "timeoutSec": 3
+           }
+          },
+          {
+           "id": "s8",
+           "ref": "auto.shoot",
+           "params": {
+            "count": 4,
+            "timeoutSec": 2.5
+           }
+          },
+          {
+           "id": "s9",
+           "note": "That volley tips the rear CELL. The robot watches the TIP and lets the spill reach the rear wall before it sweeps.",
+           "ref": "auto.waitTip",
+           "params": {
+            "cell": "rear",
+            "timeoutSec": 4
+           }
+          },
+          {
+           "id": "s10",
+           "ref": "auto.wait",
+           "params": {
+            "timeoutSec": 1.2
+           }
+          },
+          {
+           "id": "s11",
+           "note": "A blind sweep: a TIP spills the CELL where the robot can't see. scripts/plan-sweeps.ts records where the spill comes to rest over many simulated matches and writes the lanes that collect the most. Each lane ends early once the hopper is full.",
+           "ref": "auto.sweep",
+           "params": {
+            "from": "angledRear",
+            "role": "left",
+            "lanes": [
+             {
+              "x": -1.565,
+              "z": -1.115,
+              "wall": null
+             },
+             {
+              "x": -1.565,
+              "z": -0.515,
+              "wall": null
+             },
+             {
+              "x": -0.365,
+              "z": -1.115,
+              "wall": null
+             }
+            ]
+           }
+          },
+          {
+           "id": "s12",
+           "note": "The right robot's third TIP raises the rear CELL again: launch what the sweep found, then sweep once more so that TELEOP starts with a full hopper.",
+           "ref": "auto.drive",
+           "params": {
+            "pose": "angledRear",
+            "timeoutSec": 3
+           }
+          },
+          {
+           "id": "s13",
+           "ref": "auto.shoot",
+           "params": {
+            "count": 4,
+            "timeoutSec": 4,
+            "cell": "rear"
+           }
+          },
+          {
+           "id": "s14",
+           "note": "A blind sweep: a TIP spills the CELL where the robot can't see. scripts/plan-sweeps.ts records where the spill comes to rest over many simulated matches and writes the lanes that collect the most. Each lane ends early once the hopper is full.",
+           "ref": "auto.sweep",
+           "params": {
+            "from": "angledRear",
+            "role": "left",
+            "lanes": [
+             {
+              "x": -1.565,
+              "z": -1.115,
+              "wall": null
+             },
+             {
+              "x": -1.565,
+              "z": -0.515,
+              "wall": null
+             },
+             {
+              "x": -0.365,
+              "z": -1.115,
+              "wall": null
+             }
+            ]
+           }
+          }
+         ]
+        }
+       }
+      ]
+     }
+    },
+    {
+     "id": "s15",
+     "note": "Every drive to PARK runs the intake: the robot faces the alliance wall, where NECTAR from the LOADING ZONE collects, and a full hopper at the end of AUTO is a head start in TELEOP. LEAVE needs the robot clear of the wall by half its size plus 2 cm. The pose is 9 cm off the wall, which leaves margin for a 5 cm drive tolerance.",
+     "ref": "auto.drive",
+     "params": {
+      "pose": "parkLeft",
+      "intake": "all",
+      "timeoutSec": 6
+     }
+    }
+   ]
+  }
+ }
+}

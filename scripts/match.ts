@@ -22,7 +22,7 @@ while (sim.phase !== 'post') {
   for (let i = 0; i < 0.1 / DT && sim.phase !== 'post'; i++) { sim.step(coaches.map((c, k) => c.update(sim.view(k), DT)), coaches.map(() => true)); referee.update(sim, DT); t += DT; }
   coaches.forEach((c, k) => { const s = c.executor.stall; if (s && s.at !== stallAt[k]) { stallAt[k] = s.at; stalls[k]++; } });
   if (ex.stall && ex.stall.at !== lastStall) { lastStall = ex.stall.at; log(`STALL at ${ex.stall.target}: ${ex.stall.reason}`); }
-  const key = sim.phase === 'auto' ? coaches[0].script?.note ?? '' : ex.tactic + ex.note + ex.status;
+  const key = sim.phase === 'auto' ? coaches[0].auto?.note ?? '' : ex.tactic + ex.note + ex.status;
   if (t >= nextLog || key !== lastKey) { lastKey = key; log(sim.phase === 'auto' ? key : `${ex.status} ${ex.note}`); nextLog = t + 10; }
 }
 for (let i = 0; i < 3 / DT; i++) sim.step(NO_INPUT);

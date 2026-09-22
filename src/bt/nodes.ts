@@ -276,5 +276,5 @@ export function leaf(base: Base, type: LeafType, params: Readonly<Record<string,
       now: () => rt.now(), log: (event, data) => rt.rec?.log(rt.span, rt.now(), event, data),
     };
     return yield* type.run(ctx);
-  });
+  }, { leaf: { type, params } });
 }

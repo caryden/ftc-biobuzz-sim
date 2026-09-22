@@ -25,7 +25,7 @@ This project isn't affiliated with or endorsed by *FIRST*. See [NOTICE.md](NOTIC
 - **The match.** A full 2:30 MATCH with AUTO, the transition, TELEOP, scoring, ranking points, and a PIN referee (G421).
 - **The drivers.** Every robot runs a scripted AUTO. In TELEOP, a planner or a person with a controller drives.
 
-[docs/simulator.md](docs/simulator.md) describes the planner, the AUTO scripts, partner coordination, the robot
+[docs/simulator.md](docs/simulator.md) describes the planner, the AUTO trees, partner coordination, the robot
 config, and the review mode.
 
 ## Run it
@@ -45,7 +45,7 @@ You need Node.js 20 or later.
 | Gear icon, or a right-click on a robot | Open the robot config |
 | Enter, R, C, M, V | Start, reset, change the camera, mark a moment, and review the match |
 
-To run the tests, run `npm test`. They cover the HIVE calibration, the drivetrain, the AUTO scripts, the referee, and
+To run the tests, run `npm test`. They cover the HIVE calibration, the drivetrain, the behavior-tree runtime, the AUTO trees, the referee, and
 full scripted matches, without a browser.
 
 ## Run matches without a browser
@@ -66,7 +66,8 @@ The results are in [experiments/](experiments/README.md). Every number on the si
 | Path | Contents |
 | --- | --- |
 | `src/sim/` | The match simulation. It has no DOM and no three.js dependency, so it runs in Node.js. |
-| `src/auto/` | The planner: tactics, path planning, the path follower, AUTO scripts, and the defense policy |
+| `src/auto/` | The planner: tactics, path planning, the path follower, the AUTO trees and their leaves, and the defense policy |
+| `src/bt/` | The behavior-tree runtime. It knows nothing about BIOBUZZ. |
 | `src/ref/`, `src/render/` | The PIN referee, and the three.js view |
 | `src/main.ts`, `src/review.ts`, `src/setup.ts` | The simulator page, the review mode, and the robot setups |
 | `index.html`, `sim/index.html` | The home page and the simulator page. Both are Vite entries. |

@@ -1,0 +1,25 @@
+{
+ "kind": "bt.tree",
+ "name": "leave_only",
+ "env": "onboard",
+ "note": "Drive to the LOADING ZONE and stay: LEAVE plus AUTO PARK, with no launching.",
+ "defs": {
+  "len": "bots.me.dimensions.length",
+  "park": "pose(-(field.half - len / 2 - 0.09), -0.8954, 180)"
+ },
+ "root": {
+  "sequence": {
+   "children": [
+    {
+     "id": "s1",
+     "note": "Every drive to PARK runs the intake: the robot faces the alliance wall, where NECTAR from the LOADING ZONE collects, and a full hopper at the end of AUTO is a head start in TELEOP. LEAVE needs the robot clear of the wall by half its size plus 2 cm. The pose is 9 cm off the wall, which leaves margin for a 5 cm drive tolerance.",
+     "ref": "auto.drive",
+     "params": {
+      "pose": "park",
+      "timeoutSec": 8
+     }
+    }
+   ]
+  }
+ }
+}

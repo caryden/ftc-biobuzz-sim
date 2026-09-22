@@ -5,6 +5,7 @@
  * node's success value. A node fails by throwing a `Failure`. Anything else that a node throws is a bug: it stops the
  * tree. Halting a node calls its generator's `return` method, which runs its `finally` blocks.
  */
+import type { LeafType } from './leaf';
 import type { Type } from './schema';
 import type { Recorder, Span } from './trace';
 
@@ -62,6 +63,8 @@ export interface CNode {
   run(rt: Rt, input: unknown, b: Bindings): Behavior;
   /** Guards only: checks the guard's condition now, without starting its child. A reactive fallback uses it. */
   test?(s: Scope): boolean;
+  /** Leaves only: the leaf type and its compiled parameters. Tools read them, for example to preview an AUTO path. */
+  readonly leaf?: { readonly type: LeafType; readonly params: Readonly<Record<string, (s: Scope) => unknown>> };
 }
 
 /**

@@ -36,9 +36,9 @@ export class TraceRecorder {
     if (sim.phase === 'pre') return; this.t += dt; if (this.t < this.nextAt) return; this.nextAt = this.t + 0.1;
     const robots = sim.robots.map((r, i) => {
       const p = r.body.translation(), v = r.body.linvel(), c = coaches[i], inAuto = sim.phase === 'auto', ex = c?.executor, goalKey = (ex as unknown as { goalKey?: string } | undefined)?.goalKey ?? '';
-      const path = (inAuto ? c?.script?.path : ex?.path) ?? [];
+      const path = (inAuto ? c?.auto?.path : ex?.path) ?? [];
       return { id: `${r.alliance === 'red' ? 'R' : 'B'}${r.slot}`, x: r2(p.x), z: r2(p.z), h: r2(sim.view(i).heading), speed: r2(Math.hypot(v.x, v.z)), carried: r.carried.map(code),
-        driver: !c ? 'human' : inAuto ? 'auto script' : 'planner', tactic: !c ? '' : inAuto ? c.script?.note ?? '' : ex!.tactic + (ex!.flowerId ? `:${ex!.flowerId}` : ''), status: ex?.status ?? '', note: inAuto ? '' : ex?.note ?? '',
+        driver: !c ? 'human' : inAuto ? 'auto script' : 'planner', tactic: !c ? '' : inAuto ? c.auto?.note ?? '' : ex!.tactic + (ex!.flowerId ? `:${ex!.flowerId}` : ''), status: ex?.status ?? '', note: inAuto ? '' : ex?.note ?? '',
         goalKey, goal: r.plan.goal ? [r2(r.plan.goal.x), r2(r.plan.goal.z)] as [number, number] : null, path: path.slice(0, 8).map(q => [r2(q.x), r2(q.z)] as [number, number]),
         phase: r.plan.phase, side: r.plan.side, load: r2(r.plan.load), stall: !inAuto && ex?.stall && ex.avoided().includes(ex.stall.target) ? `${ex.stall.target}: ${ex.stall.reason}` : null };
     });

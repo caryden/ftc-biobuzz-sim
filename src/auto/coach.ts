@@ -1,11 +1,11 @@
 import { Defender } from './defend';
 import { Executor } from './executor';
 import { scriptedTeleop } from './policy';
-import { ScriptRunner, autoFor, buildScripts, type ScriptTuning } from './script';
+import { AUTO_TREES, AutoProgram, autoFor } from './onboard';
 import { NO_INPUT, type Inputs, type Sim } from '../sim/world';
 
 /**
- * Drives one robot for a program: a named AUTO script (see `ScriptRunner`) in AUTO, and the scripted policy
+ * Drives one robot for a program: a named AUTO tree (see `AutoProgram`) in AUTO, and the scripted policy
  * (`scriptedTeleop`) in TELEOP. The policy picks a tactic when the running tactic finishes and at least once per second.
  */
 export class Coach {
@@ -19,18 +19,20 @@ export class Coach {
   /** FLOWER work starts when this many seconds remain in TELEOP. Default: 0, which means TIPS only. */
   flowerStartSec = 0;
   private nextReview = 0; private t = 0;
-  script: ScriptRunner | null = null; private scriptName = '';
-  /** For experiments: a script name that bypasses the partner mapping, and the choreography tuning. */
-  autoOverride: string | null = null; scriptTuning: ScriptTuning = {};
+  /** The running AUTO tree, or null before AUTO. */
+  auto: AutoProgram | null = null; private autoName = '';
+  /** For experiments: an AUTO tree name that bypasses the partner mapping. */
+  autoOverride: string | null = null;
 
   /** Gets the inputs for one physics step. Call it once per step while a program drives. */
   update(sim: Sim, dt: number): Inputs {
     this.t += dt; const ex = this.executor;
-    // AUTO runs a pure script: fixed poses and open-loop shots, with no view of the balls, the HIVE, or other robots.
+    // AUTO runs a tree in the onboard environment: poses, open-loop shots, and the camera, with no view of the balls or
+    // other robots. An unknown name runs cycle_and_park.
     if (sim.phase === 'auto') {
       const name = this.autoOverride ?? autoFor(sim, this.autoRoutine);
-      if (!this.script || this.scriptName !== name) { const all = buildScripts({ ...this.scriptTuning, length: sim.cfg.length, facing: sim.cfg.shooter.facing }); this.scriptName = name; this.script = new ScriptRunner(all[name] ?? all.cycle_and_park); }
-      return this.script.update(sim, dt);
+      if (!this.auto || this.autoName !== name) { this.autoName = name; this.auto = new AutoProgram(AUTO_TREES[name] ?? AUTO_TREES.cycle_and_park); }
+      return this.auto.update(sim, dt);
     }
     // The planner runs only in TELEOP. In the transition the sim ignores every command, so a running executor would
     // see no progress, report a stall, and start TELEOP with its first goals on the skip list.

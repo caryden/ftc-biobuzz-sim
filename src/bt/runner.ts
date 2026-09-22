@@ -1,7 +1,7 @@
 /**
  * Runs one loaded tree for one robot, one physics step at a time.
  */
-import { exec, Failure, isFailure, type Behavior, type Bindings, type Rt } from './core';
+import { exec, Failure, isFailure, type Behavior, type Bindings, type CNode, type Rt } from './core';
 import type { TreeDef } from './load';
 import type { Recorder, Span } from './trace';
 
@@ -45,6 +45,17 @@ export class TreeRunner<E = unknown> {
       this.status = isFailure(e) ? { state: 'failure', failure: e } : { state: 'error', error: e };
     }
     return this.status;
+  }
+
+  /**
+   * Evaluates a leaf's parameters now, as the leaf would get them if it started now, outside any chain. Tools use it,
+   * for example to preview an AUTO path before the match. Returns null for a node that isn't a leaf.
+   */
+  paramsOf(node: CNode): Record<string, unknown> | null {
+    if (!node.leaf) return null;
+    const s = { rt: this.rt, input: null, b: NO_BINDINGS }, out: Record<string, unknown> = {};
+    for (const [k, f] of Object.entries(node.leaf.params)) out[k] = f(s);
+    return out;
   }
 
   /** Stops the tree. Every running node's cleanup runs. */

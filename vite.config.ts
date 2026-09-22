@@ -1,6 +1,8 @@
+/// <reference types="vitest/config" />
 import fs from 'node:fs';
 import path from 'node:path';
 import { defineConfig, type Plugin } from 'vite';
+import { configDefaults } from 'vitest/config';
 
 /**
  * Saves match traces and annotations into the repository's traces/ folder, so that they can be read from disk later.
@@ -35,4 +37,8 @@ function folderIndex(): Plugin {
 }
 
 // src/main.ts awaits the physics engine at the top level, which needs an ES2022 target: Chrome 89, Firefox 89, Safari 15.
-export default defineConfig({ plugins: [folderIndex(), traceStore()], build: { target: 'es2022', rollupOptions: { input: { home: 'index.html', sim: 'sim/index.html' } } } });
+export default defineConfig({
+  plugins: [folderIndex(), traceStore()], build: { target: 'es2022', rollupOptions: { input: { home: 'index.html', sim: 'sim/index.html' } } },
+  // Agent sessions can keep git worktrees in .claude/worktrees/, each with its own copy of the tests.
+  test: { exclude: [...configDefaults.exclude, '.claude/**'] },
+});

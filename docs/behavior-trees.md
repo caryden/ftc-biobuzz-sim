@@ -1,8 +1,8 @@
 # Behavior-tree policies
 
-**Status: the runtime is built; the rest is proposed.** The first increment of the [plan](#plan), the runtime in
-`src/bt/`, is built and tested. The simulator doesn't use it yet. For how the planner works today, see
-[How the simulator works](simulator.md).
+**Status: the runtime and AUTO are built; the rest is proposed.** The first two increments of the [plan](#plan) are
+done: the runtime in `src/bt/`, and AUTO as trees in `src/auto/trees/`. TELEOP still runs the older planner. For how the
+planner works, see [How the simulator works](simulator.md).
 
 This document proposes replacing the robot's decision code with behavior trees. A behavior tree is a tree of small
 nodes. The inner nodes decide what runs, and the leaves read the field and drive the robot. The same tree format
@@ -28,9 +28,9 @@ The planner code is in `src/auto/`. Three layers make its decisions:
 - **`Executor`** in `src/auto/executor.ts` runs one of six tactics. It also contains decisions that belong to the
   policy: the endgame check that switches to PARK or a last launch, the opportunistic bump, and yielding to a partner.
 
-`ScriptRunner` in `src/auto/script.ts` runs AUTO. An AUTO script is a list of steps with timeouts, plus a clock
-check that jumps to the last step, which is the PARK. `buildScripts` computes most poses from the robot's length and
-the side that its shooter faces.
+Before increment 2, `ScriptRunner` in `src/auto/script.ts` ran AUTO. An AUTO script was a list of steps with
+timeouts, plus a clock check that jumped to the last step, which is the PARK. `buildScripts` computed most poses from
+the robot's length and the side that its shooter faces. The AUTO trees replaced both.
 
 These layers already work like a behavior tree, but the priority order is spread across three files. Written out as
 one tree, TELEOP looks like this:
@@ -62,8 +62,8 @@ leaf can read and every action that it can take. There are two environment types
 | Onboard | AUTO trees | The camera's AprilTag sightings of the CELLS |
 
 A driver watches the whole field, so a TELEOP tree can read opponents' positions, their loads, and where they're
-heading. An AUTO tree can't. Today `ScriptRunner` reads only odometry, the hopper count, the clock, and the camera,
-and the onboard environment keeps that limit.
+heading. An AUTO tree can't. It reads only odometry, the hopper count, the robot's size, the clock, and the camera,
+as `ScriptRunner` did.
 
 The shape of the environment is as follows:
 
@@ -260,32 +260,40 @@ expression, so the pose still moves when the robot's length changes.
 A tree file is JSON. It uses the shape `kind: "bt.tree"`, with a `root` that names its node type as a key. A leaf is
 a `ref` to a registered leaf type, with `params`. Each parameter's schema says whether it takes an expression. An
 enum parameter, such as an intake mode, takes a plain value. Any node can carry a `note`, which keeps the reason for a
-step next to the step, the way the comments in `src/auto/script.ts` do today.
+step next to the step.
 
-The following file is the start of the right robot's AUTO:
+The following file is `src/auto/trees/right_harvest.json`, the right robot's AUTO, shortened to its first three steps
+and its last. Its last step, the PARK, starts when all the other steps end, or when the clock shows 2.5 s, whichever
+comes first:
 
 ```json
 {
   "kind": "bt.tree",
   "name": "right_harvest",
   "env": "onboard",
+  "note": "For the right start position, on the alliance wall: the first TIP from the pre-loads, then ...",
   "defs": {
+    "len": "bots.me.dimensions.length",
     "flip": "if(bots.me.shooter.facing == 'front', 180, 0)",
-    "stand": "bots.me.dimensions.length / 2 + field.flowers.own.halfSize + 0.02",
-    "launchAudience": "pose(field.hives.own.pivot.x, 1.32, -90 + flip)",
-    "ownFlowerStand": "pose(field.flowers.own.position.x + stand, field.flowers.own.position.z, 180)",
-    "parkRight": "pose(-(field.half - bots.me.dimensions.length / 2 - 0.09), -0.5654, 180)"
+    "hiveX": "-0.3237",
+    "stand": "len / 2 + field.flowerHalfSize + 0.02",
+    "launchAudience": "pose(hiveX, 1.32, -90 + flip)",
+    "ownFlower": "pose(-1.7282 + stand, 0.5942, 180)",
+    "park": "pose(-(field.half - len / 2 - 0.09), -0.8954, 180)",
+    "parkRight": "pose(park.x, -0.8954 + 0.33, park.headingDeg)"
   },
-  "root": { "fallback": { "recheckSec": 0, "children": [
-    { "guard": { "when": "clock.remaining <= 2.5",
-      "child": { "ref": "biobuzz.navigate", "params": { "poses": ["parkRight"], "intake": "all" } } } },
-    { "sequence": { "children": [
-      { "timeout": { "sec": 4, "child": { "ref": "biobuzz.navigate", "params": { "poses": ["launchAudience"] } } } },
-      { "timeout": { "sec": 2.5, "child": { "ref": "biobuzz.shoot", "params": { "count": 3 } } } },
-      { "timeout": { "sec": 3.5, "child": { "ref": "biobuzz.navigate", "params": { "poses": ["offset(ownFlowerStand, 0.2, 0)"] } } } },
-      { "note": "The camera wait keeps the robot from launching before the partner's TIP raises the CELL.",
-        "timeout": { "sec": 14, "child": { "ref": "biobuzz.waitCellRaised", "params": { "cell": "audience" } } } }
-    ] } }
+  "root": { "sequence": { "children": [
+    { "id": "steps", "parallel": { "policy": "any", "children": [
+      { "id": "finish", "ref": "auto.clockAtMost", "params": { "sec": 2.5 } },
+      { "sequence": { "children": [
+        { "id": "s1", "ref": "auto.drive", "params": { "pose": "launchAudience", "timeoutSec": 4 } },
+        { "id": "s2", "note": "The raised CELL starts with 3 NECTAR, so the third POLLEN tips the HIVE.",
+          "ref": "auto.shoot", "params": { "count": 3, "timeoutSec": 2.5 } },
+        { "id": "s3", "note": "The red FLOWER's POLLEN fills the wait for the left robot's TIP.",
+          "ref": "auto.drive", "params": { "pose": "offset(ownFlower, 0.2, 0)", "timeoutSec": 3.5 } }
+      ] } }
+    ] } },
+    { "id": "s23", "ref": "auto.drive", "params": { "pose": "parkRight", "intake": "all", "timeoutSec": 6 } }
   ] } }
 }
 ```
@@ -396,17 +404,27 @@ exact match is the test for increments 2 and 3.
    types that describe an environment, the expression language, the loader, the node types, the runner, and the
    trace recorder. `test/bt.test.ts` and `test/bt-expr.test.ts` cover each node type. QuickJS's cost per call is
    measured. No match behavior changes.
-2. **Convert AUTO.** Define the onboard environment's schema and its adapter from the simulator, and the AUTO leaves.
-   The eight scripts in `src/auto/script.ts` become tree files in `src/auto/trees/`, and the runtime
-   replaces `ScriptRunner`. `scripts/plan-sweeps.ts` writes the sweep lanes into the tree files. The path preview reads
-   the trees. Pass condition: every seed's AUTO score matches today's exactly, and `npm test` passes.
-   Before the conversion, one small change to `ScriptRunner` gets measured and logged on its own. The script runner
-   times a step by adding the step length on every physics step, and that sum drifts: at 240 steps per second, 7 of
-   the 16 timeout lengths in the scripts end one step early, including 2.5 s, 3 s, and 4 s. A tree's timeout counts
-   exactly, from any start time. Making `ScriptRunner` count steps first lets the trees match it exactly afterward.
-   One more detail needs care: when `ScriptRunner` finishes a step, it sends no input for that physics step. The runtime
-   keeps that gap, behind a switch in an exported tuning object, so that the scores match. Removing the gap later is a
-   measured change.
+2. **Convert AUTO. Done.** `src/auto/onboard.ts` holds the onboard environment, the AUTO leaves, and `AutoProgram`,
+   which runs a tree for one robot. The eight scripts are tree files in `src/auto/trees/`, and `src/auto/script.ts` is
+   gone. `scripts/plan-sweeps.ts` writes the sweep lanes into the trees. Results:
+   - **The inputs match on every step.** With the script runner driving and a tree running alongside, the two gave
+     identical inputs on every physics step of 45 AUTO periods: 324,045 steps, four robots each, for three robot
+     sizes, both shooter directions, partners and solo, and three seeds. A pose moved by 1 mm showed up at the drive's
+     first replan.
+   - **The scores match.** `e50-auto-trees` equals `e49-script-counts-steps` on every seed.
+   - **One measured change came first.** The script runner timed a step by adding the step length on every physics
+     step, and that sum drifts: 7 of the 16 timeout lengths ended one step early, including 2.5 s, 3 s, and 4 s.
+     `e49-script-counts-steps` made it count steps, at a cost of 18 ± 9.5 combined points. See
+     `experiments/policy-loop.md`.
+
+   Four details differ from the design, to match the script runner exactly:
+   - **Each step leaf owns its timeout,** as a `timeoutSec` parameter, and a timeout ends the step without a failure.
+     A `timeout` supervisor fails instead.
+   - **Each step ends with one idle physics step.** `AUTO_TUNING.idleAfterStep` switches it. Removing it is a measured
+     change.
+   - **The clock race is a parallel node.** An `auto.clockAtMost` leaf races the steps with the `any` policy, and the
+     PARK follows the race.
+   - **Both alliances use red's HIVE pivot,** as the mirrored scripts did. Blue's own pivot is 0.4 mm farther out.
 3. **Convert TELEOP.** The coach, `scriptedTeleop`, and the endgame check become the default TELEOP tree. The six
    tactics become action leaves that wrap the executor code unchanged. Pass condition: every seed's score matches
    today's exactly.

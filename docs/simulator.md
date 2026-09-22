@@ -50,7 +50,7 @@ is in [Behavior-tree policies](behavior-trees.md).
 
 | Period | Decision maker | Setting |
 | --- | --- | --- |
-| AUTO | A pure script in `AUTO_SCRIPTS`, for every robot | **AUTO plan** in the robot config |
+| AUTO | A behavior tree in `src/auto/trees/`, for every robot | **AUTO plan** in the robot config |
 | TELEOP | The scripted policy in `src/auto/policy.ts`: TIPS, and FLOWERS from the time that **TELEOP plan** sets | **Driver**: Planner |
 | TELEOP | A person with controller 1 or controller 2. Only the red robots can have a human driver. | **Driver**: Controller 1 or Controller 2 |
 
@@ -78,23 +78,36 @@ every visit, until you configure a robot. R0, R1, B0, and B1 stay the robot ids 
 setups. `src/setup.ts` turns a setup into a `RobotConfig`: the rpm changes the gear ratio of
 the same motor, so the stall torque scales inversely, and the size scales the wheelbase, the track, and the intake.
 
-### AUTO scripts
+### AUTO trees
 
-An AUTO script in `src/auto/script.ts` is a fixed list of steps: `drive` to a
-pose, `push` with the intake on for a set time, `shoot` a count open loop,
-`wait`, `waitUntil` a clock time, `waitCell` until the camera reads a CELL as raised, and `waitTip` until the camera
-sees that CELL tip. The `ScriptRunner` reads only the robot's own pose, its carried count,
-and the clock. It doesn't read ball, FLOWER, or robot positions. Paths avoid the fixed FIELD elements and a
-virtual wall on the FIELD center line, so each robot stays on its own side
+Each AUTO plan is a behavior tree in `src/auto/trees/`. It runs in the onboard environment of `src/auto/onboard.ts`,
+which has what an OpMode can know: the robot's own pose, its carried count, its size, the clock, and the camera. It
+has no ball, FLOWER, or robot positions. For how trees work, see [Behavior-tree policies](behavior-trees.md).
+
+A tree is a list of steps, and each step is a leaf:
+
+- **`auto.drive`** drives to a pose. **`auto.sweep`** drives a list of planned lanes.
+- **`auto.push`** pushes with the intake on, and **`auto.shoot`** launches a count open loop.
+- **`auto.wait`** waits, and **`auto.waitClock`** waits until a clock time.
+- **`auto.waitCell`** waits until the camera reads a CELL as raised, and **`auto.waitTip`** until it sees that CELL tip.
+
+Each step ends on its condition or its timeout. The robot then does nothing for one physics step, as a state machine
+that advances on its next loop does. A tree that ends with a PARK races its steps against the clock, so that the PARK
+starts in time whatever step is running. Poses are expressions over the robot's size and shooter direction, so one
+tree fits every robot. Each step's note in the tree file says why the step is there.
+
+Paths avoid the fixed FIELD elements and a virtual wall on the FIELD center line, so each robot stays on its own side
 (G402). A blue robot mirrors the red poses through the FIELD center. One sensor is modeled: a Limelight 3A that reads
 the AprilTag cluster under each CELL, so a `waitCell` step or a `shoot` step with a `cell` holds until the camera
 reads that CELL as raised. `src/sim/camera.ts` applies the camera's 54.5° by 42° field of view, a range limit, and
 a grazing-angle limit. The camera sits on the shooter side, 0.30 m up and pitched 50°, which frames the raised
-CELL's tags from both launch spots. The camera reads the HIVE, not the balls, and only AUTO uses it. The sweeps are blind but planned from data: `scripts/plan-sweeps.ts` records where spilled balls come to rest over
-many simulated AUTO periods, prints a heatmap, and searches for the waypoints in `src/auto/sweep-lanes.json` that
-collect the most. Lanes lead with the intake, except along a wall, where the robot faces the wall and strafes. The page
-projects the script onto the FIELD as a dashed orange line, with a wedge at
-each pose and a red ring where the robot shoots.
+CELL's tags from both launch spots. The camera reads the HIVE, not the balls, and only AUTO uses it.
+
+The sweeps are blind but planned from data: `scripts/plan-sweeps.ts` records where spilled balls come to rest over
+many simulated AUTO periods, prints a heatmap, searches for the lanes that collect the most, and writes them into the
+sweep steps of the trees. Lanes lead with the intake, except along a wall, where the robot faces the wall and strafes.
+The page projects the tree onto the FIELD as a dashed orange line, with a wedge at each pose and a red ring where the
+robot shoots.
 
 ### Alliance partners
 
@@ -128,7 +141,7 @@ shared `plan`, the way drive teams talk:
 
 ### Opponent robots
 
-The blue robots run the same AUTO scripts and the same TELEOP policy as the red robots, with their own robot
+The blue robots run the same AUTO trees and the same TELEOP policy as the red robots, with their own robot
 configs. Robots collide with each other, and each planner treats the other robots as obstacles. To compare
 scripted strategies against the blue alliance, run `npx tsx scripts/sweep.ts`.
 
