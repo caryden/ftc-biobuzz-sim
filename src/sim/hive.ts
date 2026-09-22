@@ -129,6 +129,15 @@ export class Hive {
     return [-0.19, -0.063, 0.063, 0.19].map(lx => ({ p: { x: t.x + lx, y: t.y + ly * c - lz * s, z: t.z + ly * s + lz * c }, n: { x: 0, y: -c, z: -s } }));
   }
 
+  /**
+   * Converts a point in the raised CELL's frame to world space. `lx` runs across the CELL, `ly` is the height above the
+   * pivot in the HIVE frame, and `along` is the distance from the pivot toward the opening, as in `containsInUpCell`.
+   */
+  raisedCellPoint(lx: number, ly: number, along: number): { x: number; y: number; z: number } {
+    const t = this.read(), c = Math.cos(t.phi), s = Math.sin(t.phi), lz = (this.lastStable > 0 ? -1 : 1) * along;
+    return { x: t.x + lx, y: t.y + ly * c - lz * s, z: t.z + ly * s + lz * c };
+  }
+
   /** Gets the world-space center of the raised CELL opening. */
   mouthCenter(): { x: number; y: number; z: number } {
     const t = this.read(), phi = t.phi, c = Math.cos(phi), s = Math.sin(phi);
