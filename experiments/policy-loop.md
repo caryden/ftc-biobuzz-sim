@@ -86,8 +86,20 @@ Transit is about 73% of TELEOP. The changes that paid were the ones that removed
 | `e45-speed-error-x3` | Red with 3 times the launch speed error only (0.24 m/s) | red 307.6, blue 399.5 | -109. Launch speed consistency matters most. |
 | `e46-all-errors-x3` | Red with all three errors at 3 times | red 260.2, blue 402.5 | -157. The three losses are sub-additive: they sum to 196. |
 | `e47-andymark-masses-baseline` | The ball masses from AndyMark's product page (24.9 g and 41.3 g, where the simulator assumed 22.0 g and 35.2 g), with the HIVE's ballast height calibrated again at 0.063 m | 820 ± 7.2 | Kept. +4.2 ± 8.7 against e42, so the published results stand. |
+| `e48-baseline-main` | The baseline again, on the public repository's `main` | 820 ± 7.2 | The reference for e49. Identical to e47 on all 24 seeds, so the code hasn't changed since e47. |
+| `e49-script-counts-steps` | `ScriptRunner` times each AUTO step and its 0.15 s replanning by counting physics steps, where it added `dt` on every step. The sum drifted, so 7 of the 16 timeout lengths in the scripts, including 2.5 s, 3 s, and 4 s, ended one step early. | 802 ± 9 | Kept for the timing, not for points. -18.0 ± 9.5 is under the 20-point threshold, but 18 of 24 seeds went down. AUTO falls from 172.2 to 167.4. Exact timing lets the AUTO trees of docs/behavior-trees.md match the script runner step for step. See [How much AUTO depends on 4 ms](#how-much-auto-depends-on-4-ms). |
 
 Net for the planner: 736 to 800 combined on the default robots, or about +32 per alliance. The standard error of that difference is about 11.
+
+## How much AUTO depends on 4 ms
+
+e49 changed when some AUTO steps end by one physics step, which is 4 ms. That changed AUTO in 10 of the 24 seeds. In 9
+of them, an alliance made one or two AUTO TIPS more or fewer. Over the 24 seeds, AUTO lost 115 points: 3 alliances
+gained points and 8 lost them. The choreography was tuned on the drifting timer, so some of its timing sat on
+an edge that the drift happened to be on the good side of.
+
+A real robot's timing varies by far more than 4 ms from one MATCH to the next. So a single seed's AUTO score says
+little about a choreography, and a change to AUTO needs all 24 seeds.
 
 ## How fast the HIVE tips
 

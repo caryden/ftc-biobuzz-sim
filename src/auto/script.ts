@@ -237,22 +237,26 @@ export function previewScript(script: AutoScript, alliance: 'red' | 'blue', star
  */
 export class ScriptRunner {
   index = 0; path: Pt[] = []; note = '';
-  private stepTime = 0; private startCount = -1; private replanAt = 0; private t = 0; private sawRaised = false;
+  // Timers count physics steps. A sum of `dt` drifts: after 600 steps of 1/240 s, it's already more than 2.5 s, so
+  // a 2.5 s timeout ended one step early. A count times a step the same way from any start.
+  private n = 0; private stepStart = 0; private plannedAt = -1; private startCount = -1; private sawRaised = false;
   constructor(public script: AutoScript) {}
 
   update(sim: Sim, dt: number): Inputs {
-    this.t += dt; this.stepTime += dt; const steps = this.script.steps, last = steps.length - 1;
+    this.n++; const steps = this.script.steps, last = steps.length - 1;
     if (this.script.finishAtSec !== undefined && sim.phase === 'auto' && sim.timer <= this.script.finishAtSec && this.index < last) this.goto(last);
+    // The time in this step. The tolerance keeps exactly `timeoutSec` from counting as more than `timeoutSec`.
+    const stepTime = (this.n - this.stepStart) * dt, over = (sec: number) => stepTime > sec + 1e-9;
     const step = steps[this.index]; if (!step) { this.path = []; this.note = 'script finished'; return NO_INPUT; }
     this.note = `step ${this.index + 1}/${steps.length}: ${step.do}`;
     const mirror = sim.alliance === 'blue', next = () => { this.goto(this.index + 1); return NO_INPUT; };
-    if (this.stepTime > step.timeoutSec) return next();
+    if (over(step.timeoutSec)) return next();
     if (step.do === 'wait') return step.unlessFull && sim.carried.length >= sim.cfg.capacity ? next() : NO_INPUT;
     if (step.do === 'waitUntil') return sim.timer <= step.clockSec ? next() : NO_INPUT;
     // Blue mirrors the FIELD, so its rear is red's audience side.
     const raised = (cell: 'rear' | 'audience') => seesRaisedCell(sim, mirror ? (cell === 'rear' ? 'audience' : 'rear') : cell);
     if (step.do === 'waitCell') return raised(step.cell) ? next() : NO_INPUT;
-    if (step.do === 'waitTip') { if (raised(step.cell)) this.sawRaised = true; return (this.sawRaised || this.stepTime > 1) && !raised(step.cell) ? next() : NO_INPUT; }
+    if (step.do === 'waitTip') { if (raised(step.cell)) this.sawRaised = true; return (this.sawRaised || over(1)) && !raised(step.cell) ? next() : NO_INPUT; }
     if (step.do === 'push') return sim.carried.length >= sim.cfg.capacity ? next() : { ...NO_INPUT, forward: step.power, intake: step.intake };
     if (step.do === 'shoot') {
       if (step.cell && !raised(step.cell)) return NO_INPUT;
@@ -263,14 +267,14 @@ export class ScriptRunner {
     if (step.untilFull && sim.carried.length >= sim.cfg.capacity) return next();
     const goal = { x: mirror ? -step.x : step.x, z: mirror ? -step.z : step.z }, heading = ((step.headingDeg + (mirror ? 180 : 0)) * Math.PI) / 180;
     const p = sim.robot.translation(), R = Math.hypot(sim.cfg.length, sim.cfg.width) / 2;
-    if (this.t >= this.replanAt) {
+    if (this.plannedAt < 0 || (this.n - this.plannedAt) * dt >= 0.15 - 1e-9) {
       // The center-line wall sits so that the robot's circumscribed circle stays on its own side of the FIELD.
-      this.path = planPath({ x: p.x, z: p.z }, goal, R, [...fieldObstacles(), centerWall(mirror)]); this.replanAt = this.t + 0.15;
+      this.path = planPath({ x: p.x, z: p.z }, goal, R, [...fieldObstacles(), centerWall(mirror)]); this.plannedAt = this.n;
     }
     const cmd = pursue(sim, this.path, heading);
     if (cmd.remaining < 0.05 && Math.abs(cmd.headingError) < 0.05 && sim.telemetry.speed < 0.15) return next();
     return { ...NO_INPUT, forward: cmd.forward, strafeRight: cmd.strafeRight, turnRight: cmd.turnRight, intake: step.intake ?? 'none' };
   }
 
-  private goto(i: number) { this.index = i; this.stepTime = 0; this.startCount = -1; this.replanAt = 0; this.sawRaised = false; }
+  private goto(i: number) { this.index = i; this.stepStart = this.n; this.startCount = -1; this.plannedAt = -1; this.sawRaised = false; }
 }
