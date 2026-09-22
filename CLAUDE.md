@@ -3,6 +3,8 @@
 Instructions for an AI coding agent that works in this repository. People: read [CONTRIBUTING.md](CONTRIBUTING.md).
 
 - `src/sim/` has no DOM or three.js dependency. Keep it that way so that matches run headless.
+- `src/bt/` is the behavior-tree runtime. It has no DOM dependency and no knowledge of BIOBUZZ: game leaves and
+  environment schemas go in `src/auto/`. The design is in `docs/behavior-trees.md`.
 - No Node-only code in `src/`: the same files run in the browser, where `process` doesn't exist. Put an experiment
   switch in an exported tuning object, such as `EXEC`, and set it from a script.
 - Field constants come from `cad/field-manifest.json` and the Competition Manual. Cite the source when you add one.

@@ -1,7 +1,8 @@
 # Behavior-tree policies
 
-**Status: proposed.** Nothing in this document is built yet. The document records the design and the order of work.
-For how the planner works today, see [How the simulator works](simulator.md).
+**Status: the runtime is built; the rest is proposed.** The first increment of the [plan](#plan), the runtime in
+`src/bt/`, is built and tested. The simulator doesn't use it yet. For how the planner works today, see
+[How the simulator works](simulator.md).
 
 This document proposes replacing the robot's decision code with behavior trees. A behavior tree is a tree of small
 nodes. The inner nodes decide what runs, and the leaves read the field and drive the robot. The same tree format
@@ -76,7 +77,6 @@ interface CoreEnv {
     zones: { loading: ZoneView };
   };
   bots: { me: MyBot };
-  log(event: string, data?: Record<string, number | string | boolean>): void;
 }
 
 interface MyBot {
@@ -108,6 +108,8 @@ The following rules keep the environment from becoming a blackboard:
 - **Facts, not scratch space.** The environment holds observations and the robot's own history, such as its recent
   stalls. Some fields are computed when a leaf reads them, for example the number of POLLEN that the raised CELL still
   needs. They read like plain fields.
+- **Logging goes through the leaf's context.** A leaf gets the environment, its parameters, its input, and a `log`
+  function, which adds an event to the leaf's own span in the trace.
 - **Plain data at every boundary.** Observations, action arguments, and query results are plain data. A sandboxed
   leaf needs this rule, because only plain data can cross into a sandbox.
 - **One schema.** A single schema defines the environment. It produces the TypeScript types, the expression checker,
@@ -203,6 +205,9 @@ The following sections describe the parts that need more than one line.
 
 A `fallback` can be reactive. While a child runs, the fallback checks the guards of its higher-priority children
 every `recheckSec` seconds. If one passes, the fallback halts the running child and starts the higher-priority one.
+If the running child is a guard and its own condition fails, the fallback halts it and starts the next child. Only
+guard children take part in these checks, so a reactive fallback needs at least one. The interval starts again
+whenever a child starts.
 A `recheckSec` of 0 checks every step. The endgame branch needs 0. The tactic choice uses 1 s, which matches the
 coach's review today.
 
@@ -215,7 +220,8 @@ A node can get data from four places, and from nowhere else:
 
 - **`params`:** fixed values or expressions from the tree file.
 - **`input`:** the one value that a chain passes from the previous child.
-- **Bound names:** values that a `bind` earlier in the same chain named. Only later children of that chain can read
+- **Bound names:** values that a `bind` earlier in the same chain named. A `bind` must be a direct child of its chain.
+  Only later children of that chain can read
   them.
 - **The environment.**
 
@@ -310,19 +316,48 @@ The sandbox follows these rules:
 
 - **One context per leaf instance.** The host loads the leaf before the match and keeps its context for the whole
   match, because a leaf runs across many steps.
-- **A synchronous call each step.** The host passes the step's observations as plain data. The leaf yields a command
-  as plain data, and the host runs it through the same subsystems that built-in actions use.
+- **Only the fields that the leaf declares.** The host passes the leaf only the environment fields that its
+  manifest lists, not the whole environment. The measurements in the following table show why.
+- **A synchronous call.** The leaf gets its observations as plain data and returns or yields plain data. The host
+  runs a command through the same subsystems that built-in actions use.
 - **Deterministic limits.** The host sets a memory limit, and it limits run time by counting calls to QuickJS's
   interrupt handler, not by reading the wall clock. A wall-clock limit would make a leaf's timeout depend on the
-  machine.
+  machine. The handler runs only about once per 75 calls of a small leaf, so the count stops a leaf that loops
+  forever, but it can't measure one call precisely.
 - **No randomness and no clock.** The host leaves `Math.random` and `Date` out of the leaf's globals.
 
 The WebAssembly component model can come later, for authors who want to write a leaf in another language, such as
 Rust. The environment maps to a WebAssembly Interface Types (WIT) interface. The cost is the toolchain: an author
 needs a compiler that targets components, and the browser needs `jco` to run them.
 
-QuickJS's cost per call at 240 steps per second isn't measured yet. That number decides whether a code leaf can run
-every step or only at the decision rate, and it's worth measuring in the first increment.
+A benchmark measured QuickJS 0.32 in Node.js 22 on an Apple silicon Mac. One persistent context called a small leaf
+37,920 times, which is one robot's MATCH at 240 steps per second. Each call passed the observation as a JSON string,
+and the leaf found the nearest of 40 balls. The times vary by a few microseconds between runs.
+
+| What each call did | Time per call |
+| --- | --- |
+| Nothing: an empty function | 14 µs |
+| Parsed a 2.3 KB observation | 56 µs |
+| Looped over 40 balls, with no parsing | 21 µs |
+| Parsed the observation and looped | 63 µs |
+| The same work in Node.js's own engine, for scale | 12 µs |
+
+At 63 µs a call, four robots each running one code leaf every step spend about 10 s per MATCH in QuickJS. A headless
+MATCH takes about 27 s today, so a code leaf that runs every step and reads the whole field makes a MATCH about 40%
+slower. Parsing the observation is most of that cost. So code leaves follow two rules:
+
+- **A code leaf decides, and built-in actions act.** A code leaf is a choice or a condition that runs when its node
+  starts, for example which FLOWER to work next. It passes its choice on through a chain, and a built-in action such
+  as `navigate` does the work of every step.
+- **A code leaf reads only what it declares.** Its manifest lists the environment fields that it reads, and the host
+  serializes only those fields.
+
+A code leaf that runs every step is still possible, but its cost counts against the MATCH, and the editor shows it.
+The benchmark isn't in the repository, because it needs `quickjs-emscripten` as a dependency.
+
+The runtime itself costs little by comparison. `scripts/bt-bench.ts` runs four trees shaped like the TELEOP policy
+for one MATCH, with no physics. On the same Mac, the median of 7 runs was 52 ms without a recorder and 59 ms with
+one.
 
 ## Why the runtime doesn't use Effect
 
@@ -357,10 +392,12 @@ The planner uses no randomness, and the simulator's random numbers come from a s
 makes the same decisions on the same physics steps gives the same score on every one of the 24 evaluation seeds. That
 exact match is the test for increments 2 and 3.
 
-1. **Build the runtime.** Add `src/bt/`, which has no DOM dependency and no knowledge of BIOBUZZ. It holds the node
-   types, the expression language, the environment schema, and unit tests for each node type. Measure QuickJS's cost
-   per call. No match behavior changes.
-2. **Convert AUTO.** The eight scripts in `src/auto/script.ts` become tree files in `src/auto/trees/`, and the runtime
+1. **Build the runtime. Done.** `src/bt/` has no DOM dependency and no knowledge of BIOBUZZ. It holds the schema
+   types that describe an environment, the expression language, the loader, the node types, the runner, and the
+   trace recorder. `test/bt.test.ts` and `test/bt-expr.test.ts` cover each node type. QuickJS's cost per call is
+   measured. No match behavior changes.
+2. **Convert AUTO.** Define the onboard environment's schema and its adapter from the simulator, and the AUTO leaves.
+   The eight scripts in `src/auto/script.ts` become tree files in `src/auto/trees/`, and the runtime
    replaces `ScriptRunner`. `scripts/plan-sweeps.ts` writes the sweep lanes into the tree files. The path preview reads
    the trees. Pass condition: every seed's AUTO score matches today's exactly, and `npm test` passes.
    One detail needs care: when `ScriptRunner` finishes a step, it sends no input for that physics step. The runtime
