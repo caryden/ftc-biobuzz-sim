@@ -76,7 +76,7 @@ The results are in [experiments/](experiments/README.md). Every number on the si
 | `traces/` | Annotated matches that drove the planner fixes |
 | `functions/`, `db/`, `wrangler.toml` | The match counter on Cloudflare Pages and D1 |
 | `.github/workflows/ci.yml` | The checks that every pull request must pass |
-| `docs/` | The lessons, the simulator description, the HIVE calibration, and the backlog |
+| `docs/` | The lessons, the simulator description, the HIVE calibration, the behavior-tree design, and the backlog |
 
 ## The site
 

@@ -19,7 +19,8 @@ friction, and damping are estimates.
 
 Code drives the robot and presses the buttons. A decision maker picks what to
 work on. `src/auto/executor.ts` runs six tactics: `tip_hive`, `collect_pollen`,
-`collect_own_nectar`, `launch_into_hive`, `work_flower`, and `park`.
+`collect_own_nectar`, `launch_into_hive`, `work_flower`, and `park`. A proposed replacement for these decision layers
+is in [Behavior-tree policies](behavior-trees.md).
 
 - **`tip_hive`** collects only the POLLEN that the next TIP needs. It counts
   balls in flight, and when a TIP is certain it collects for the opposite CELL.
