@@ -202,6 +202,19 @@ describe('supervisors', () => {
     expect(steps).toBe(6); // Started at 0 s; 1.25 s is the first check past 1 s.
     expect(harness(tree({ timeout: { sec: 'count + 1', child: W('b', 2) } })).run().status.state).toBe('success');
   });
+  it('times out after the same number of steps from any start time', () => {
+    const at240 = (startStep: number, sec: number) => {
+      const def = loadTree(tree({ timeout: { sec, child: W('a', 100_000) } }), REG);
+      let k = startStep; const r = new TreeRunner(def, { env: makeEnv(), now: () => k / 240 });
+      let steps = 0; do { k++; steps++; } while (r.step().state === 'running');
+      return steps;
+    };
+    for (const sec of [1.2, 2.2, 2.5, 3.5, 5]) {
+      // One step starts the timeout. It ends on the first step after exactly `sec` seconds: for 2.5 s, the 601st after the start.
+      const expected = Math.round(sec * 240) + 2;
+      for (const start of [0, 1234, 7777, 30_000]) expect(at240(start, sec)).toBe(expected);
+    }
+  });
   it('retries only the listed failures, up to the number of attempts', () => {
     const h = harness(tree({ retry: { attempts: 5, child: { ref: 'test.flaky', params: { until: 3 } } } }));
     expect(h.run().status).toEqual({ state: 'success', value: 3 });

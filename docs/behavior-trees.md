@@ -400,7 +400,11 @@ exact match is the test for increments 2 and 3.
    The eight scripts in `src/auto/script.ts` become tree files in `src/auto/trees/`, and the runtime
    replaces `ScriptRunner`. `scripts/plan-sweeps.ts` writes the sweep lanes into the tree files. The path preview reads
    the trees. Pass condition: every seed's AUTO score matches today's exactly, and `npm test` passes.
-   One detail needs care: when `ScriptRunner` finishes a step, it sends no input for that physics step. The runtime
+   Before the conversion, one small change to `ScriptRunner` gets measured and logged on its own. The script runner
+   times a step by adding the step length on every physics step, and that sum drifts: at 240 steps per second, 7 of
+   the 16 timeout lengths in the scripts end one step early, including 2.5 s, 3 s, and 4 s. A tree's timeout counts
+   exactly, from any start time. Making `ScriptRunner` count steps first lets the trees match it exactly afterward.
+   One more detail needs care: when `ScriptRunner` finishes a step, it sends no input for that physics step. The runtime
    keeps that gap, behind a switch in an exported tuning object, so that the scores match. Removing the gap later is a
    measured change.
 3. **Convert TELEOP.** The coach, `scriptedTeleop`, and the endgame check become the default TELEOP tree. The six

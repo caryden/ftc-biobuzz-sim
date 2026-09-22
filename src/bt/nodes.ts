@@ -127,7 +127,10 @@ export function guard(base: Base, when: Ex, source: string): CNode {
   }, { test });
 }
 
-/** Halts its child and fails with `TimedOut` when more than `sec` seconds have passed since it started. */
+/**
+ * Halts its child and fails with `TimedOut` when more than `sec` seconds have passed since it started. Exactly `sec`
+ * seconds isn't more: at 240 steps per second, a 2.5 s timeout halts its child on the 601st step after it started.
+ */
 export function timeout(base: Base, sec: Ex): CNode {
   const [child] = base.children;
   return node(base, function* (rt, input, b) {
@@ -136,7 +139,8 @@ export function timeout(base: Base, sec: Ex): CNode {
       let r = g.next();
       while (!r.done) {
         yield;
-        if (rt.now() - t0 > limit) { halt(g); throw new Failure('TimedOut', `timed out after ${limit} s`); }
+        // The tolerance makes the length the same from any start time: (s0 + k) * dt - s0 * dt isn't exactly k * dt.
+        if (rt.now() - t0 > limit + 1e-9) { halt(g); throw new Failure('TimedOut', `timed out after ${limit} s`); }
         r = g.next();
       }
       return r.value;
