@@ -1,5 +1,6 @@
 import RAPIER from '@dimforge/rapier3d-compat';
 import { beforeAll, describe, expect, it } from 'vitest';
+import { TELEOP_TREES } from '../src/auto/driver';
 import { AUTO_TREES, previewAuto } from '../src/auto/onboard';
 import { Sim } from '../src/sim/world';
 import { defaultBot, robotConfig, sanitize } from '../src/setup';
@@ -26,5 +27,15 @@ describe('AUTO trees', () => {
     // A front-facing shooter turns every launch pose around. The first pose is the audience launch spot.
     expect(Math.abs(Math.abs(front[0].heading - big[0].heading) - Math.PI)).toBeLessThan(1e-9);
     expect(small[0].shoots).toBe(true);
+  });
+});
+
+describe('TELEOP tree', () => {
+  it('loads the default tree in the driver environment, with its guards in priority order', () => {
+    const def = TELEOP_TREES.teleop_default;
+    expect(def.env).toBe('driver');
+    const nodes: { kind: string; path: string }[] = [], walk = (n: typeof def.root) => { nodes.push(n); n.children.forEach(walk); }; walk(def.root);
+    expect(nodes.filter(n => n.kind === 'guard').map(n => n.path)).toEqual(['root/defend', 'root/play/child/flowers', 'root/play/child/tip', 'root/play/child/launch']);
+    expect(nodes.some(n => n.path === 'root/play/child/park')).toBe(true);
   });
 });

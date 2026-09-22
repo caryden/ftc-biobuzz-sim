@@ -1,8 +1,9 @@
 # Behavior-tree policies
 
-**Status: the runtime and AUTO are built; the rest is proposed.** The first two increments of the [plan](#plan) are
-done: the runtime in `src/bt/`, and AUTO as trees in `src/auto/trees/`. TELEOP still runs the older planner. For how the
-planner works, see [How the simulator works](simulator.md).
+**Status: increments 1 to 3 are built; the rest is proposed.** The first three increments of the [plan](#plan) are
+done: the runtime in `src/bt/`, and both periods as trees in `src/auto/trees/`, with the same scores as the planner
+that they replaced. The executor still holds three decisions that increment 4 moves into the TELEOP tree. For how the
+simulator works, see [How the simulator works](simulator.md).
 
 This document proposes replacing the robot's decision code with behavior trees. A behavior tree is a tree of small
 nodes. The inner nodes decide what runs, and the leaves read the field and drive the robot. The same tree format
@@ -20,13 +21,16 @@ The end state has these parts:
 
 ## The code that this design replaces
 
-The planner code is in `src/auto/`. Three layers make its decisions:
+The planner code is in `src/auto/`. Before increments 2 and 3, three layers made its decisions:
 
-- **`Coach`** in `src/auto/coach.ts` picks the mode. In AUTO, it runs a script. In TELEOP, it asks the policy for a
-  tactic when the running tactic ends, and at least once per second.
-- **`scriptedTeleop`** in `src/auto/policy.ts` picks a tactic by trying a list of options in order.
+- **`Coach`** in `src/auto/coach.ts` picked the mode. In AUTO, it ran a script. In TELEOP, it asked the policy for a
+  tactic when the running tactic ended, and at least once per second.
+- **`scriptedTeleop`** in `src/auto/policy.ts` picked a tactic by trying a list of options in order.
 - **`Executor`** in `src/auto/executor.ts` runs one of six tactics. It also contains decisions that belong to the
   policy: the endgame check that switches to PARK or a last launch, the opportunistic bump, and yielding to a partner.
+
+The coach now only hosts the two trees, and `scriptedTeleop` is gone. The executor's tactics run as TELEOP leaves, and
+its three buried decisions move into the tree in increment 4.
 
 Before increment 2, `ScriptRunner` in `src/auto/script.ts` ran AUTO. An AUTO script was a list of steps with
 timeouts, plus a clock check that jumped to the last step, which is the PARK. `buildScripts` computed most poses from
@@ -209,7 +213,7 @@ If the running child is a guard and its own condition fails, the fallback halts 
 guard children take part in these checks, so a reactive fallback needs at least one. The interval starts again
 whenever a child starts.
 A `recheckSec` of 0 checks every step. The endgame branch needs 0. The tactic choice uses 1 s, which matches the
-coach's review today.
+coach's review that it replaced.
 
 A reactive fallback interrupts only its own running child. It doesn't restart the whole tree, so a sequence elsewhere
 keeps its place.
@@ -425,9 +429,28 @@ exact match is the test for increments 2 and 3.
    - **The clock race is a parallel node.** An `auto.clockAtMost` leaf races the steps with the `any` policy, and the
      PARK follows the race.
    - **Both alliances use red's HIVE pivot,** as the mirrored scripts did. Blue's own pivot is 0.4 mm farther out.
-3. **Convert TELEOP.** The coach, `scriptedTeleop`, and the endgame check become the default TELEOP tree. The six
-   tactics become action leaves that wrap the executor code unchanged. Pass condition: every seed's score matches
-   today's exactly.
+3. **Convert TELEOP. Done.** `src/auto/driver.ts` holds the driver environment, the TELEOP leaves, and
+   `TeleopProgram`. The coach's decision and `scriptedTeleop` are the tree `src/auto/trees/teleop_default.json`: a
+   full-time defender first, and otherwise a reactive fallback, rechecked once per second, over FLOWER work, a TIP, a
+   launch of what the robot carries, and PARK. Results:
+   - **The inputs match on every step.** With the coach's old code driving and the tree running alongside, the two
+     gave identical inputs on every physics step of 12 full matches: 455,076 steps, four robots each, over three
+     seeds. The matches cover the baseline and the meta build, TIPS only and FLOWER work, and both kinds of defense.
+     A recheck of 1.5 s instead of
+     1 s showed up at the FLOWER start time.
+   - **The scores match.** `e52-teleop-tree` equals `e51-coach-counts-steps` on every seed.
+   - **One measured change came first.** `e51-coach-counts-steps` made the coach's review count steps, with no
+     measurable effect: +0.5 ± 2.7 combined points.
+
+   Three details keep the tree equal to the coach:
+   - **A tactic leaf succeeds when the executor reports done or blocked,** on the next step, so the tree decides again
+     from the top, as the coach did. A failure would have sent the fallback on to the next branch instead.
+   - **`teleop.flowerWork` picks its FLOWER again once per second** on the fallback's schedule, because the coach's
+     review could change the FLOWER without changing the branch.
+   - **The endgame check stays in the executor.** It moves in increment 4, which is a measured change.
+
+   The driver environment holds only what the default tree reads so far: the clock, the robot's config and hopper,
+   and which tactics can make progress. It grows as the buried decisions move into the tree.
 4. **Move the buried behaviors into the tree.** The endgame check, the opportunistic bump, and the partner yield become
    branches. Writes to the shared plan go through the partner channel. The defender becomes a subtree. Decision
    timing can shift here, so this increment is measured.

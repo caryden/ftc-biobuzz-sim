@@ -23,7 +23,7 @@ This project isn't affiliated with or endorsed by *FIRST*. See [NOTICE.md](NOTIC
 - **The robots.** A mecanum drivetrain with a DC motor model, a battery with internal resistance, and a traction limit.
   The intake, the launcher, and FLOWER placement are bulk models with sampled errors, not mechanism physics.
 - **The match.** A full 2:30 MATCH with AUTO, the transition, TELEOP, scoring, ranking points, and a PIN referee (G421).
-- **The drivers.** Every robot runs a scripted AUTO. In TELEOP, a planner or a person with a controller drives.
+- **The drivers.** Every robot runs an AUTO behavior tree. In TELEOP, a TELEOP tree or a person with a controller drives.
 
 [docs/simulator.md](docs/simulator.md) describes the planner, the AUTO trees, partner coordination, the robot
 config, and the review mode.
@@ -66,7 +66,7 @@ The results are in [experiments/](experiments/README.md). Every number on the si
 | Path | Contents |
 | --- | --- |
 | `src/sim/` | The match simulation. It has no DOM and no three.js dependency, so it runs in Node.js. |
-| `src/auto/` | The planner: tactics, path planning, the path follower, the AUTO trees and their leaves, and the defense policy |
+| `src/auto/` | The planner: the AUTO and TELEOP trees and their leaves, tactics, path planning, the path follower, and the defense policy |
 | `src/bt/` | The behavior-tree runtime. It knows nothing about BIOBUZZ. |
 | `src/ref/`, `src/render/` | The PIN referee, and the three.js view |
 | `src/main.ts`, `src/review.ts`, `src/setup.ts` | The simulator page, the review mode, and the robot setups |

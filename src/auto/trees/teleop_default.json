@@ -1,0 +1,49 @@
+{
+ "kind": "bt.tree",
+ "name": "teleop_default",
+ "env": "driver",
+ "note": "The default TELEOP policy. A full-time defender defends for the whole period. Otherwise the robot works FLOWERS once the clock passes the FLOWER start time, then TIPS, then launches what it carries, then PARKS. It decides again when a tactic ends, and at least once per second.",
+ "root": {
+  "fallback": {
+   "children": [
+    {
+     "id": "defend",
+     "guard": { "when": "config.defense == 'full'", "child": { "ref": "teleop.defend" } }
+    },
+    {
+     "id": "play",
+     "note": "The robot decides again whenever a tactic ends: the repeat runs the choice again from the top.",
+     "repeat": {
+      "stopOn": "never",
+      "child": {
+       "fallback": {
+        "recheckSec": 1,
+        "children": [
+         {
+          "id": "flowers",
+          "note": "FLOWER work starts when config.flowerStartSec seconds remain. 0 means TIPS only.",
+          "guard": { "when": "clock.remaining < config.flowerStartSec and available.flowerWork", "child": { "ref": "teleop.flowerWork" } }
+         },
+         {
+          "id": "tip",
+          "guard": { "when": "available.tipHive", "child": { "ref": "teleop.tactic", "params": { "tactic": "tip_hive" } } }
+         },
+         {
+          "id": "launch",
+          "guard": { "when": "bots.me.hopper.count > 0", "child": { "ref": "teleop.tactic", "params": { "tactic": "launch_into_hive" } } }
+         },
+         {
+          "id": "park",
+          "note": "The executor's park guard starts the PARK on time whatever the tactic is, so this branch runs only when nothing else can make progress.",
+          "ref": "teleop.tactic",
+          "params": { "tactic": "park" }
+         }
+        ]
+       }
+      }
+     }
+    }
+   ]
+  }
+ }
+}

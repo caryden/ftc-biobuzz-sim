@@ -17,10 +17,10 @@ friction, and damping are estimates.
 
 ## Program drivers
 
-Code drives the robot and presses the buttons. A decision maker picks what to
-work on. `src/auto/executor.ts` runs six tactics: `tip_hive`, `collect_pollen`,
-`collect_own_nectar`, `launch_into_hive`, `work_flower`, and `park`. A proposed replacement for these decision layers
-is in [Behavior-tree policies](behavior-trees.md).
+Code drives the robot and presses the buttons. A behavior tree picks what to work on: an AUTO tree in AUTO, and the
+default TELEOP tree in TELEOP. For how the trees work, see [Behavior-tree policies](behavior-trees.md). In TELEOP,
+`src/auto/executor.ts` runs the tactic that the tree picks: `tip_hive`, `collect_pollen`, `collect_own_nectar`,
+`launch_into_hive`, `work_flower`, or `park`.
 
 - **`tip_hive`** collects only the POLLEN that the next TIP needs. It counts
   balls in flight, and when a TIP is certain it collects for the opposite CELL.
@@ -35,7 +35,7 @@ is in [Behavior-tree policies](behavior-trees.md).
   preference. `nectarReserve` keeps one NECTAR in hand for a FLOWER cap. The policy sets it when 75
   seconds remain.
 - **Stalls.** If the robot makes no progress toward a target, the executor backs away, avoids that target for 7
-  to 12 seconds, and reports `blocked` with a reason, for example "another robot is in the way". The coach then
+  to 12 seconds, and reports `blocked` with a reason, for example "another robot is in the way". The TELEOP tree then
   picks something else. Inside 0.56 m, robots also push straight away from each other, so they don't wedge.
 - **Shooter.** The shooter has a fixed azimuth, with no turret. The default
   shooter faces the rear of the robot, opposite the intake.
@@ -51,7 +51,7 @@ is in [Behavior-tree policies](behavior-trees.md).
 | Period | Decision maker | Setting |
 | --- | --- | --- |
 | AUTO | A behavior tree in `src/auto/trees/`, for every robot | **AUTO plan** in the robot config |
-| TELEOP | The scripted policy in `src/auto/policy.ts`: TIPS, and FLOWERS from the time that **TELEOP plan** sets | **Driver**: Planner |
+| TELEOP | The default TELEOP tree, `src/auto/trees/teleop_default.json`: TIPS, and FLOWERS from the time that **TELEOP plan** sets | **Driver**: Planner |
 | TELEOP | A person with controller 1 or controller 2. Only the red robots can have a human driver. | **Driver**: Controller 1 or Controller 2 |
 
 ### Robot config

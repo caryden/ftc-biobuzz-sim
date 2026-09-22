@@ -1,14 +1,16 @@
 import { Defender } from './defend';
+import { TELEOP_TREES, TeleopProgram } from './driver';
 import { Executor } from './executor';
-import { scriptedTeleop } from './policy';
 import { AUTO_TREES, AutoProgram, autoFor } from './onboard';
 import { NO_INPUT, type Inputs, type Sim } from '../sim/world';
 
 /**
- * Drives one robot for a program: a named AUTO tree (see `AutoProgram`) in AUTO, and the scripted policy
- * (`scriptedTeleop`) in TELEOP. The policy picks a tactic when the running tactic finishes and at least once per second.
+ * Drives one robot for a program: a named AUTO tree (see `AutoProgram`) in AUTO, and the default TELEOP tree (see
+ * `TeleopProgram` and src/auto/trees/teleop_default.json) in TELEOP. The robot's settings here are what the TELEOP
+ * tree reads as `config`.
  */
 export class Coach {
+  /** The executor that the TELEOP tree's tactic leaves drive. It keeps its state across tactics. */
   executor = new Executor();
   autoRoutine = 'cycle_and_park';
   /**
@@ -18,16 +20,15 @@ export class Coach {
   defense: 'none' | 'full' | 'opportunistic' = 'none'; defender = new Defender();
   /** FLOWER work starts when this many seconds remain in TELEOP. Default: 0, which means TIPS only. */
   flowerStartSec = 0;
-  // The review counts physics steps: a sum of `dt` drifts, so a 1 s review came after 240 or 241 steps.
-  private n = 0; private reviewedAt = -Infinity;
   /** The running AUTO tree, or null before AUTO. */
   auto: AutoProgram | null = null; private autoName = '';
   /** For experiments: an AUTO tree name that bypasses the partner mapping. */
   autoOverride: string | null = null;
+  /** The running TELEOP tree, or null before TELEOP. */
+  teleop: TeleopProgram | null = null;
 
   /** Gets the inputs for one physics step. Call it once per step while a program drives. */
   update(sim: Sim, dt: number): Inputs {
-    this.n++; const ex = this.executor;
     // AUTO runs a tree in the onboard environment: poses, open-loop shots, and the camera, with no view of the balls or
     // other robots. An unknown name runs cycle_and_park.
     if (sim.phase === 'auto') {
@@ -38,10 +39,6 @@ export class Coach {
     // The planner runs only in TELEOP. In the transition the sim ignores every command, so a running executor would
     // see no progress, report a stall, and start TELEOP with its first goals on the skip list.
     if (sim.phase !== 'teleop') return NO_INPUT;
-    if (this.defense === 'full') return this.defender.update(sim, dt);
-    ex.opportunistic = this.defense === 'opportunistic';
-    ex.nectarReserve = sim.timer < 75 ? 1 : 0; // Near the endgame, always keep a NECTAR for a FLOWER cap.
-    if (ex.status !== 'in_progress' || (this.n - this.reviewedAt) * dt >= 1 - 1e-9) { const d = scriptedTeleop(sim, this.flowerStartSec, ex.avoidedFlowers()); ex.setTactic(d.tactic, d.flower); this.reviewedAt = this.n; }
-    return ex.update(sim, dt);
+    return (this.teleop ??= new TeleopProgram(TELEOP_TREES.teleop_default, this)).update(sim, dt);
   }
 }
