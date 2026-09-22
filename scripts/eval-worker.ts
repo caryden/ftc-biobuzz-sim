@@ -1,15 +1,17 @@
 // Runs one four-robot planner match and prints one JSON line with the score and a waste account per robot.
 // Run: npx tsx scripts/eval-worker.ts <seed>. BOTS works as in scripts/match.ts. OPPONENT=none plays red alone, and
-// REFEREE=1 adds the G421 PIN referee, whose MAJOR FOULS go to the other alliance's score.
+// REFEREE=1 adds the G421 PIN referee, whose MAJOR FOULS go to the other alliance's score. FIXED_CELL=1 starts the CELL
+// NECTAR at the CAD staging spots instead of a random drop (see `STAGING`).
 import RAPIER from '@dimforge/rapier3d-compat';
 import { Coach } from '../src/auto/coach';
 import { EXEC } from '../src/auto/executor';
 import { Referee } from '../src/ref/referee';
 import { defaultBot, robotConfig, sanitize, type BotSetup } from '../src/setup';
-import { DT, Sim } from '../src/sim/world';
+import { DT, STAGING, Sim } from '../src/sim/world';
 
 const seed = Number(process.argv[2] ?? 1); await RAPIER.init();
 if (process.env.OLD_TIP) EXEC.tipByMotion = false; // For comparisons with the old TIP test.
+if (process.env.FIXED_CELL) STAGING.randomCellNectar = false; // For comparisons with the fixed CELL layout.
 const given: Partial<BotSetup>[] = JSON.parse(process.env.BOTS ?? '[]'), bots = [0, 1, 2, 3].map(i => sanitize({ ...defaultBot(i), ...(given[i] ?? {}) }, i));
 const sim = new Sim(RAPIER, undefined, 'full', seed, { opponent: process.env.OPPONENT !== 'none', partners: true, configFor: (a, slot) => robotConfig(bots[(a === 'red' ? 0 : 2) + slot]) }); sim.start();
 const coaches = sim.robots.map((_, i) => { const c = new Coach(); c.flowerStartSec = bots[i].flowerStartSec; c.defense = bots[i].defense; c.autoOverride = bots[i].auto === 'default' || bots[i].auto === 'none' ? null : bots[i].auto; return c; });

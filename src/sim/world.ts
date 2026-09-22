@@ -72,6 +72,18 @@ export interface SimOptions {
   configFor?: (alliance: Alliance, slot: 0 | 1) => RobotConfig | undefined;
 }
 
+/** Switches for experiments on the pre-MATCH setup. */
+export const STAGING = {
+  /**
+   * If true, the NECTAR that start in each raised CELL drop in at random spots drawn from the seed, and the sim lets
+   * them settle before the MATCH starts. The FIELD reset crew tosses them in, so their layout differs from MATCH to
+   * MATCH. If false, they sit in a row against the back skin at the CAD staging spots. Default: true.
+   */
+  randomCellNectar: true,
+  /** The seconds of physics that the constructor runs after a random drop, so that the NECTAR are at rest at the start. */
+  settleSec: 1.5,
+};
+
 /** The BIOBUZZ match simulation. It has no rendering or DOM dependency, so it also runs headless. */
 export class Sim {
   world: RAPIER_NS.World;
@@ -144,7 +156,7 @@ export class Sim {
     // Order: the player's robot, its partner, then the blue robots.
     for (const a of (options.opponent ? ['red', 'blue'] : ['red']) as Alliance[])
       for (const slot of (options.partners ? [0, 1] : [0]) as (0 | 1)[]) this.robots.push(this.buildRobot(a, options.configFor?.(a, slot) ?? (this.robots.length ? structuredClone(cfg) : cfg), slot));
-    this.stageElements();
+    this.stageElements(new Rng((seed ^ 0x5a17c3e5) >>> 0));
     if (mode === 'practice') { this.phase = 'teleop'; this.clock = Infinity; }
   }
 
@@ -182,16 +194,47 @@ export class Sim {
     }
   }
 
-  private stageElements() {
+  /** Places the SCORING ELEMENTS. `rng` draws the CELL NECTAR layout. It is a separate stream, so the layout doesn't shift the MATCH's other draws. */
+  private stageElements(rng: Rng) {
     const st = manifest.staging as Record<string, number[][]>;
     for (const p of st.pollen) if (Math.abs(p[2]) > 1.74 && Math.abs(p[0]) < 1.79) this.spawn('pollen', p[0], p[1], p[2]); // GARDENS
-    for (const kind of ['nectar_red', 'nectar_blue'] as const)
-      for (const p of st[kind]) if (p[1] > 1) this.spawn(kind, p[0], p[1] + 0.004, p[2]);                              // CELLS
+    for (const kind of ['nectar_red', 'nectar_blue'] as const) {
+      const cell = st[kind].filter(p => p[1] > 1);                                                                     // CELLS
+      if (!STAGING.randomCellNectar) { for (const p of cell) this.spawn(kind, p[0], p[1] + 0.004, p[2]); continue; }
+      this.dropInCell(this.hives[kind === 'nectar_red' ? 'red' : 'blue'], kind, cell.length, rng);
+    }
+    if (STAGING.randomCellNectar) this.settle(STAGING.settleSec);
     // Absent robots: their pre-load POLLEN go in the LOADING ZONE against the wall (section 10.3.1).
     const absent = (['red', 'blue'] as Alliance[]).map(a => [a, 4 * (2 - this.robots.filter(r => r.alliance === a).length)] as [Alliance, number]);
     for (const [a, n] of absent) {
       const z = FIELD.loadingZone[a], sx = a === 'red' ? -1 : 1;
       for (let i = 0; i < n; i++) this.spawn('pollen', sx * (FIELD.half - 0.04 - 0.075 * (i % 2)), FIELD.pollenRadius, (z[2] + z[3]) / 2 + (Math.floor(i / 2) - n / 4 + 0.5) * 0.075);
+    }
+  }
+
+  /**
+   * Drops `n` balls at uniform random spots in the raised CELL of `hive`, 1 cm to 8 cm above its floor and clear of
+   * each other. They then roll to wherever the CELL's slope and each other leave them.
+   */
+  private dropInCell(hive: Hive, kind: BallKind, n: number, rng: Rng) {
+    const r = radiusOf(kind), placed: { lx: number; along: number; ly: number }[] = [];
+    const u = (lo: number, hi: number) => lo + (hi - lo) * rng.next();
+    for (let i = 0; i < n; i++) {
+      let q = { lx: 0, along: 0, ly: 0 };
+      for (let tries = 0; tries < 100; tries++) {
+        q = { lx: u(-HIVE.cellHalfWidth + r + 0.005, HIVE.cellHalfWidth - r - 0.005), along: u(HIVE.cellBack + r + 0.005, HIVE.cellMouth - r - 0.01), ly: HIVE.cellFloorY + r + u(0.01, 0.08) };
+        if (placed.every(o => Math.hypot(o.lx - q.lx, o.along - q.along, o.ly - q.ly) > 2 * r + 0.005)) break;
+      }
+      placed.push(q); const w = hive.raisedCellPoint(q.lx, q.ly, q.along); this.spawn(kind, w.x, w.y, w.z);
+    }
+  }
+
+  /** Runs the physics for `sec` with no robot input and the clock stopped, as before a MATCH. */
+  private settle(sec: number) {
+    for (let i = 0; i < sec / DT; i++) {
+      for (const h of Object.values(this.hives)) h.applyTorques();
+      this.world.step(); this.touch();
+      for (const h of Object.values(this.hives)) h.epoch!++;
     }
   }
 
