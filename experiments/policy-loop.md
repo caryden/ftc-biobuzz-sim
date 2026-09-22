@@ -86,6 +86,8 @@ Transit is about 73% of TELEOP. The changes that paid were the ones that removed
 | `e45-speed-error-x3` | Red with 3 times the launch speed error only (0.24 m/s) | red 307.6, blue 399.5 | -109. Launch speed consistency matters most. |
 | `e46-all-errors-x3` | Red with all three errors at 3 times | red 260.2, blue 402.5 | -157. The three losses are sub-additive: they sum to 196. |
 | `e47-andymark-masses-baseline` | The ball masses from AndyMark's product page (24.9 g and 41.3 g, where the simulator assumed 22.0 g and 35.2 g), with the HIVE's ballast height calibrated again at 0.063 m | 820 ± 7.2 | Kept. +4.2 ± 8.7 against e42, so the published results stand. |
+| `e48-step-cache-base` | Commit `89c2f2e`, the reference for e48 | 820 ± 7.2 | The same as e47. |
+| `e48-step-cache` | A speed change, not a planner change. Between two world steps, `Sim` reads each ball's position from Rapier once, and it counts the raised CELL's load once per alliance. `Hive` reads its angle, angular velocity, and pivot position once per step. | 820 ± 7.2 | Kept. Every per-seed score and summary field is identical to e48-step-cache-base. One MATCH on seed 11, timed by `scripts/match-timing.ts` as the mean of three runs: the planner falls from 16.99 s to 6.80 s, physics from 9.81 s to 9.56 s, and the referee from 0.29 s to 0.26 s. The MATCH falls from 27.08 s to 16.63 s. The 24-seed eval on 10 workers falls from 111 s to 73 s. |
 
 Net for the planner: 736 to 800 combined on the default robots, or about +32 per alliance. The standard error of that difference is about 11.
 

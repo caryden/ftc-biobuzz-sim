@@ -95,14 +95,14 @@ export function opponentCapGain(sim: Sim, f: Flower): number {
 export function tipTarget(sim: Sim, mateLoad = 0, own: 'rear' | 'audience' | null = null): { side: 'rear' | 'audience'; need: number; remaining: number; tipPending: boolean } {
   const hive = sim.hives[sim.alliance], up = hive.upCell, mouth = hive.mouthCenter(); let inflight = 0;
   for (const b of sim.balls.values()) {
-    const q = b.body.translation();
+    const q = sim.ballPos(b);
     if (b.airborne && q.y > 0.5 && Math.abs(q.x - mouth.x) < 0.35 && !hive.containsInUpCell(q, b.radius)) inflight += b.kind === 'pollen' ? TIP_LOAD.pollen : TIP_LOAD.nectar;
   }
   // A TIP is under way when the HIVE is past level, or when it is off its stop and turning away from it. A HIVE that is
   // only off its stop isn't tipping: a partly loaded CELL sags by up to 0.13 rad and stays there, and balls that land in
   // it rock it. Reading that as a TIP sent both robots to the other end, where they waited with a load that would have
   // tipped the raised CELL. `EXEC.tipByMotion` false restores the old test, for comparisons.
-  const off = Math.abs(Math.abs(hive.phi) - HIVE.tiltLimit), w = hive.body.angvel().x, away = Math.sign(w) !== Math.sign(hive.phi) && Math.abs(w) > 0.25;
+  const off = Math.abs(Math.abs(hive.phi) - HIVE.tiltLimit), w = hive.omega, away = Math.sign(w) !== Math.sign(hive.phi) && Math.abs(w) > 0.25;
   const swinging = EXEC.tipByMotion ? (hive.phi > 0) !== (up === 'rear') || (off > 0.03 && away) : off > 0.03, load = sim.cellLoad(sim.alliance) + inflight + mateLoad;
   const full = Math.ceil(TIP_LOAD.threshold / TIP_LOAD.pollen);
   // Sides convention: the robot launches only into its own CELL. While that CELL is down, or about to go down, the

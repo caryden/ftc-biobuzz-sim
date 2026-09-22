@@ -55,13 +55,31 @@ export class Hive {
     }
   }
 
+  /**
+   * A stamp that the owner changes each time the body can have moved, such as after every world step. While it holds
+   * one value, `phi`, `omega`, and the pivot position are read from Rapier once and then served from a cache. While it
+   * is null, which is the default, every read goes to Rapier. Each Rapier read allocates a wrapper object, and
+   * `containsInUpCell` runs once per ball on the FIELD each time `Sim.cellLoad` counts a CELL.
+   */
+  epoch: number | null = null;
+  private pose = { epoch: NaN, x: 0, y: 0, z: 0, phi: 0, omega: 0 };
+  private read() {
+    const p = this.pose;
+    if (this.epoch === null || p.epoch !== this.epoch) {
+      const t = this.body.translation(), q = this.body.rotation();
+      p.x = t.x; p.y = t.y; p.z = t.z; p.phi = 2 * Math.atan2(q.x, q.w); p.omega = this.body.angvel().x; p.epoch = this.epoch ?? NaN;
+    }
+    return p;
+  }
   /** Gets the tilt angle in radians. Positive means the rear CELL is raised. */
-  get phi(): number { const q = this.body.rotation(); return 2 * Math.atan2(q.x, q.w); }
+  get phi(): number { return this.read().phi; }
+  /** Gets the angular velocity about the pivot axis (world X) in radians per second. */
+  get omega(): number { return this.read().omega; }
   get upCell(): CellSide { return this.lastStable > 0 ? 'rear' : 'audience'; }
 
   /** Applies pivot friction and the end-stop damper. Call before each world step. */
   applyTorques(dyn = HIVE_DYN): void {
-    const w = this.body.angvel().x, phi = this.phi;
+    const w = this.omega, phi = this.phi;
     let tq = 0;
     if (Math.abs(w) > 1e-3) tq -= Math.sign(w) * dyn.pivotFriction;
     const closing = Math.sign(w) === Math.sign(phi) && HIVE.tiltLimit - Math.abs(phi) < dyn.damperZone;
@@ -73,7 +91,7 @@ export class Hive {
   /** Checks whether the hive settled on the opposite stop since the last call. */
   pollTip(): boolean {
     const phi = this.phi;
-    if (Math.abs(phi) > HIVE.tiltLimit - 0.05 && Math.sign(phi) !== this.lastStable && Math.abs(this.body.angvel().x) < 0.5) {
+    if (Math.abs(phi) > HIVE.tiltLimit - 0.05 && Math.sign(phi) !== this.lastStable && Math.abs(this.omega) < 0.5) {
       this.lastStable = phi > 0 ? 1 : -1; this.tips++; return true;
     }
     return false;
@@ -81,7 +99,7 @@ export class Hive {
 
   /** Checks whether a world-space point is inside the raised CELL. */
   containsInUpCell(p: { x: number; y: number; z: number }, radius: number): boolean {
-    const t = this.body.translation(), phi = this.phi, c = Math.cos(-phi), s = Math.sin(-phi);
+    const t = this.read(), phi = t.phi, c = Math.cos(-phi), s = Math.sin(-phi);
     const y0 = p.y - t.y, z0 = p.z - t.z;
     const lx = p.x - t.x, ly = y0 * c - z0 * s, lz = y0 * s + z0 * c;
     const along = this.lastStable > 0 ? -lz : lz;
@@ -91,7 +109,7 @@ export class Hive {
 
   /** Checks whether the segment p0 -> p1 passes inward through the opening of the raised CELL. */
   entersMouth(p0: { x: number; y: number; z: number }, p1: { x: number; y: number; z: number }, radius: number): boolean {
-    const t = this.body.translation(), phi = this.phi, c = Math.cos(-phi), s = Math.sin(-phi), sign = this.lastStable > 0 ? -1 : 1;
+    const t = this.read(), phi = t.phi, c = Math.cos(-phi), s = Math.sin(-phi), sign = this.lastStable > 0 ? -1 : 1;
     const loc = (p: { x: number; y: number; z: number }) => { const y = p.y - t.y, z = p.z - t.z; return { x: p.x - t.x, y: y * c - z * s, a: sign * (y * s + z * c) }; };
     const a = loc(p0), b = loc(p1);
     if (!(a.a > HIVE.cellMouth && b.a <= HIVE.cellMouth)) return false;
@@ -106,14 +124,14 @@ export class Hive {
    * the CELL (section 9.9). ASSUMPTION: the four tags are spread evenly across the 20 in. width, centered front to back.
    */
   tags(side: CellSide): { p: { x: number; y: number; z: number }; n: { x: number; y: number; z: number } }[] {
-    const t = this.body.translation(), phi = this.phi, c = Math.cos(phi), s = Math.sin(phi);
+    const t = this.read(), phi = t.phi, c = Math.cos(phi), s = Math.sin(phi);
     const ly = HIVE.cellFloorY - HIVE.wall, lz = (side === 'rear' ? -1 : 1) * (HIVE.cellBack + HIVE.cellMouth) / 2;
     return [-0.19, -0.063, 0.063, 0.19].map(lx => ({ p: { x: t.x + lx, y: t.y + ly * c - lz * s, z: t.z + ly * s + lz * c }, n: { x: 0, y: -c, z: -s } }));
   }
 
   /** Gets the world-space center of the raised CELL opening. */
   mouthCenter(): { x: number; y: number; z: number } {
-    const t = this.body.translation(), phi = this.phi, c = Math.cos(phi), s = Math.sin(phi);
+    const t = this.read(), phi = t.phi, c = Math.cos(phi), s = Math.sin(phi);
     const ly = (HIVE.cellFloorY + HIVE.cellPeakY) / 2 - 0.03, lz = (this.lastStable > 0 ? -1 : 1) * HIVE.cellMouth;
     return { x: t.x, y: t.y + ly * c - lz * s, z: t.z + ly * s + lz * c };
   }
