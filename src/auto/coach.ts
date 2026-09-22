@@ -18,7 +18,8 @@ export class Coach {
   defense: 'none' | 'full' | 'opportunistic' = 'none'; defender = new Defender();
   /** FLOWER work starts when this many seconds remain in TELEOP. Default: 0, which means TIPS only. */
   flowerStartSec = 0;
-  private nextReview = 0; private t = 0;
+  // The review counts physics steps: a sum of `dt` drifts, so a 1 s review came after 240 or 241 steps.
+  private n = 0; private reviewedAt = -Infinity;
   /** The running AUTO tree, or null before AUTO. */
   auto: AutoProgram | null = null; private autoName = '';
   /** For experiments: an AUTO tree name that bypasses the partner mapping. */
@@ -26,7 +27,7 @@ export class Coach {
 
   /** Gets the inputs for one physics step. Call it once per step while a program drives. */
   update(sim: Sim, dt: number): Inputs {
-    this.t += dt; const ex = this.executor;
+    this.n++; const ex = this.executor;
     // AUTO runs a tree in the onboard environment: poses, open-loop shots, and the camera, with no view of the balls or
     // other robots. An unknown name runs cycle_and_park.
     if (sim.phase === 'auto') {
@@ -40,7 +41,7 @@ export class Coach {
     if (this.defense === 'full') return this.defender.update(sim, dt);
     ex.opportunistic = this.defense === 'opportunistic';
     ex.nectarReserve = sim.timer < 75 ? 1 : 0; // Near the endgame, always keep a NECTAR for a FLOWER cap.
-    if (ex.status !== 'in_progress' || this.t >= this.nextReview) { const d = scriptedTeleop(sim, this.flowerStartSec, ex.avoidedFlowers()); ex.setTactic(d.tactic, d.flower); this.nextReview = this.t + 1; }
+    if (ex.status !== 'in_progress' || (this.n - this.reviewedAt) * dt >= 1 - 1e-9) { const d = scriptedTeleop(sim, this.flowerStartSec, ex.avoidedFlowers()); ex.setTactic(d.tactic, d.flower); this.reviewedAt = this.n; }
     return ex.update(sim, dt);
   }
 }
