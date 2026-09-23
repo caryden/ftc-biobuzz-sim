@@ -25,10 +25,10 @@ describe('intake.run', () => {
     // The outer race stops the scope after 0.5 s, in the middle of its 3 s wait.
     run({ sequence: { children: [
       { parallel: { policy: 'any', children: [
-        { ref: 'auto.wait', params: { timeoutSec: 0.5 } },
-        { parallel: { policy: 'any', children: [intakeRun('pollen'), { ref: 'auto.wait', params: { timeoutSec: 3 } }] } },
+        { ref: 'wait', params: { timeoutSec: 0.5 } },
+        { parallel: { policy: 'any', children: [intakeRun('pollen'), { ref: 'wait', params: { timeoutSec: 3 } }] } },
       ] } },
-      { ref: 'auto.wait', params: { timeoutSec: 1 } },
+      { ref: 'wait', params: { timeoutSec: 1 } },
     ] } }, 1.2, (_, inp) => seen.push(inp.intake));
     expect(seen.slice(0, 100).every(f => f === 'pollen')).toBe(true);
     expect(seen.slice(130).every(f => f === 'none')).toBe(true);
@@ -38,7 +38,7 @@ describe('intake.run', () => {
   });
   it('starts AUTO with the intake off', () => {
     const seen: (string | undefined)[] = [];
-    run({ ref: 'auto.wait', params: { timeoutSec: 1 } }, 0.2, (_, inp) => seen.push(inp.intake));
+    run({ ref: 'wait', params: { timeoutSec: 1 } }, 0.2, (_, inp) => seen.push(inp.intake));
     expect(new Set(seen)).toEqual(new Set(['none']));
   });
 });
@@ -61,13 +61,13 @@ describe('drive.followPath', () => {
   });
 });
 
-describe('auto.waitHopperFull', () => {
-  it('ends a race in the step that the hopper fills', () => {
-    // A robot that starts with a full hopper: the race ends before the drive starts.
+describe('waitUntil', () => {
+  it('ends a race in the step that its condition holds', () => {
+    // A robot that starts with a full transfer: the race ends before the drive starts.
     let moved = 0;
     run({ sequence: { children: [
-      { parallel: { policy: 'any', children: [{ ref: 'auto.waitHopperFull' }, { ref: 'drive.driveTo', params: { pose: 'pose(0, 0, 0)', timeoutSec: 3 } }] } },
-      { ref: 'auto.wait', params: { timeoutSec: 3 } },
+      { parallel: { policy: 'any', children: [{ ref: 'waitUntil', params: { condition: 'bots.me.transfer.full' } }, { ref: 'drive.driveTo', params: { pose: 'pose(0, 0, 0)', timeoutSec: 3 } }] } },
+      { ref: 'wait', params: { timeoutSec: 3 } },
     ] } }, 0.5, (_, inp) => { if (inp.forward || inp.strafeRight) moved++; });
     expect(moved).toBe(0);
   });

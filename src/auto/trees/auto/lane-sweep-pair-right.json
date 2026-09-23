@@ -9,6 +9,7 @@
   "partner": "lane-sweep-pair-left"
  },
  "defs": {
+  "full": "bots.me.transfer.full",
   "len": "bots.me.dimensions.length",
   "flip": "if(bots.me.shooter.facing == 'front', 180, 0)",
   "hiveX": "-0.3237",
@@ -29,9 +30,9 @@
        {
         "id": "finish",
         "note": "When the clock shows 4.5 s, the last step starts, whatever step is running then.",
-        "ref": "auto.clockAtMost",
+        "ref": "waitUntil",
         "params": {
-         "sec": 4.5
+         "condition": "clock.remaining <= 4.5"
         }
        },
        {
@@ -90,7 +91,10 @@
                   "policy": "any",
                   "children": [
                    {
-                    "ref": "auto.waitHopperFull"
+                    "ref": "waitUntil",
+                    "params": {
+                     "condition": "full"
+                    }
                    },
                    {
                     "id": "s5",
@@ -120,9 +124,9 @@
           {
            "id": "s7",
            "note": "The camera wait keeps the robot from launching at the CELL before its partner's TIP raises it.",
-           "ref": "auto.waitCell",
+           "ref": "waitUntil",
            "params": {
-            "cell": "audience",
+            "condition": "bots.me.vision.seesRaised('audience')",
             "timeoutSec": 14
            }
           },
@@ -141,7 +145,10 @@
             "policy": "any",
             "children": [
              {
-              "ref": "auto.waitHopperFull"
+              "ref": "waitUntil",
+              "params": {
+               "condition": "full"
+              }
              },
              {
               "ref": "intake.run",
@@ -203,7 +210,7 @@
           {
            "id": "s12",
            "note": "That volley is the third TIP. The right robot stays on its own side: it sweeps the fresh audience-side spill so that TELEOP starts with a full hopper, and crosses to the rear only to PARK.",
-           "ref": "auto.waitTip",
+           "ref": "vision.waitTip",
            "params": {
             "cell": "audience",
             "timeoutSec": 4
@@ -211,7 +218,7 @@
           },
           {
            "id": "s13",
-           "ref": "auto.wait",
+           "ref": "wait",
            "params": {
             "timeoutSec": 1.2
            }
@@ -222,7 +229,10 @@
             "policy": "any",
             "children": [
              {
-              "ref": "auto.waitHopperFull"
+              "ref": "waitUntil",
+              "params": {
+               "condition": "full"
+              }
              },
              {
               "ref": "intake.run",

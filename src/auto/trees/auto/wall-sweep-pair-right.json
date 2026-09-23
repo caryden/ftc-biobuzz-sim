@@ -9,6 +9,7 @@
   "partner": "wall-sweep-pair-left"
  },
  "defs": {
+  "full": "bots.me.transfer.full",
   "len": "bots.me.dimensions.length",
   "flip": "if(bots.me.shooter.facing == 'front', 180, 0)",
   "hiveX": "-0.3237",
@@ -34,9 +35,9 @@
        {
         "id": "finish",
         "note": "When the clock shows 2.5 s, the last step starts, whatever step is running then.",
-        "ref": "auto.clockAtMost",
+        "ref": "waitUntil",
         "params": {
-         "sec": 2.5
+         "condition": "clock.remaining <= 2.5"
         }
        },
        {
@@ -96,7 +97,10 @@
                   "policy": "any",
                   "children": [
                    {
-                    "ref": "auto.waitHopperFull"
+                    "ref": "waitUntil",
+                    "params": {
+                     "condition": "full"
+                    }
                    },
                    {
                     "id": "s5",
@@ -126,9 +130,9 @@
           {
            "id": "s7",
            "note": "The camera wait keeps the robot from launching at the CELL before its partner's TIP raises it.",
-           "ref": "auto.waitCell",
+           "ref": "waitUntil",
            "params": {
-            "cell": "audience",
+            "condition": "bots.me.vision.seesRaised('audience')",
             "timeoutSec": 14
            }
           },
@@ -161,7 +165,10 @@
                   "policy": "any",
                   "children": [
                    {
-                    "ref": "auto.waitHopperFull"
+                    "ref": "waitUntil",
+                    "params": {
+                     "condition": "full"
+                    }
                    },
                    {
                     "id": "s9",
@@ -181,7 +188,10 @@
                   "policy": "any",
                   "children": [
                    {
-                    "ref": "auto.waitHopperFull"
+                    "ref": "waitUntil",
+                    "params": {
+                     "condition": "full"
+                    }
                    },
                    {
                     "id": "s10",
@@ -223,7 +233,10 @@
             "policy": "any",
             "children": [
              {
-              "ref": "auto.waitHopperFull"
+              "ref": "waitUntil",
+              "params": {
+               "condition": "full"
+              }
              },
              {
               "id": "s13",
@@ -243,12 +256,15 @@
             "policy": "any",
             "children": [
              {
-              "ref": "auto.waitHopperFull"
+              "ref": "waitUntil",
+              "params": {
+               "condition": "full"
+              }
              },
              {
               "id": "s14",
               "note": "The camera can't read either CELL from under the HIVE, so the wait is timed: the HIVE tips about 2 s after the volley ends, and the spill needs about 1.6 s more to reach the wall. A full hopper skips the wait and the sweep.",
-              "ref": "auto.wait",
+              "ref": "wait",
               "params": {
                "timeoutSec": 2.6
               }
@@ -276,7 +292,10 @@
                   "policy": "any",
                   "children": [
                    {
-                    "ref": "auto.waitHopperFull"
+                    "ref": "waitUntil",
+                    "params": {
+                     "condition": "full"
+                    }
                    },
                    {
                     "id": "s15",
@@ -296,7 +315,10 @@
                   "policy": "any",
                   "children": [
                    {
-                    "ref": "auto.waitHopperFull"
+                    "ref": "waitUntil",
+                    "params": {
+                     "condition": "full"
+                    }
                    },
                    {
                     "id": "s16",
@@ -352,7 +374,10 @@
                   "policy": "any",
                   "children": [
                    {
-                    "ref": "auto.waitHopperFull"
+                    "ref": "waitUntil",
+                    "params": {
+                     "condition": "full"
+                    }
                    },
                    {
                     "id": "s19",
@@ -372,7 +397,10 @@
                   "policy": "any",
                   "children": [
                    {
-                    "ref": "auto.waitHopperFull"
+                    "ref": "waitUntil",
+                    "params": {
+                     "condition": "full"
+                    }
                    },
                    {
                     "id": "s20",

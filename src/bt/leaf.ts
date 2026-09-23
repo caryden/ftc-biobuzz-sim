@@ -17,6 +17,12 @@ export interface ParamBase {
   /** Bounds that the loader checks on a literal number. An expression's value isn't checked. */
   min?: number;
   max?: number;
+  /**
+   * If true, the leaf gets a function that evaluates the parameter each time that the leaf calls it, for example a
+   * condition that a wait checks on every step. If false, the leaf gets the value, evaluated once when it starts.
+   * Default: false.
+   */
+  live?: boolean;
 }
 
 /** A parameter whose default has the parameter's type. */
@@ -27,9 +33,9 @@ export type ParamSpec<T extends Type = Type> = ParamBase & { type: T; default?: 
  * TypeScript to expand.
  */
 export type ParamSpecs = Readonly<Record<string, ParamBase>>;
-export type InferParams<S extends ParamSpecs> = { -readonly [K in keyof S]: Infer<S[K]['type']> };
+export type InferParams<S extends ParamSpecs> = { -readonly [K in keyof S]: S[K] extends { live: true } ? () => Infer<S[K]['type']> : Infer<S[K]['type']> };
 
-/** What a leaf gets when it starts. Parameters are evaluated once, when the leaf starts. */
+/** What a leaf gets when it starts. Parameters are evaluated once, when the leaf starts, except live parameters. */
 export interface LeafCtx<E, P> {
   env: E;
   params: P;

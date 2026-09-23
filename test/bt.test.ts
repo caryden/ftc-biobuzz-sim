@@ -47,9 +47,14 @@ const pose = leaf({
   params: { at: { type: t.object({ x: t.number(), z: t.number(), headingDeg: t.number() }) }, mode: { type: t.enum('all', 'none'), default: 'none' } },
   *run(ctx) { return { ...ctx.params.at, mode: ctx.params.mode }; },
 });
+const until = leaf({
+  id: 'test.until', version: 1, doc: 'Waits until `when` is true, and succeeds with the number of steps it waited.',
+  params: { when: { type: t.boolean(), live: true } },
+  *run(ctx) { let n = 0; while (!ctx.params.when()) { n++; yield; } return n; },
+});
 const REG: Registry = {
   envs: { full: fullEnv, bare: bareEnv },
-  leaves: Object.fromEntries([wait, fail, flaky, emit, text, double, drive, intake, camera, logger, pose].map(l => [l.id, l])),
+  leaves: Object.fromEntries([wait, fail, flaky, emit, text, double, drive, intake, camera, logger, pose, until].map(l => [l.id, l])),
 };
 
 const tree = (root: unknown, extra: Record<string, unknown> = {}) => ({ kind: 'bt.tree', id: 'test', name: 'Test', env: 'full', root, ...extra });
@@ -293,6 +298,11 @@ describe('halting and determinism', () => {
 });
 
 describe('parameters and definitions', () => {
+  it('evaluates a live parameter each time that the leaf calls it, and a definition in it once per step', () => {
+    const h = harness(tree({ ref: 'test.until', params: { when: 'reached' } }, { defs: { reached: 'count >= 3' } }));
+    const { status } = h.run(20, k => { h.env.count = k; });
+    expect(status).toEqual({ state: 'success', value: 3 });
+  });
   it('compiles a pose that mixes numbers, expressions, and definitions, and takes an enum as plain text', () => {
     const src = tree({ ref: 'test.pose', params: { at: { x: 'base + 1', z: -0.5, headingDeg: "if(side == 'rear', 90, -90)" }, mode: 'all' } }, { defs: { base: '0.25 * 2' } });
     expect(harness(src).run().status).toEqual({ state: 'success', value: { x: 1.5, z: -0.5, headingDeg: 90, mode: 'all' } });

@@ -8,6 +8,7 @@
   "start": "any"
  },
  "defs": {
+  "full": "bots.me.transfer.full",
   "len": "bots.me.dimensions.length",
   "flip": "if(bots.me.shooter.facing == 'front', 180, 0)",
   "hiveX": "-0.3237",
@@ -73,7 +74,10 @@
             "policy": "any",
             "children": [
              {
-              "ref": "auto.waitHopperFull"
+              "ref": "waitUntil",
+              "params": {
+               "condition": "full"
+              }
              },
              {
               "id": "s5",
@@ -145,7 +149,10 @@
             "policy": "any",
             "children": [
              {
-              "ref": "auto.waitHopperFull"
+              "ref": "waitUntil",
+              "params": {
+               "condition": "full"
+              }
              },
              {
               "id": "s10",
@@ -183,7 +190,7 @@
     {
      "id": "s13",
      "note": "From the rear launch spot the camera can't see the audience CELL, so the robot can't watch the TIP finish. It waits 1.5 s for the spill to land instead.",
-     "ref": "auto.wait",
+     "ref": "wait",
      "params": {
       "timeoutSec": 1.5
      }
@@ -194,7 +201,10 @@
       "policy": "any",
       "children": [
        {
-        "ref": "auto.waitHopperFull"
+        "ref": "waitUntil",
+        "params": {
+         "condition": "full"
+        }
        },
        {
         "ref": "intake.run",

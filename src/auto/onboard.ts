@@ -278,13 +278,6 @@ const intakeRun = leaf({
   },
 });
 
-const waitHopperFull = leaf({
-  id: 'auto.waitHopperFull', version: 1,
-  doc: 'Waits until the transfer is full. Race it against a drive or a path with a `parallel` node of policy `any`, before the drive, so that the race ends in the step that the transfer fills.',
-  params: {},
-  *run(ctx) { for (;;) { if (ctx.env.bots.me.transfer.full) return null; yield; } },
-});
-
 const push = leaf({
   id: 'drive.push', version: 1, uses: ['drive'],
   doc: 'Pushes straight ahead for `timeoutSec`, for example against the bottom of a FLOWER to pick up its POLLEN. It leaves the intake as it is.',
@@ -311,18 +304,21 @@ const shoot = leaf({
   },
 });
 
-const waitCell = leaf({
-  id: 'auto.waitCell', version: 1, needs: NEEDS_CAMERA,
-  doc: 'Waits until the camera sees the AprilTags of `cell` in the raised position. The robot must be near its launch spot, with the shooter side toward the HIVE.',
-  params: { cell: { type: CELL }, timeoutSec: { type: t.number('s'), min: 0, unit: 's' } },
+const waitUntil = leaf({
+  id: 'waitUntil', version: 1,
+  doc: 'Waits until `condition` is true, for example `bots.me.transfer.full` or `bots.me.vision.seesRaised(\'rear\')`. With `timeoutSec`, it also ends after that many seconds. It checks the condition on every physics step, and it ends in the step that the condition holds, with no idle step, so that a race against it ends in that step. Put it first in the race.',
+  params: {
+    condition: { type: t.boolean(), live: true, doc: 'An expression over the environment. It is evaluated on every step.' },
+    timeoutSec: { type: t.nullable(t.number('s')), default: null, min: 0, unit: 's', doc: 'The longest wait. Null waits for as long as it takes.' },
+  },
   *run(ctx) {
-    const e = ctx.env, timer = stepTimer(e); begin(e, ctx.path, 'waitCell');
-    for (;;) { if (timer.over(ctx.params.timeoutSec) || e.bots.me.vision.seesRaised(ctx.params.cell)) return yield* idle(); yield; }
+    const e = ctx.env, p = ctx.params, timer = stepTimer(e);
+    for (;;) { if (p.condition() || (p.timeoutSec !== null && timer.over(p.timeoutSec))) return null; yield; }
   },
 });
 
 const waitTip = leaf({
-  id: 'auto.waitTip', version: 1, needs: NEEDS_CAMERA,
+  id: 'vision.waitTip', version: 1, needs: NEEDS_CAMERA,
   doc: 'Waits until `cell` tips: the camera saw it raised, and then no longer sees it raised. A CELL that isn\'t seen raised after 1 s counts as already tipping.',
   params: { cell: { type: CELL }, timeoutSec: { type: t.number('s'), min: 0, unit: 's' } },
   *run(ctx) {
@@ -337,27 +333,10 @@ const waitTip = leaf({
 });
 
 const wait = leaf({
-  id: 'auto.wait', version: 2,
-  doc: 'Waits `timeoutSec`. To skip a wait whose only purpose is a pickup that follows, race it against `auto.waitHopperFull`.',
+  id: 'wait', version: 1,
+  doc: 'Waits `timeoutSec`, as one step with its idle step. To skip a wait whose only purpose is a pickup that follows, race it against `waitUntil` on a full transfer.',
   params: { timeoutSec: { type: t.number('s'), min: 0, unit: 's' }, tag: { type: t.string(), default: '' } },
   *run(ctx) { begin(ctx.env, ctx.path, 'wait', ctx.params.tag || undefined); return yield* waitStep(ctx.env, ctx.params.timeoutSec); },
-});
-
-const waitClock = leaf({
-  id: 'auto.waitClock', version: 1,
-  doc: 'Waits until the period clock shows `clockSec` or less. Partners use it to take turns.',
-  params: { clockSec: { type: t.number('s'), unit: 's' }, timeoutSec: { type: t.number('s'), min: 0, unit: 's' } },
-  *run(ctx) {
-    const e = ctx.env, timer = stepTimer(e); begin(e, ctx.path, 'waitUntil');
-    for (;;) { if (timer.over(ctx.params.timeoutSec) || e.clock.remaining <= ctx.params.clockSec) return yield* idle(); yield; }
-  },
-});
-
-const clockAtMost = leaf({
-  id: 'auto.clockAtMost', version: 1,
-  doc: 'Succeeds as soon as the period clock shows `sec` or less. It isn\'t a step: it has no timeout and no idle step. An AUTO tree races it against its steps, so that the last step starts in time.',
-  params: { sec: { type: t.number('s'), unit: 's' } },
-  *run(ctx) { while (ctx.env.clock.remaining > ctx.params.sec) yield; return null; },
 });
 
 const FNS: Record<string, FnSpec> = {
@@ -368,7 +347,7 @@ const FNS: Record<string, FnSpec> = {
 
 export const AUTO_REGISTRY: Registry = {
   envs: { onboard: ONBOARD_SCHEMA },
-  leaves: Object.fromEntries([driveTo, followPath, push, intakeRun, shoot, waitHopperFull, waitCell, waitTip, wait, waitClock, clockAtMost].map(l => [l.id, l])),
+  leaves: Object.fromEntries([driveTo, followPath, push, intakeRun, shoot, waitTip, waitUntil, wait].map(l => [l.id, l])),
   fns: FNS,
 };
 
@@ -465,7 +444,7 @@ export function leafParams(def: TreeDef, sim: Sim): { node: CNode; params: Recor
  */
 export function previewAuto(def: TreeDef, sim: Sim, start: Pt): { path: Pt[]; poses: (Pt & { heading: number; shoots: boolean })[] } {
   const rotate = sim.alliance === 'blue', R = Math.hypot(sim.cfg.length, sim.cfg.width) / 2;
-  const leaves = leafParams(def, sim).filter(l => l.node.label !== 'auto.waitHopperFull' && l.node.label !== 'intake.run');
+  const leaves = leafParams(def, sim).filter(l => l.node.label !== 'waitUntil' && l.node.label !== 'intake.run');
   // A goal is a pose that the planner routes to, or a waypoint that the robot drives to in a straight line.
   const goals: { pose: Pose; planned: boolean; next: CNode | undefined }[] = [];
   let at: { x: number; y: number } = alliancePose(start, 0, rotate);

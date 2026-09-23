@@ -9,6 +9,7 @@
   "partner": "lane-sweep-pair-right"
  },
  "defs": {
+  "full": "bots.me.transfer.full",
   "len": "bots.me.dimensions.length",
   "flip": "if(bots.me.shooter.facing == 'front', 180, 0)",
   "hiveX": "-0.3237",
@@ -29,9 +30,9 @@
        {
         "id": "finish",
         "note": "When the clock shows 3 s, the last step starts, whatever step is running then.",
-        "ref": "auto.clockAtMost",
+        "ref": "waitUntil",
         "params": {
-         "sec": 3
+         "condition": "clock.remaining <= 3"
         }
        },
        {
@@ -48,9 +49,9 @@
           {
            "id": "s2",
            "note": "The camera wait keeps the robot from launching at the CELL before its partner's TIP raises it.",
-           "ref": "auto.waitCell",
+           "ref": "waitUntil",
            "params": {
-            "cell": "rear",
+            "condition": "bots.me.vision.seesRaised('rear')",
             "timeoutSec": 8
            }
           },
@@ -99,7 +100,10 @@
                   "policy": "any",
                   "children": [
                    {
-                    "ref": "auto.waitHopperFull"
+                    "ref": "waitUntil",
+                    "params": {
+                     "condition": "full"
+                    }
                    },
                    {
                     "id": "s6",
@@ -137,7 +141,7 @@
           {
            "id": "s9",
            "note": "That volley tips the rear CELL. The robot watches the TIP and lets the spill reach the rear wall before it sweeps.",
-           "ref": "auto.waitTip",
+           "ref": "vision.waitTip",
            "params": {
             "cell": "rear",
             "timeoutSec": 4
@@ -145,7 +149,7 @@
           },
           {
            "id": "s10",
-           "ref": "auto.wait",
+           "ref": "wait",
            "params": {
             "timeoutSec": 1.2
            }
@@ -156,7 +160,10 @@
             "policy": "any",
             "children": [
              {
-              "ref": "auto.waitHopperFull"
+              "ref": "waitUntil",
+              "params": {
+               "condition": "full"
+              }
              },
              {
               "ref": "intake.run",
@@ -217,7 +224,10 @@
             "policy": "any",
             "children": [
              {
-              "ref": "auto.waitHopperFull"
+              "ref": "waitUntil",
+              "params": {
+               "condition": "full"
+              }
              },
              {
               "ref": "intake.run",
