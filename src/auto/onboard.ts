@@ -50,6 +50,8 @@ export const ONBOARD_SCHEMA = t.object({
     shooter: t.object({ facing: t.enum('front', 'rear'), type: t.enum('catapult', 'fifo', 'dual') }),
     hopper: t.object({ count: t.number(), capacity: t.number(), full: t.boolean() }),
     slot: t.number(),
+    /** The robot's pose from its odometry, in the alliance frame. */
+    pose: POSE,
   }) }),
   sensors: t.object({ camera: t.object({ seesRaised: t.fn([CELL], t.boolean()) }) }),
 });
@@ -73,15 +75,25 @@ export interface OnboardEnv {
     shooter: { facing: 'front' | 'rear'; type: 'catapult' | 'fifo' | 'dual' };
     hopper: { count: number; capacity: number; full: boolean };
     slot: number;
-    drive: DriveSubsystem; intake: { set(filter: IntakeFilter): void }; launcher: { fireBoth(): void };
+    pose: Pose;
+    drive: DriveSubsystem; intake: IntakeSubsystem; launcher: { fireBoth(): void };
   } };
   sensors: { camera: { seesRaised(cell: 'rear' | 'audience'): boolean } };
   out: AutoOutput;
 }
 
+interface IntakeSubsystem {
+  /** Runs the intake with `filter` for this physics step only. */
+  set(filter: IntakeFilter): void;
+  /** Runs the intake with `filter` from this physics step on, until the next `hold`. */
+  hold(filter: IntakeFilter): void;
+}
+
 interface DriveSubsystem {
   /** Plans a path to a pose in the alliance's frame, around the FIELD elements and the AUTO center-line wall. */
   plan(goal: Pose): void;
+  /** Sets the path to follow: from where the robot is, straight through `points` in the alliance frame, with no planner. */
+  route(points: readonly { x: number; y: number }[]): void;
   /** Computes the command that follows the planned path and turns toward `headingDeg`, without sending it. */
   follow(headingDeg: number): { forward: number; strafeRight: number; turnRight: number; remaining: number; headingError: number };
   send(cmd: { forward: number; strafeRight: number; turnRight: number }): void;
@@ -97,6 +109,11 @@ interface DriveSubsystem {
 export const simPoint = (p: { x: number; y: number }, rotate: boolean): Pt => (rotate ? { x: -p.x, z: p.y } : { x: p.x, z: -p.y });
 /** Converts a heading in the alliance frame to the simulator's heading in radians. A blue robot's turns by 180°. */
 export const simHeading = (headingDeg: number, rotate: boolean) => ((headingDeg + (rotate ? 180 : 0)) * Math.PI) / 180;
+/** Converts a position and heading on the simulator's axes to a pose in the alliance frame. It undoes `simPoint` and `simHeading`. */
+export const alliancePose = (p: Pt, heading: number, rotate: boolean): Pose => {
+  const deg = (heading * 180) / Math.PI - (rotate ? 180 : 0);
+  return { x: rotate ? -p.x : p.x, y: rotate ? p.z : -p.z, headingDeg: ((((deg + 180) % 360) + 360) % 360) - 180 };
+};
 
 /** The virtual wall on the FIELD center line. It keeps the robot's circumscribed circle on its own side (G402). */
 export const centerWall = (rotate: boolean): Capsule => { const xw = (rotate ? -1 : 1) * 0.08; return { a: { x: xw, z: -2 }, b: { x: xw, z: 2 }, r: 0 }; };
@@ -107,12 +124,14 @@ export const centerWall = (rotate: boolean): Capsule => { const xw = (rotate ? -
  */
 class OnboardAdapter implements OnboardEnv {
   out: AutoOutput = { inputs: { ...NO_INPUT }, path: [], note: '', step: null };
+  /** The intake filter that `auto.intake` holds, or undefined before the first. The simulator runs an unset intake as `all`. */
+  held: IntakeFilter | undefined;
   clock!: OnboardEnv['clock']; bots!: OnboardEnv['bots']; sensors!: OnboardEnv['sensors'];
   readonly field = { half: FIELD.half, flowerHalfSize: FIELD.flowerHalfSize };
 
   use(s: Sim, n: number, dt: number) {
     const out = this.out, rotate = s.alliance === 'blue';
-    out.inputs = { ...NO_INPUT };
+    out.inputs = { ...NO_INPUT }; if (this.held) out.inputs.intake = this.held;
     this.clock = { remaining: s.timer, step: n, dt };
     // Rotated 180°, blue's rear CELL is where red's audience CELL is, so a tree's `rear` means red's rear.
     this.sensors = { camera: { seesRaised: cell => seesRaisedCell(s, rotate ? (cell === 'rear' ? 'audience' : 'rear') : cell) } };
@@ -121,6 +140,7 @@ class OnboardAdapter implements OnboardEnv {
         const p = s.robot.translation(), R = Math.hypot(s.cfg.length, s.cfg.width) / 2;
         out.path = planPath({ x: p.x, z: p.z }, simPoint(goal, rotate), R, [...fieldObstacles(), centerWall(rotate)]);
       },
+      route: points => { const p = s.robot.translation(); out.path = [{ x: p.x, z: p.z }, ...points.map(q => simPoint(q, rotate))]; },
       follow: headingDeg => pursue(s, out.path, simHeading(headingDeg, rotate)),
       send: cmd => { out.inputs.forward = cmd.forward; out.inputs.strafeRight = cmd.strafeRight; out.inputs.turnRight = cmd.turnRight; },
       push: power => { out.inputs.forward = power; },
@@ -131,7 +151,8 @@ class OnboardAdapter implements OnboardEnv {
       shooter: { facing: s.cfg.shooter.facing, type: s.cfg.shooter.type },
       hopper: { count: s.carried.length, capacity: s.cfg.capacity, full: s.carried.length >= s.cfg.capacity },
       slot: s.slot,
-      drive, intake: { set: f => { out.inputs.intake = f; } }, launcher: { fireBoth: () => { out.inputs.shootPollen = true; out.inputs.shootNectar = true; } },
+      pose: alliancePose(s.robot.translation(), s.heading, rotate),
+      drive, intake: { set: f => { out.inputs.intake = f; }, hold: f => { this.held = f; out.inputs.intake = f; } }, launcher: { fireBoth: () => { out.inputs.shootPollen = true; out.inputs.shootNectar = true; } },
     } };
   }
 }
@@ -145,7 +166,12 @@ export const AUTO_TUNING: {
    * step starts on the step after. If false, the next step starts in the same physics step. Default: true.
    */
   idleAfterStep: boolean;
-} = { sweepSnapshotDelay: null, idleAfterStep: true };
+  /**
+   * The intake filter that AUTO starts with, until an `auto.intake` step sets one. Null leaves the intake input unset,
+   * which the simulator runs as `all`, except in a step that sets the intake itself. Default: null.
+   */
+  intakeDefault: IntakeFilter | null;
+} = { sweepSnapshotDelay: null, idleAfterStep: true, intakeDefault: null };
 
 // ---- Step timing ----
 
@@ -162,8 +188,11 @@ function* idle(): Behavior<null> { if (AUTO_TUNING.idleAfterStep) yield; return 
 const stepName = (path: string) => { const id = path.split('/').pop() ?? ''; const m = /^s(\d+)$/.exec(id); return m ? `step ${m[1]}` : id; };
 const begin = (e: OnboardEnv, path: string, kind: string, tag?: string) => { e.out.note = `${stepName(path)}: ${kind}`; e.out.step = tag ? { do: kind, tag } : { do: kind }; };
 
-/** Drives to a pose and turns to its heading. It ends on arrival, on a full hopper if `untilFull`, or on its timeout. */
-function* driveStep(e: OnboardEnv, pose: Pose, intake: IntakeFilter, untilFull: boolean, timeoutSec: number): Behavior<null> {
+/**
+ * Drives to a pose and turns to its heading. It ends on arrival, on a full hopper if `untilFull`, or on its timeout.
+ * With an `intake` filter, it runs the intake with that filter on each step. With null, it leaves the intake as it is.
+ */
+function* driveStep(e: OnboardEnv, pose: Pose, intake: IntakeFilter | null, untilFull: boolean, timeoutSec: number): Behavior<null> {
   const timer = stepTimer(e), me = () => e.bots.me; let plannedAt = -1; // `me` is rebuilt each step.
   for (;;) {
     if (timer.over(timeoutSec)) return yield* idle();
@@ -172,7 +201,7 @@ function* driveStep(e: OnboardEnv, pose: Pose, intake: IntakeFilter, untilFull: 
     if (plannedAt < 0 || (e.clock.step - plannedAt) * e.clock.dt >= 0.15 - 1e-9) { me().drive.plan(pose); plannedAt = e.clock.step; }
     const cmd = me().drive.follow(pose.headingDeg);
     if (cmd.remaining < 0.05 && Math.abs(cmd.headingError) < 0.05 && me().drive.speed < 0.15) return yield* idle();
-    me().drive.send(cmd); me().intake.set(intake);
+    me().drive.send(cmd); if (intake) me().intake.set(intake);
     yield;
   }
 }
@@ -223,6 +252,70 @@ const sweep = leaf({
     }
     return null;
   },
+});
+
+const WAYPOINT = t.object({ x: t.number('m'), y: t.number('m'), headingDeg: t.nullable(t.number('deg')) });
+const driveTo = leaf({
+  id: 'auto.driveTo', version: 1, uses: ['drive'],
+  doc: 'Drives to a pose on a path that the path planner picks around the FIELD elements and the AUTO center-line wall, and turns to the pose\'s heading. It ends on arrival or after `timeoutSec`. It leaves the intake as it is.',
+  params: {
+    pose: { type: POSE, doc: 'The goal, in the alliance frame.' },
+    timeoutSec: { type: t.number('s'), min: 0, unit: 's' },
+    tag: { type: t.string(), default: '', doc: 'A label for tools.' },
+  },
+  *run(ctx) { const p = ctx.params; begin(ctx.env, ctx.path, 'drive', p.tag || undefined); return yield* driveStep(ctx.env, p.pose, null, false, p.timeoutSec); },
+});
+
+/** Where a follower moves on to the next waypoint: within this distance of it, in meters, or past it along the path. */
+const WAYPOINT_REACHED = 0.15;
+const followPath = leaf({
+  id: 'auto.followPath', version: 1, uses: ['drive'],
+  doc: 'Follows the path through `waypoints` in order, with no path planner: straight lines from where the robot starts, and through each waypoint without stopping. A waypoint with a heading turns the robot to it; one without faces along the path, so the intake leads. It ends at the last waypoint or after `timeoutSec`. It leaves the intake as it is.',
+  params: {
+    waypoints: { type: t.array(WAYPOINT), doc: 'The path, in the alliance frame. `scripts/plan-sweeps.ts` writes the waypoints of a path tagged `sweep-ROLE`.' },
+    timeoutSec: { type: t.number('s'), min: 0, unit: 's' },
+    tag: { type: t.string(), default: '', doc: 'A label for tools. `scripts/plan-sweeps.ts` finds its sweeps by the tags `sweep-solo`, `sweep-right`, and `sweep-left`.' },
+  },
+  *run(ctx) {
+    const e = ctx.env, p = ctx.params, me = () => e.bots.me; // `me` is rebuilt each step.
+    if (AUTO_TUNING.sweepSnapshotDelay !== null && p.tag.startsWith('sweep')) {
+      begin(e, ctx.path, 'wait'); yield* waitStep(e, AUTO_TUNING.sweepSnapshotDelay, false);
+      begin(e, ctx.path, 'wait', 'sweep'); return yield* waitStep(e, 30, false);
+    }
+    const wps = p.waypoints; if (!wps.length) return null;
+    begin(e, ctx.path, 'follow', p.tag || undefined);
+    const timer = stepTimer(e), start = { x: me().pose.x, y: me().pose.y };
+    const prev = (i: number) => (i === 0 ? start : wps[i - 1]);
+    const headings = wps.map((w, i) => w.headingDeg ?? (Math.atan2(w.y - prev(i).y, w.x - prev(i).x) * 180) / Math.PI);
+    let k = 0; me().drive.route(wps);
+    for (;;) {
+      if (timer.over(p.timeoutSec)) return yield* idle();
+      for (;;) {
+        if (k >= wps.length - 1) break;
+        const here = me().pose, a = prev(k), b = wps[k], ux = b.x - a.x, uy = b.y - a.y, l2 = ux * ux + uy * uy;
+        const passed = l2 > 0 && ((here.x - a.x) * ux + (here.y - a.y) * uy) / l2 >= 1;
+        if (!passed && Math.hypot(here.x - b.x, here.y - b.y) >= WAYPOINT_REACHED) break;
+        k++; me().drive.route(wps.slice(k));
+      }
+      const cmd = me().drive.follow(headings[k]);
+      if (k === wps.length - 1 && cmd.remaining < 0.05 && Math.abs(cmd.headingError) < 0.05 && me().drive.speed < 0.15) return yield* idle();
+      me().drive.send(cmd); yield;
+    }
+  },
+});
+
+const intake = leaf({
+  id: 'auto.intake', version: 1, uses: ['intake'],
+  doc: 'Sets the intake filter, which holds until the next `auto.intake`. It ends at once, in the same physics step. To turn the intake off however a part of the tree ends, put this leaf with `none` in the cleanup of an `ensure` node.',
+  params: { filter: { type: INTAKE } },
+  *run(ctx) { ctx.env.bots.me.intake.hold(ctx.params.filter); return null; },
+});
+
+const waitHopperFull = leaf({
+  id: 'auto.waitHopperFull', version: 1,
+  doc: 'Waits until the hopper is full. Race it against a drive or a path with a `parallel` node of policy `any`, before the drive, so that the race ends in the step that the hopper fills.',
+  params: {},
+  *run(ctx) { for (;;) { if (ctx.env.bots.me.hopper.full) return null; yield; } },
 });
 
 const push = leaf({
@@ -311,7 +404,7 @@ const FNS: Record<string, FnSpec> = {
 
 export const AUTO_REGISTRY: Registry = {
   envs: { onboard: ONBOARD_SCHEMA },
-  leaves: Object.fromEntries([drive, sweep, push, shoot, waitCell, waitTip, wait, waitClock, clockAtMost].map(l => [l.id, l])),
+  leaves: Object.fromEntries([drive, sweep, driveTo, followPath, intake, waitHopperFull, push, shoot, waitCell, waitTip, wait, waitClock, clockAtMost].map(l => [l.id, l])),
   fns: FNS,
 };
 
@@ -370,7 +463,10 @@ export class AutoProgram {
   private n = 0;
 
   /** @param recorder If given, records a span each time a node runs, for the tree view and the match trace. */
-  constructor(readonly def: TreeDef, readonly recorder?: Recorder) { this.runner = new TreeRunner(def, { env: this.env, now: () => this.n * this.dt, recorder }); }
+  constructor(readonly def: TreeDef, readonly recorder?: Recorder) {
+    this.env.held = AUTO_TUNING.intakeDefault ?? undefined;
+    this.runner = new TreeRunner(def, { env: this.env, now: () => this.n * this.dt, recorder });
+  }
   private dt = 0;
 
   get path(): Pt[] { return this.env.out.path; }
