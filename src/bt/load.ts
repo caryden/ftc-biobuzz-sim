@@ -179,11 +179,11 @@ export function loadTree(source: unknown, reg: Registry, limits: Partial<Limits>
     const common = ['id', 'note', kind];
     if (raw.note !== undefined && typeof raw.note !== 'string') issue(path, "'note' must be a string");
     const here: Ctx = { ...c, path };
+    const spec = raw[kind], specPath = `${path}.${kind}`;
     const base = (kids: CNode[], out: Type, uses?: ReadonlySet<string>): N.Base => ({
-      idx, kind, label, path, note: typeof raw.note === 'string' ? raw.note : undefined, children: kids, out,
+      idx, kind, label, path, note: typeof raw.note === 'string' ? raw.note : undefined, detail: detailOf(kind, raw, spec), children: kids, out,
       uses: uses ?? new Set(kids.flatMap(k => [...k.uses])),
     });
-    const spec = raw[kind], specPath = `${path}.${kind}`;
 
     switch (kind) {
       case 'ref': {
@@ -340,4 +340,26 @@ export function loadTree(source: unknown, reg: Registry, limits: Partial<Limits>
   const root = build(source.root, { path: '', depth: 1, input: t.any(), bindings: new Map(), inChain: false }, 'root', 0, true);
   if (issues.length) throw new TreeLoadError(issues);
   return { id, name, env: envName, description: source.description as string | undefined, meta: isObj(source.meta) ? source.meta : {}, root, nodeCount: count, defs, defNames };
+}
+
+/** Describes a node's settings in a few words, for a tree view. Expressions are shown as they are written. */
+function detailOf(kind: string, raw: Record<string, unknown>, spec: unknown): string | undefined {
+  const o = isObj(spec) ? spec : {}, show = (v: unknown) => (typeof v === 'string' ? v : JSON.stringify(v));
+  switch (kind) {
+    case 'guard': return o.when === undefined ? undefined : show(o.when);
+    case 'condition': case 'map': case 'matches': return show(spec);
+    case 'bind': return `as ${show(spec)}`;
+    case 'validate': return show(spec);
+    case 'timeout': case 'hold': return o.sec === undefined ? undefined : `${show(o.sec)} s`;
+    case 'cooldown': return o.sec === undefined ? undefined : `${show(o.sec)} s from ${o.from ?? 'failure'}`;
+    case 'retry': return o.attempts === undefined ? undefined : `${show(o.attempts)} attempts`;
+    case 'repeat': return [o.times !== undefined ? `${show(o.times)} times` : '', `stop on ${o.stopOn ?? 'failure'}`].filter(Boolean).join(', ');
+    case 'fallback': return o.recheckSec === undefined ? undefined : `recheck every ${show(o.recheckSec)} s`;
+    case 'parallel': return o.policy === undefined ? 'all' : show(o.policy);
+    case 'ref': {
+      const params = isObj(raw.params) ? Object.entries(raw.params).filter(([k]) => k !== 'lanes') : [];
+      return params.length ? params.map(([k, v]) => `${k} ${show(v)}`).join(', ') : undefined;
+    }
+    default: return undefined;
+  }
 }

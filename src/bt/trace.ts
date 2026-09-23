@@ -42,6 +42,10 @@ export class Recorder {
   readonly spans: Span[] = [];
   /** Spans that weren't stored because the recorder was full. */
   dropped = 0;
+  /** The spans that are running now: the chain from the root to each running leaf. */
+  readonly live = new Set<Span>();
+  /** Every span that has ended, in the order that it ended. A reader keeps its own index into it. */
+  readonly closed: Span[] = [];
   private readonly max: number; private readonly values: boolean; private readonly maxEvents: number;
 
   constructor(opts: RecorderOptions = {}) {
@@ -53,13 +57,13 @@ export class Recorder {
     if (this.spans.length >= this.max) { this.dropped++; return null; }
     const span: Span = { id: this.spans.length, parent: parent?.id ?? null, node: node.idx, path: node.path, kind: node.kind, label: node.label, start: t, end: null, result: 'running', events: [] };
     if (this.values && input !== undefined && input !== null) span.input = input;
-    this.spans.push(span);
+    this.spans.push(span); this.live.add(span);
     return span;
   }
 
   /** Called by the runtime when a node ends. */
   close(span: Span, t: number, result: Exclude<Span['result'], 'running'>, value?: unknown) {
-    span.end = t; span.result = result;
+    span.end = t; span.result = result; this.live.delete(span); this.closed.push(span);
     if (result === 'success') { if (this.values && value !== undefined) span.output = value; }
     else if (isFailure(value)) { span.tag = value.tag; span.message = value.message; }
     else if (value instanceof Error) span.message = value.message;
@@ -71,6 +75,9 @@ export class Recorder {
     if (!span || span.events.length >= this.maxEvents) return;
     span.events.push(data ? { t, event, data } : { t, event });
   }
+
+  /** Gets the running spans, deepest last: from the root to each running leaf, in the order that they started. */
+  running(): Span[] { return [...this.live].sort((a, b) => a.id - b.id); }
 
   /** Gets the spans that were running at time `t`: started at or before `t`, and not ended before it. */
   activeAt(t: number): Span[] {

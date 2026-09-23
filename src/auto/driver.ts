@@ -11,7 +11,7 @@
  * tactic leaf ends when the executor reports that the tactic is done or blocked, on the step after it reports it.
  * Either way the leaf succeeds, so the tree decides again from the top, as the coach did.
  */
-import { defineLeaf, loadTree, t, TreeRunner, type Registry, type TreeDef } from '../bt';
+import { defineLeaf, loadTree, t, TreeRunner, type Recorder, type Registry, type TreeDef } from '../bt';
 import { NO_INPUT, type Inputs, type Sim } from '../sim/world';
 import { Defender } from './defend';
 import { POINTS } from '../sim/config';
@@ -233,9 +233,10 @@ export class TeleopProgram {
   private readonly runner: TreeRunner<DriverEnv>;
   private n = 0; private dt = 0;
 
-  constructor(readonly def: TreeDef, host: DriverHost) {
+  /** @param recorder If given, records a span each time a node runs, for the tree view and the match trace. */
+  constructor(readonly def: TreeDef, host: DriverHost, readonly recorder?: Recorder) {
     this.env = new DriverAdapter(host);
-    this.runner = new TreeRunner(def, { env: this.env, now: () => this.n * this.dt });
+    this.runner = new TreeRunner(def, { env: this.env, now: () => this.n * this.dt, recorder });
   }
 
   /** The error that stopped the tree, if a leaf or the host threw one. The robot then gets no input. */

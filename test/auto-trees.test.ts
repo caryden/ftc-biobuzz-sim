@@ -2,7 +2,10 @@ import RAPIER from '@dimforge/rapier3d-compat';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { TELEOP_TREES } from '../src/auto/driver';
 import { AUTO_TREES, previewAuto } from '../src/auto/onboard';
-import { Sim } from '../src/sim/world';
+import { Coach } from '../src/auto/coach';
+import { treeStateAt } from '../src/render/tree-view';
+import { notesMarkdown, TraceRecorder } from '../src/trace';
+import { DT, Sim } from '../src/sim/world';
 import { defaultBot, robotConfig, sanitize } from '../src/setup';
 
 beforeAll(async () => { await RAPIER.init(); });
@@ -52,5 +55,28 @@ describe('tree files', () => {
       expect(tree.id).toBe(file.replace(/\.json$/, ''));
       expect(tree.env).toBe(folder === 'auto' ? 'onboard' : 'driver');
     }
+  });
+});
+
+describe('tree recording', () => {
+  /** Plays the first `sec` seconds of a MATCH, with or without tree recording, and returns the trace and the final positions. */
+  function play(sec: number, traceTrees: boolean) {
+    const sim = new Sim(RAPIER, undefined, 'full', 5, { opponent: true, partners: true }); sim.start();
+    const coaches = sim.robots.map(() => { const c = new Coach(); c.traceTrees = traceTrees; return c; }), rec = new TraceRecorder(sim, {});
+    for (let k = 0; k < sec / DT; k++) { sim.step(coaches.map((c, i) => c.update(sim.view(i), DT)), coaches.map(() => true)); rec.record(sim, coaches, DT); }
+    return { trace: rec.trace, at: sim.robots.map(r => r.body.translation()) };
+  }
+  it('records each robot\'s tree in the trace, and the review rebuilds its state from the frames', () => {
+    const { trace } = play(6, true), last = trace.frames.length - 1, bt = trace.frames[last].robots[0].bt!;
+    expect(bt.tree).toBe('wall-sweep-pair-right');
+    expect(bt.leaf).toMatch(/^root\/steps\//);
+    const def = AUTO_TREES['wall-sweep-pair-right'], nodes: { idx: number; path: string }[] = [], walk = (n: typeof def.root) => { nodes.push(n); n.children.forEach(walk); }; walk(def.root);
+    const s1 = nodes.find(n => n.path.endsWith('/s1'))!, at = treeStateAt(trace, last, 0)!;
+    expect(at.state.last.get(s1.idx)).toBe('s'); // The first drive is done within 6 s.
+    expect([...at.state.running]).toEqual(bt.running);
+    expect(notesMarkdown(trace, [{ t: trace.frames[last].t, clock: 24, phase: 'auto', robot: 'R0', text: 'x' }])).toContain(`tree wall-sweep-pair-right at ${bt.leaf}`);
+  });
+  it("doesn't change what the robots do", () => {
+    expect(play(4, true).at).toEqual(play(4, false).at);
   });
 });

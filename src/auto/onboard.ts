@@ -10,7 +10,7 @@
  * on its `timeoutSec`, whichever comes first, and then the robot does nothing for one physics step before the next
  * step starts, as a state machine that advances on its next loop does.
  */
-import { defineLeaf, loadTree, t, TreeRunner, type Behavior, type CNode, type FnSpec, type Registry, type TreeDef } from '../bt';
+import { defineLeaf, loadTree, t, TreeRunner, type Behavior, type CNode, type FnSpec, type Recorder, type Registry, type TreeDef } from '../bt';
 import { seesRaisedCell } from '../sim/camera';
 import { FIELD } from '../sim/config';
 import { NO_INPUT, type Inputs, type IntakeFilter, type Sim } from '../sim/world';
@@ -330,7 +330,8 @@ export class AutoProgram {
   private readonly runner: TreeRunner<OnboardEnv>;
   private n = 0;
 
-  constructor(readonly def: TreeDef) { this.runner = new TreeRunner(def, { env: this.env, now: () => this.n * this.dt }); }
+  /** @param recorder If given, records a span each time a node runs, for the tree view and the match trace. */
+  constructor(readonly def: TreeDef, readonly recorder?: Recorder) { this.runner = new TreeRunner(def, { env: this.env, now: () => this.n * this.dt, recorder }); }
   private dt = 0;
 
   get path(): Pt[] { return this.env.out.path; }
