@@ -72,6 +72,18 @@ export interface SimOptions {
   configFor?: (alliance: Alliance, slot: 0 | 1) => RobotConfig | undefined;
 }
 
+/** Switches for experiments on the pre-MATCH setup. */
+export const STAGING = {
+  /**
+   * If true, the NECTAR that start in each raised CELL drop in at random spots drawn from the seed, and the sim lets
+   * them settle before the MATCH starts. The FIELD reset crew tosses them in, so their layout differs from MATCH to
+   * MATCH. If false, they sit in a row against the back skin at the CAD staging spots. Default: true.
+   */
+  randomCellNectar: true,
+  /** The seconds of physics that the constructor runs after a random drop, so that the NECTAR are at rest at the start. */
+  settleSec: 1.5,
+};
+
 /** The BIOBUZZ match simulation. It has no rendering or DOM dependency, so it also runs headless. */
 export class Sim {
   world: RAPIER_NS.World;
@@ -94,8 +106,17 @@ export class Sim {
   private owed: Record<Alliance, { at: number }[]> = { red: [], blue: [] };
   private autoTips: Record<Alliance, number> = { red: 0, blue: 0 };
   // Counters live in an object so that a view, which inherits from the sim, updates the shared value.
-  private shared = { nextId: 1 };
+  private shared = { nextId: 1, epoch: 0 };
   private simTime = 0; private views: Sim[] = [];
+  /**
+   * Ball positions and CELL tallies for the current epoch. The epoch changes after each world step and each time a ball
+   * is added, removed, or moved by the sim, so between two steps, where all four planners run, Rapier is read once per
+   * ball. Mutate this object; don't replace it, because views share it through the prototype.
+   */
+  private frame = { epoch: -1, pos: new Map<number, RAPIER_NS.Vector>(), cell: {} as Partial<Record<Alliance, { count: number; load: number }>> };
+  /** Starts a new epoch. Call it after anything that moves, adds, or removes a ball, or that moves a HIVE. */
+  private touch() { this.shared.epoch++; }
+  private fresh() { const f = this.frame; if (f.epoch !== this.shared.epoch) { f.epoch = this.shared.epoch; f.pos.clear(); f.cell = {}; } return f; }
 
   get robot() { return this.robots[this.me].body; }
   get carried() { return this.robots[this.me].carried; } set carried(v: BallKind[]) { this.robots[this.me].carried = v; }
@@ -131,10 +152,11 @@ export class Sim {
       red: new Hive(rapier, this.world, 'red', 'audience'),
       blue: new Hive(rapier, this.world, 'blue', 'rear'),
     };
+    for (const h of Object.values(this.hives)) h.epoch = 0;
     // Order: the player's robot, its partner, then the blue robots.
     for (const a of (options.opponent ? ['red', 'blue'] : ['red']) as Alliance[])
       for (const slot of (options.partners ? [0, 1] : [0]) as (0 | 1)[]) this.robots.push(this.buildRobot(a, options.configFor?.(a, slot) ?? (this.robots.length ? structuredClone(cfg) : cfg), slot));
-    this.stageElements();
+    this.stageElements(new Rng((seed ^ 0x5a17c3e5) >>> 0));
     if (mode === 'practice') { this.phase = 'teleop'; this.clock = Infinity; }
   }
 
@@ -172,16 +194,47 @@ export class Sim {
     }
   }
 
-  private stageElements() {
+  /** Places the SCORING ELEMENTS. `rng` draws the CELL NECTAR layout. It is a separate stream, so the layout doesn't shift the MATCH's other draws. */
+  private stageElements(rng: Rng) {
     const st = manifest.staging as Record<string, number[][]>;
     for (const p of st.pollen) if (Math.abs(p[2]) > 1.74 && Math.abs(p[0]) < 1.79) this.spawn('pollen', p[0], p[1], p[2]); // GARDENS
-    for (const kind of ['nectar_red', 'nectar_blue'] as const)
-      for (const p of st[kind]) if (p[1] > 1) this.spawn(kind, p[0], p[1] + 0.004, p[2]);                              // CELLS
+    for (const kind of ['nectar_red', 'nectar_blue'] as const) {
+      const cell = st[kind].filter(p => p[1] > 1);                                                                     // CELLS
+      if (!STAGING.randomCellNectar) { for (const p of cell) this.spawn(kind, p[0], p[1] + 0.004, p[2]); continue; }
+      this.dropInCell(this.hives[kind === 'nectar_red' ? 'red' : 'blue'], kind, cell.length, rng);
+    }
+    if (STAGING.randomCellNectar) this.settle(STAGING.settleSec);
     // Absent robots: their pre-load POLLEN go in the LOADING ZONE against the wall (section 10.3.1).
     const absent = (['red', 'blue'] as Alliance[]).map(a => [a, 4 * (2 - this.robots.filter(r => r.alliance === a).length)] as [Alliance, number]);
     for (const [a, n] of absent) {
       const z = FIELD.loadingZone[a], sx = a === 'red' ? -1 : 1;
       for (let i = 0; i < n; i++) this.spawn('pollen', sx * (FIELD.half - 0.04 - 0.075 * (i % 2)), FIELD.pollenRadius, (z[2] + z[3]) / 2 + (Math.floor(i / 2) - n / 4 + 0.5) * 0.075);
+    }
+  }
+
+  /**
+   * Drops `n` balls at uniform random spots in the raised CELL of `hive`, 1 cm to 8 cm above its floor and clear of
+   * each other. They then roll to wherever the CELL's slope and each other leave them.
+   */
+  private dropInCell(hive: Hive, kind: BallKind, n: number, rng: Rng) {
+    const r = radiusOf(kind), placed: { lx: number; along: number; ly: number }[] = [];
+    const u = (lo: number, hi: number) => lo + (hi - lo) * rng.next();
+    for (let i = 0; i < n; i++) {
+      let q = { lx: 0, along: 0, ly: 0 };
+      for (let tries = 0; tries < 100; tries++) {
+        q = { lx: u(-HIVE.cellHalfWidth + r + 0.005, HIVE.cellHalfWidth - r - 0.005), along: u(HIVE.cellBack + r + 0.005, HIVE.cellMouth - r - 0.01), ly: HIVE.cellFloorY + r + u(0.01, 0.08) };
+        if (placed.every(o => Math.hypot(o.lx - q.lx, o.along - q.along, o.ly - q.ly) > 2 * r + 0.005)) break;
+      }
+      placed.push(q); const w = hive.raisedCellPoint(q.lx, q.ly, q.along); this.spawn(kind, w.x, w.y, w.z);
+    }
+  }
+
+  /** Runs the physics for `sec` with no robot input and the clock stopped, as before a MATCH. */
+  private settle(sec: number) {
+    for (let i = 0; i < sec / DT; i++) {
+      for (const h of Object.values(this.hives)) h.applyTorques();
+      this.world.step(); this.touch();
+      for (const h of Object.values(this.hives)) h.epoch!++;
     }
   }
 
@@ -212,10 +265,10 @@ export class Sim {
     this.world.createCollider(this.rapier.ColliderDesc.ball(r).setMass(massOf(kind)).setFriction(BALL.friction)
       .setRestitution(BALL.restitution).setCollisionGroups(groups(GROUP.ball, 0xffff)), body);
     const b: Ball = { id: this.shared.nextId++, kind, body, radius: r, retryAt: 0, airborne: !!vel };
-    this.balls.set(b.id, b); return b;
+    this.balls.set(b.id, b); this.touch(); return b;
   }
 
-  private remove(b: Ball) { this.world.removeRigidBody(b.body); this.balls.delete(b.id); }
+  private remove(b: Ball) { this.world.removeRigidBody(b.body); this.balls.delete(b.id); this.touch(); }
   say(text: string) { this.messages.push({ t: this.simTime, text }); if (this.messages.length > 6) this.messages.shift(); }
 
   // ---------- robot pose helpers ----------
@@ -281,13 +334,14 @@ export class Sim {
     for (const r of per) r.v.driveRobot(r.inp);
     for (const h of Object.values(this.hives)) h.applyTorques();
     this.aero();
-    this.world.step();
+    this.world.step(); this.touch();
+    for (const h of Object.values(this.hives)) h.epoch!++;
     for (const a of ['red', 'blue'] as Alliance[]) {
       if (this.hives[a].pollTip()) { this.say(`${a.toUpperCase()} HIVE TIP (${this.hives[a].tips})`); this.owed[a].push({ at: this.simTime + 2 }); }
     }
     this.humanPlayers();
     for (const r of per) { r.v.intake(r.inp.intake ?? 'all'); if (r.active) { r.v.shoot(r.inp); r.v.place(r.inp); } }
-    this.housekeeping();
+    this.housekeeping(); this.touch();
   }
 
   private driveRobot(inp: Inputs) {
@@ -438,7 +492,7 @@ export class Sim {
       if (Math.abs(p.x) > FIELD.half + 0.05 || Math.abs(p.z) > FIELD.half + 0.05 || p.y < -0.2) {
         // FIELD STAFF return SCORING ELEMENTS that leave the FIELD (section 10.8.2).
         const nx = Math.max(-1.5, Math.min(1.5, p.x)), nz = Math.max(-1.5, Math.min(1.5, p.z));
-        b.body.setTranslation({ x: nx, y: 0.2, z: nz }, true); b.body.setLinvel({ x: 0, y: 0, z: 0 }, true); b.airborne = false;
+        b.body.setTranslation({ x: nx, y: 0.2, z: nz }, true); b.body.setLinvel({ x: 0, y: 0, z: 0 }, true); b.airborne = false; this.touch();
       }
     }
   }
@@ -460,14 +514,31 @@ export class Sim {
     return false;
   }
 
-  cellCount(a: Alliance): number {
-    let n = 0; for (const b of this.balls.values()) if (this.hives[a].containsInUpCell(b.body.translation(), b.radius)) n++; return n;
+  /**
+   * Gets a ball's position. Rapier is read once per ball per epoch (see `frame`), and later calls in the same epoch
+   * return that object. Don't mutate it. Code that moves a ball body directly must call `step` before it reads again.
+   */
+  ballPos(b: Ball): Readonly<RAPIER_NS.Vector> {
+    const f = this.fresh(); let p = f.pos.get(b.id);
+    if (!p) { p = b.body.translation(); f.pos.set(b.id, p); }
+    return p;
   }
 
-  /** Gets the load in the raised CELL in POLLEN equivalents. Compare it with TIP_LOAD.threshold. */
-  cellLoad(a: Alliance): number {
-    let n = 0; for (const b of this.balls.values()) if (this.hives[a].containsInUpCell(b.body.translation(), b.radius)) n += b.kind === 'pollen' ? TIP_LOAD.pollen : TIP_LOAD.nectar; return n;
+  private cell(a: Alliance) {
+    const f = this.fresh(); let c = f.cell[a];
+    if (!c) {
+      c = { count: 0, load: 0 };
+      for (const b of this.balls.values()) if (this.hives[a].containsInUpCell(this.ballPos(b), b.radius)) { c.count++; c.load += b.kind === 'pollen' ? TIP_LOAD.pollen : TIP_LOAD.nectar; }
+      f.cell[a] = c;
+    }
+    return c;
   }
+
+  /** Gets the number of elements in the raised CELL. Computed once per epoch. */
+  cellCount(a: Alliance): number { return this.cell(a).count; }
+
+  /** Gets the load in the raised CELL in POLLEN equivalents. Compare it with TIP_LOAD.threshold. Computed once per epoch. */
+  cellLoad(a: Alliance): number { return this.cell(a).load; }
 
   /** Gets per-FLOWER scoring: the owner, the bottom-NECTAR alliance, and the scored element count. */
   flowerStatus(f: Flower) {

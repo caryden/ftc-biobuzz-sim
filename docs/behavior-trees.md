@@ -415,10 +415,10 @@ exact match is the test for increments 2 and 3.
      identical inputs on every physics step of 45 AUTO periods: 324,045 steps, four robots each, for three robot
      sizes, both shooter directions, partners and solo, and three seeds. A pose moved by 1 mm showed up at the drive's
      first replan.
-   - **The scores match.** `e50-auto-trees` equals `e49-script-counts-steps` on every seed.
+   - **The scores match.** `e52-auto-trees` equals `e51-script-counts-steps` on every seed.
    - **One measured change came first.** The script runner timed a step by adding the step length on every physics
      step, and that sum drifts: 7 of the 16 timeout lengths ended one step early, including 2.5 s, 3 s, and 4 s.
-     `e49-script-counts-steps` made it count steps, at a cost of 18 ± 9.5 combined points. See
+     `e51-script-counts-steps` made it count steps, at a cost of 18 ± 9.5 combined points. See
      `experiments/policy-loop.md`.
 
    Four details differ from the design, to match the script runner exactly:
@@ -438,8 +438,8 @@ exact match is the test for increments 2 and 3.
      seeds. The matches cover the baseline and the meta build, TIPS only and FLOWER work, and both kinds of defense.
      A recheck of 1.5 s instead of
      1 s showed up at the FLOWER start time.
-   - **The scores match.** `e52-teleop-tree` equals `e51-coach-counts-steps` on every seed.
-   - **One measured change came first.** `e51-coach-counts-steps` made the coach's review count steps, with no
+   - **The scores match.** `e54-teleop-tree` equals `e53-coach-counts-steps` on every seed.
+   - **One measured change came first.** `e53-coach-counts-steps` made the coach's review count steps, with no
      measurable effect: +0.5 ± 2.7 combined points.
 
    Three details keep the tree equal to the coach:
