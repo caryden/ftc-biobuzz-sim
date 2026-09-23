@@ -28,6 +28,10 @@ const treeSel = $<HTMLSelectElement>('treeview'), treePanel = new TreePanel($('t
 try { treeSel.value = localStorage.getItem('biobuzz.treeview') === 'on' ? 'on' : 'off'; } catch { /* Storage is a convenience. */ }
 treeSel.onchange = () => { try { localStorage.setItem('biobuzz.treeview', treeSel.value); } catch { /* Storage is a convenience. */ } treeSel.blur(); paintTree(); };
 let treeRobot = -1; // -1 follows the focus robot.
+// One handler for the robot buttons. The buttons are rebuilt only when the robots or the choice change: a button that is
+// replaced between the press and the release of a click never receives the click.
+let treeBotsKey = '';
+$('treebots').onclick = e => { const btn = (e.target as HTMLElement).closest<HTMLButtonElement>('button[data-k]'); if (!btn) return; treeRobot = Number(btn.dataset.k); paintTree(); };
 
 // Every MATCH has two full alliances: R0, R1, B0, and B1. Each robot has its own setup, edited in the robot config popup.
 const bots: BotSetup[] = loadBots();
@@ -133,8 +137,11 @@ function scoreRows(r: AllianceScore | null, b: AllianceScore | null, totals: { r
 function paintTree() {
   const el = $('tree'), on = treeSel.value === 'on'; el.classList.toggle('hidden', !on); if (!on) return;
   const i = treeRobot >= 0 ? treeRobot : focus(), plate = bots[i].plate;
-  $('treebots').innerHTML = bots.map((b, k) => `<button data-k="${k}" class="${k === i ? 'on' : ''}" style="border-color:var(--${k < 2 ? 'red' : 'blue'})">${b.plate}</button>`).join('');
-  document.querySelectorAll<HTMLButtonElement>('#treebots button').forEach(btn => { btn.onclick = () => { treeRobot = Number(btn.dataset.k); paintTree(); }; });
+  const botsKey = `${i}:${bots.map(b => b.plate).join(',')}`;
+  if (botsKey !== treeBotsKey) {
+    treeBotsKey = botsKey;
+    $('treebots').innerHTML = bots.map((b, k) => `<button data-k="${k}" class="${k === i ? 'on' : ''}" style="border-color:var(--${k < 2 ? 'red' : 'blue'})">${b.plate}</button>`).join('');
+  }
   // The panel fills the space between the score panel and whatever is at the bottom left: the log, or the review bar.
   const below = review.active ? $('review') : $('log');
   el.style.top = `${$('left').getBoundingClientRect().bottom + 8}px`; el.style.bottom = `${innerHeight - below.getBoundingClientRect().top + 8}px`;

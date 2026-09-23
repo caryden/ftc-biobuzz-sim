@@ -38,13 +38,13 @@ export class LiveTreeState {
 }
 
 export class TreePanel {
-  private lastLeaf = '';
+  private lastLeaf = ''; private lastHtml = '';
   constructor(private readonly body: HTMLElement, private readonly head: HTMLElement) {}
 
   /** Draws a tree, or a message when there is none. */
   paint(title: string, def: TreeDef | null, state: TreeState | null, message = 'No tree is running.') {
     this.head.textContent = title;
-    if (!def || !state) { this.body.innerHTML = `<div class="tv-empty">${esc(message)}</div>`; this.lastLeaf = ''; return; }
+    if (!def || !state) { this.set(`<div class="tv-empty">${esc(message)}</div>`); this.lastLeaf = ''; return; }
     const rows: string[] = []; let deepest = '';
     const walk = (n: CNode, depth: number) => {
       const code = state.last.get(n.idx), running = state.running.has(n.idx);
@@ -60,9 +60,12 @@ export class TreePanel {
       n.children.forEach(c => walk(c, depth + 1));
     };
     walk(def.root, 0);
-    this.body.innerHTML = rows.join('');
+    this.set(rows.join(''));
     // Keep the running leaf in view when it changes, without fighting a reader who scrolls.
     if (deepest && deepest !== this.lastLeaf) this.body.querySelector(`[data-path="${CSS.escape(deepest)}"]`)?.scrollIntoView({ block: 'nearest' });
     this.lastLeaf = deepest;
   }
+
+  /** Replaces the outline only when it changed, so that a tooltip under the pointer stays open and a click lands. */
+  private set(html: string) { if (html !== this.lastHtml) { this.lastHtml = html; this.body.innerHTML = html; } }
 }
