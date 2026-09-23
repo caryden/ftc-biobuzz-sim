@@ -1,9 +1,9 @@
 # Behavior-tree policies
 
-**Status: increments 1 to 3 are built; the rest is proposed.** The first three increments of the [plan](#plan) are
-done: the runtime in `src/bt/`, and both periods as trees in `src/auto/trees/`, with the same scores as the planner
-that they replaced. The executor still holds three decisions that increment 4 moves into the TELEOP tree. For how the
-simulator works, see [How the simulator works](simulator.md).
+**Status: increments 1 to 4 are built; the rest is proposed.** The first four increments of the [plan](#plan) are
+done: the runtime in `src/bt/`, both periods as trees in `src/auto/trees/`, and every TELEOP decision in the TELEOP
+tree, including the endgame, the bump, the yield, and full defense. For how the simulator works, see
+[How the simulator works](simulator.md).
 
 This document proposes replacing the robot's decision code with behavior trees. A behavior tree is a tree of small
 nodes. The inner nodes decide what runs, and the leaves read the field and drive the robot. The same tree format
@@ -29,8 +29,8 @@ The planner code is in `src/auto/`. Before increments 2 and 3, three layers made
 - **`Executor`** in `src/auto/executor.ts` runs one of six tactics. It also contains decisions that belong to the
   policy: the endgame check that switches to PARK or a last launch, the opportunistic bump, and yielding to a partner.
 
-The coach now only hosts the two trees, and `scriptedTeleop` is gone. The executor's tactics run as TELEOP leaves.
-Increment 4 moves its three buried decisions into the tree, and the endgame check is already there.
+The coach now only hosts the two trees, and `scriptedTeleop` is gone. The executor's tactics run as TELEOP leaves, and
+increment 4 moved its three buried decisions into the tree.
 
 Before increment 2, `ScriptRunner` in `src/auto/script.ts` ran AUTO. An AUTO script was a list of steps with
 timeouts, plus a clock check that jumped to the last step, which is the PARK. `buildScripts` computed most poses from
@@ -500,7 +500,14 @@ exact match is the test for increments 2 and 3.
    - **The partner channel. Done.** The executor writes its intent and plan through a `TeamChannel` that the TELEOP
      program passes it, and the driver environment's `partner` fields show the partner's intent, phase, CELL, and
      load to the tree. `e65-partner-channel` equals `e64-yield-branch` on every seed.
-   - **The defender** is still to do.
+   - **The defender. Done.** The tree's `defend` branch is a subtree, checked every step: PARK when the clock requires
+     it, wait near the center while both opponents rest, take the target's launch spot when this robot gets there at
+     least 0.2 m sooner, and otherwise drive into the target. `Defender.targetFor` picks the target without side
+     effects, and the defender keeps only its bookkeeping: the contact time, each opponent's rest, and the path.
+     `e67-defender-subtree` equals `e66-full-defense-base` on every seed and in every field.
+
+   Increment 4 is done. The executor makes no policy decisions: it runs the tactic, the mode, and the target that the
+   tree gives it.
 5. **Show the tree running,** live and in review mode, from the spans.
 6. **Edit AUTO poses on the field.** Each navigate node shows its poses as handles that you drag, with a heading
    handle. Selecting a node highlights its poses, and clicking a pose selects its node. The path preview redraws after

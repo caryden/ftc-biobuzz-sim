@@ -4,8 +4,8 @@
  *
  * The driver environment models a drive team that watches the whole FIELD. This version holds what the default tree
  * reads: the clock, the robot's config, hopper, tactic, and launch state, which tactics can make progress now, the
- * values that the endgame decision weighs, whether the partner lines up first, and an opponent that is lined up to
- * launch nearby.
+ * values that the endgame decision weighs, what the partner says, an opponent that is lined up to launch nearby, and
+ * the opponent that full defense targets.
  *
  * The tactic leaves drive one shared `Executor`, which keeps its state across tactics, as it did under the coach. A
  * tactic leaf ends when the executor reports that the tactic is done or blocked, on the step after it reports it.
@@ -49,6 +49,14 @@ export const DRIVER_SCHEMA = t.object({
     /** True when this robot should hold still so that its partner lines up first. See `Executor.partnerLinesUpFirst`. */
     linesUpFirst: t.boolean(),
   }),
+  /** What full-time defense weighs. See `Defender.targetFor`. */
+  defense: t.object({
+    /**
+     * The opponent worth defending, or null if both opponents rest. `mine` and `theirs` are this robot's and the
+     * opponent's distances to the opponent's launch spot, or Infinity and 0 if the opponent isn't launching.
+     */
+    target: t.nullable(t.object({ slot: t.number(), mine: t.number('m'), theirs: t.number('m') })),
+  }),
   opponents: t.object({
     /** The first opponent that stands on its launch spot within 1 m of this robot with a load: about to launch. */
     linedUpNear: t.nullable(t.object({ slot: t.number(), distance: t.number('m') })),
@@ -87,8 +95,9 @@ export interface DriverEnv {
   sim: Sim;
   /** Runs the executor for this physics step, and records its inputs. Call it once per step. See `Executor.update` for `mode`. */
   runExecutor(mode?: 'normal' | 'park' | 'lastLaunch' | 'bump' | 'yield', bumpSlot?: number): void;
-  /** Runs the full-time defender for this physics step, and records its inputs. */
-  runDefender(): void;
+  /** Runs the full-time defender for this physics step, and records its inputs. `engage` needs the opponent's slot. */
+  runDefender(action: 'park' | 'wait' | 'takeSpot' | 'ram', slot?: number): void;
+  defense: { readonly target: { slot: number; mine: number; theirs: number } | null };
   inputs: Inputs;
 }
 
@@ -98,7 +107,7 @@ export interface DriverHost { executor: Executor; defender: Defender; flowerStar
 class DriverAdapter implements DriverEnv {
   sim!: Sim; inputs: Inputs = NO_INPUT; private dt = 0;
   clock!: DriverEnv['clock']; config!: DriverEnv['config']; bots!: DriverEnv['bots']; available!: DriverEnv['available']; endgame!: DriverEnv['endgame'];
-  opponents!: DriverEnv['opponents']; partner!: DriverEnv['partner']; team!: TeamChannel;
+  opponents!: DriverEnv['opponents']; partner!: DriverEnv['partner']; team!: TeamChannel; defense!: DriverEnv['defense'];
   constructor(private readonly host: DriverHost) {}
   get executor() { return this.host.executor; }
 
@@ -111,6 +120,8 @@ class DriverAdapter implements DriverEnv {
     const mate = sim.partner();
     this.partner = { present: !!mate, intent: mate?.intent ?? '', phase: mate?.plan.phase ?? 'other', side: mate?.plan.side ?? null, load: mate?.plan.load ?? 0, get linesUpFirst() { return ex.partnerLinesUpFirst(sim); } };
     this.team = sim.robots[sim.me];
+    const defender = host.defender;
+    this.defense = { get target() { return defender.targetFor(sim, dt); } };
     this.opponents = {
       get linedUpNear() {
         const o = linedUpOpponent(sim); if (!o) return null;
@@ -135,18 +146,23 @@ class DriverAdapter implements DriverEnv {
     this.inputs = ex.update(this.sim, this.dt, mode, bumpSlot, this.team);
   }
 
-  runDefender() { this.inputs = this.host.defender.update(this.sim, this.dt); }
+  runDefender(action: 'park' | 'wait' | 'takeSpot' | 'ram', slot = -1) {
+    const d = this.host.defender, s = this.sim, dt = this.dt;
+    this.inputs = action === 'park' ? d.park(s, dt) : action === 'wait' ? d.wait(s, dt) : d.engage(s, dt, slot, action === 'takeSpot');
+  }
 }
 
 const leaf = defineLeaf<DriverEnv>();
 const ALL = ['drive', 'intake', 'launcher', 'placer'];
 
-const defend = leaf({
-  id: 'teleop.defend', version: 1, uses: ALL,
-  doc: 'Plays full-time defense for the rest of the period. See `Defender` in src/auto/defend.ts.',
-  params: {},
-  *run(ctx) { for (;;) { ctx.env.runDefender(); yield; } },
+const defenderLeaf = (id: string, action: 'park' | 'wait' | 'takeSpot' | 'ram', doc: string) => leaf({
+  id, version: 1, uses: ALL, doc: `${doc} It runs until a parent halts it. See \`Defender\` in src/auto/defend.ts.`, params: {},
+  *run(ctx) { for (;;) { ctx.env.runDefender(action, ctx.env.defense.target?.slot ?? -1); yield; } },
 });
+const defendPark = defenderLeaf('teleop.defendPark', 'park', 'Full defense: drives to the PARK.');
+const defendWait = defenderLeaf('teleop.defendWait', 'wait', 'Full defense: waits near the FIELD center while both opponents rest.');
+const takeSpot = defenderLeaf('teleop.takeSpot', 'takeSpot', 'Full defense: takes the launch spot of the opponent in `defense.target`, facing the opponent.');
+const ram = defenderLeaf('teleop.ram', 'ram', 'Full defense: drives straight into the opponent in `defense.target`, which knocks it off its aim. After 1.6 s of contact, that opponent rests for 3.5 s.');
 
 const tactic = leaf({
   id: 'teleop.tactic', version: 1, uses: ALL,
@@ -204,7 +220,7 @@ const yieldLeaf = leaf({
   *run(ctx) { for (;;) { ctx.env.runExecutor('yield'); yield; } },
 });
 
-export const DRIVER_REGISTRY: Registry = { envs: { driver: DRIVER_SCHEMA }, leaves: Object.fromEntries([defend, tactic, flowerWork, lastLaunch, parkNow, bump, yieldLeaf].map(l => [l.id, l])) };
+export const DRIVER_REGISTRY: Registry = { envs: { driver: DRIVER_SCHEMA }, leaves: Object.fromEntries([defendPark, defendWait, takeSpot, ram, tactic, flowerWork, lastLaunch, parkNow, bump, yieldLeaf].map(l => [l.id, l])) };
 
 /** The TELEOP tree files. The catalog in D1 is seeded from them. */
 export const TELEOP_FILES: readonly unknown[] = [teleopDefault];

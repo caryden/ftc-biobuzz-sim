@@ -45,8 +45,8 @@ default TELEOP tree in TELEOP. For how the trees work, see [Behavior-tree polici
   parks. **Stage** in the game setup selects a qualification or a playoff MATCH.
 - **Reading a TIP.** A TIP counts as under way only when the HIVE is past level or turning away from its stop. A partly
   loaded CELL sags off its stop, and a driver can see that it hasn't tipped.
-- **Defense.** `src/auto/defend.ts` is a full-time defender, and the TELEOP tree's `bump` branch is an opportunistic
-  shove. Both limit a contact burst, so that no PIN count reaches 3 s. **Defense** in the robot config selects one.
+- **Defense.** The TELEOP tree's `defend` subtree is a full-time defender, with its bookkeeping in `src/auto/defend.ts`,
+  and its `bump` branch is an opportunistic shove. Both limit a contact burst, so that no PIN count reaches 3 s. **Defense** in the robot config selects one.
 
 | Period | Decision maker | Setting |
 | --- | --- | --- |

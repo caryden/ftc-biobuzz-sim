@@ -13,9 +13,47 @@
      "guard": {
       "when": "config.defense == 'full'",
       "child": {
-       "ref": "teleop.defend"
+       "fallback": {
+        "recheckSec": 0,
+        "children": [
+         {
+          "id": "defend-park",
+          "guard": {
+           "when": "clock.remaining <= endgame.parkLeadSec",
+           "child": {
+            "ref": "teleop.defendPark"
+           }
+          }
+         },
+         {
+          "id": "rest",
+          "note": "Both opponents rest after a burst of contact.",
+          "guard": {
+           "when": "not exists(defense.target)",
+           "child": {
+            "ref": "teleop.defendWait"
+           }
+          }
+         },
+         {
+          "id": "take-spot",
+          "note": "Take the opponent's launch spot when this robot gets there at least 0.2 m sooner.",
+          "guard": {
+           "when": "defense.target.mine < coalesce(defense.target.theirs, 0) - 0.2",
+           "child": {
+            "ref": "teleop.takeSpot"
+           }
+          }
+         },
+         {
+          "id": "ram",
+          "ref": "teleop.ram"
+         }
+        ]
+       }
       }
-     }
+     },
+     "note": "Full defense: the robot spends TELEOP on the opponent that has the most to lose, and never holds one opponent long enough for a PIN (G421). This fallback checks every step."
     },
     {
      "id": "match",
