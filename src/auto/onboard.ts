@@ -170,6 +170,8 @@ function* waitStep(e: OnboardEnv, timeoutSec: number, unlessFull: boolean): Beha
 }
 
 const leaf = defineLeaf<OnboardEnv>();
+/** Adds a drive step's `nudge` to its pose. A zero nudge leaves every number as it was: x + 0 is x. */
+export const nudged = (p: Pose, n: Pose): Pose => ({ x: p.x + n.x, z: p.z + n.z, headingDeg: p.headingDeg + n.headingDeg });
 const NEEDS_CAMERA = ['sensors.camera'];
 
 const drive = leaf({
@@ -181,8 +183,9 @@ const drive = leaf({
     untilFull: { type: t.boolean(), default: false, doc: 'If true, ends the step as soon as the hopper is full.' },
     timeoutSec: { type: t.number('s'), min: 0, unit: 's' },
     tag: { type: t.string(), default: '', doc: 'A label for tools.' },
+    nudge: { type: POSE, default: { x: 0, z: 0, headingDeg: 0 }, doc: 'An offset that the field editor adds to `pose`, so that the pose expression stays as it was written.' },
   },
-  *run(ctx) { const p = ctx.params; begin(ctx.env, ctx.path, 'drive', p.tag || undefined); return yield* driveStep(ctx.env, p.pose, p.intake, p.untilFull, p.timeoutSec); },
+  *run(ctx) { const p = ctx.params; begin(ctx.env, ctx.path, 'drive', p.tag || undefined); return yield* driveStep(ctx.env, nudged(p.pose, p.nudge), p.intake, p.untilFull, p.timeoutSec); },
 });
 
 const sweep = leaf({
@@ -304,8 +307,32 @@ export const AUTO_REGISTRY: Registry = {
 
 /** The AUTO tree files in the order of the page's AUTO list. The catalog in D1 is seeded from them. */
 export const AUTO_FILES: readonly unknown[] = [wallSweepRight, wallSweepLeft, laneSweepRight, laneSweepLeftNoPark, laneSweepLeft, soloSweep, soloSweepNoPark, leaveAndPark];
-/** The AUTO trees by id, loaded and checked once. A tree file that doesn't load throws with all of its problems. */
-export const AUTO_TREES: Readonly<Record<string, TreeDef>> = Object.fromEntries(AUTO_FILES.map(src => { const def = loadTree(src, AUTO_REGISTRY); return [def.id, def]; }));
+const trees: Record<string, TreeDef> = {}, sources: Record<string, Record<string, unknown>> = {}, builtIn = new Set<string>();
+/** The AUTO trees by id: the tree files, then the trees that `addAutoTree` adds. A tree file that doesn't load throws with all of its problems. */
+export const AUTO_TREES: Readonly<Record<string, TreeDef>> = trees;
+/** The JSON source of each AUTO tree, by id, for the field editor, which edits a copy. */
+export const AUTO_SOURCES: Readonly<Record<string, Readonly<Record<string, unknown>>>> = sources;
+/** The ids of the tree files. `removeAutoTree` can't remove them. */
+export const BUILT_IN_AUTO: ReadonlySet<string> = builtIn;
+for (const src of AUTO_FILES) builtIn.add(addAutoTree(src).id);
+
+/**
+ * Loads an AUTO tree and adds it to `AUTO_TREES`, or replaces the tree that has its id. The page adds the trees that
+ * the field editor saves. A tree with a tree file's id can't replace that file.
+ * @throws TreeLoadError If the tree doesn't load, with all of its problems.
+ */
+export function addAutoTree(src: unknown): TreeDef {
+  const def = loadTree(src, AUTO_REGISTRY);
+  if (builtIn.has(def.id)) throw new Error(`the tree '${def.id}' is built in and can't be replaced`);
+  trees[def.id] = def; sources[def.id] = structuredClone(src as Record<string, unknown>);
+  return def;
+}
+
+/** Removes an AUTO tree that `addAutoTree` added. Returns false for a built-in tree or an unknown id. */
+export function removeAutoTree(id: string): boolean {
+  if (builtIn.has(id) || !(id in trees)) return false;
+  delete trees[id]; delete sources[id]; return true;
+}
 
 /** The default AUTO for a robot with no partner, and for a name that no tree has. */
 export const SOLO_AUTO = 'solo-two-tip-sweep';
@@ -349,18 +376,27 @@ export class AutoProgram {
 }
 
 /**
+ * Gets a tree's leaves in step order, each with its parameters as they are before the match for the robot that `sim`
+ * views. A parameter that reads the clock, the hopper, or the camera gets its pre-match value.
+ */
+export function leafParams(def: TreeDef, sim: Sim): { node: CNode; params: Record<string, unknown> }[] {
+  const env = new OnboardAdapter(); env.use(sim, 0, 0);
+  const runner = new TreeRunner(def, { env, now: () => 0 }), out: { node: CNode; params: Record<string, unknown> }[] = [];
+  const walk = (n: CNode) => { if (n.leaf) out.push({ node: n, params: runner.paramsOf(n)! }); n.children.forEach(walk); }; walk(def.root);
+  return out;
+}
+
+/**
  * Gets an AUTO tree's whole trajectory before the match: the planned path through every drive pose, and the poses.
  * It follows the tree's steps in order and skips the race against the clock, so it shows the path of a full AUTO.
  * The plan uses only fixed FIELD geometry, so it is known before the MATCH, like a real AUTO path.
  */
 export function previewAuto(def: TreeDef, sim: Sim, start: Pt): { path: Pt[]; poses: (Pt & { heading: number; shoots: boolean })[] } {
-  const env = new OnboardAdapter(); env.use(sim, 0, 0);
-  const runner = new TreeRunner(def, { env, now: () => 0 }), mirror = sim.alliance === 'blue', R = Math.hypot(sim.cfg.length, sim.cfg.width) / 2;
-  const leaves: CNode[] = [], walk = (n: CNode) => { if (n.leaf) leaves.push(n); n.children.forEach(walk); }; walk(def.root);
+  const mirror = sim.alliance === 'blue', R = Math.hypot(sim.cfg.length, sim.cfg.width) / 2;
+  const leaves = leafParams(def, sim);
   const goals: { pose: Pose; next: CNode | undefined }[] = [];
-  leaves.forEach((n, i) => {
-    const p = runner.paramsOf(n)!;
-    if (n.label === 'auto.drive') goals.push({ pose: p.pose as Pose, next: leaves[i + 1] });
+  leaves.forEach(({ node: n, params: p }, i) => {
+    if (n.label === 'auto.drive') goals.push({ pose: nudged(p.pose as Pose, p.nudge as Pose), next: leaves[i + 1]?.node });
     if (n.label === 'auto.sweep') {
       const facing = { rear: 90, audience: -90, red: 180 } as const, from = p.from as Pose; let at = { x: from.x, z: from.z };
       for (const l of p.lanes as { x: number; z: number; wall: keyof typeof facing | null }[]) {

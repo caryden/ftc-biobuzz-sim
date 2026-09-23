@@ -72,6 +72,12 @@
   .tv.run { background: rgba(65,224,127,.18); } .tv.run em { color: var(--ok); font-weight: 700; }
   .tv.ok em { color: #6fae86; } .tv.fail em { color: #f0857b; } .tv.halt em { color: #8b939f; } .tv.err em, .tv.err b { color: var(--red); }
   .tv-empty { color: var(--dim); }
+  /* The field editor: the tree view selects steps, and a bar at the bottom edge shows the selected pose. */
+  .tv.ed { cursor: pointer; } .tv.ed b.leaf::after { content: " \25C9"; color: #ffa726; } .tv.ed:hover { background: rgba(255,255,255,.07); } .tv.sel, .tv.sel:hover { background: rgba(255,167,38,.28); }
+  #autoedit { bottom: 10px; left: 12px; right: 12px; display: flex; align-items: center; gap: 10px; padding: 6px 10px; }
+  #autoedit button { width: auto; margin: 0; } #autoedit button:disabled { opacity: .45; cursor: default; }
+  #aehead { font-weight: 700; white-space: nowrap; } #aesel { flex: 1; color: var(--dim); font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  body.editing #right, body.editing #bottom, body.editing #log, body.editing #help, body.editing #banner, body.editing #final { display: none !important; }
   .hidden { display: none !important; }
 </style>
 </head>
@@ -99,6 +105,7 @@
   <label>Intake <select id="bcintake"><option value="front">Front</option><option value="dual">Front and rear</option></select></label>
   <label>Launches from <select id="bcends"><option value="one">The rear end</option><option value="both">Both ends</option></select></label>
   <label>AUTO plan <select id="bcauto"></select></label>
+  <button id="bcedit" type="button" title="Drag the AUTO poses on the FIELD. The first edit makes an edited copy of the tree, which this robot runs and this browser keeps.">Edit the AUTO poses on the FIELD</button>
   <label>TELEOP plan <select id="bcplan"><option value="0">Keep tipping</option><option value="30">FLOWERS from 30 s</option><option value="45">FLOWERS from 45 s</option><option value="66">FLOWERS from 66 s</option></select></label>
   <div class="errhead"><span title="How much one shot differs from the next, as one standard deviation. Measure it: launch 20 elements from one spot.">Launcher error, 1 SD</span><span class="chips"><button type="button" data-err="1">1x</button><button type="button" data-err="3">3x</button><button type="button" data-err="5">5x</button></span></div>
   <label>Elevation, ° <input id="bcelev" type="number" min="0" max="15" step="0.1"></label>
@@ -125,6 +132,8 @@
 </div>
 <div id="notepop" class="panel hidden"><h2 id="nhead"></h2><textarea id="ntext" rows="3" placeholder="What happened here?"></textarea>
   <div class="btns"><button id="nsave" class="primary">Save (Enter)</button><button id="ndel">Delete</button><button id="ncancel">Cancel (Esc)</button></div></div>
+<div id="autoedit" class="panel hidden"><span id="aehead"></span><span id="aesel"></span>
+  <button id="aereset" title="Moves the selected step's poses back to where the original tree has them.">Reset this step</button><button id="aerevert" title="Deletes the edited copy. Every robot that ran it runs the original tree.">Revert to the original</button><button id="aedone" class="primary">Done</button></div>
 <div id="final" class="panel hidden"></div>
 <div id="banner" class="panel hidden"></div>
 <script type="module" src="/src/main.ts"></script>

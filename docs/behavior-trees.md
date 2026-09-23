@@ -1,9 +1,9 @@
 # Behavior-tree policies
 
-**Status: increments 1 to 5 are built; the rest is proposed.** The first five increments of the [plan](#plan) are done:
-the runtime in `src/bt/`, both periods as trees in `src/auto/trees/auto/` and `src/auto/trees/teleop/`, every TELEOP
-decision in the TELEOP tree, and a tree view on the simulator page, live and in review. For how the simulator works,
-see [How the simulator works](simulator.md).
+**Status: increments 1 to 6 are built, except increment 6's timeline; the rest is proposed.** The first six increments
+of the [plan](#plan) are done: the runtime in `src/bt/`, both periods as trees in `src/auto/trees/auto/` and
+`src/auto/trees/teleop/`, every TELEOP decision in the TELEOP tree, a tree view on the simulator page, live and in
+review, and a field editor for AUTO poses. For how the simulator works, see [How the simulator works](simulator.md).
 
 This document proposes replacing the robot's decision code with behavior trees. A behavior tree is a tree of small
 nodes. The inner nodes decide what runs, and the leaves read the field and drive the robot. The same tree format
@@ -378,6 +378,25 @@ test checks that. The headless scripts don't record trees.
 
 Chain values aren't recorded yet: the page's recorders don't store node inputs and outputs, to keep traces small.
 
+## Editing AUTO poses
+
+The field editor in `src/field-editor.ts` edits one robot's AUTO poses before a MATCH. To open it, click **Edit the
+AUTO poses on the FIELD** in the robot config. The camera changes to **Overhead**, and the tree view shows the robot's
+AUTO tree, whatever the **Tree view** setting is. A step with handles has a dot after its leaf name.
+
+A drive step's `pose` is an expression, such as `launchAudience`, which is computed from the robot's size and shooter
+direction. A drag doesn't replace the expression with numbers. It sets the step's `nudge` parameter, an offset in
+meters and degrees that `auto.drive` adds to the pose, so the step still fits a robot of another size. A sweep's lanes
+are numbers, which `scripts/plan-sweeps.ts` wrote, so a drag changes a lane point itself. Positions in a tree are in
+red's frame, and a blue robot mirrors them through the FIELD center, so an edit on a blue robot is mirrored back into
+red's frame. `src/auto/auto-edit.ts` holds these edits, and it has no DOM, so `test/auto-edit.test.ts` runs it.
+
+The first edit of a built-in tree makes an edited copy: the id gets `-edited`, the name gets "(edited)", and
+`meta.editedFrom` names the original. A second copy of one tree gets `-edited-2`. The robot switches to the copy. The
+browser keeps the copies in local storage under `biobuzz.trees.v1`, and the page loads them before the robot setups.
+**Reset this step** moves a step's handles back to the original, and **Revert to the original** deletes the copy. A
+copy lives in one browser only: sharing a tree is increment 8.
+
 ## Code leaves in a sandbox
 
 A leaf that a user writes runs in QuickJS, a JavaScript engine that is compiled to WebAssembly. The page calls it
@@ -551,10 +570,14 @@ exact match is the test for increments 2 and 3.
    tree gives it.
 5. **Show the tree running. Done.** The simulator page's tree view shows a robot's tree live and at the review cursor,
    and match notes name the running leaf. See [Tracing and the tree view](#tracing-and-the-tree-view).
-6. **Edit AUTO poses on the field.** Each navigate node shows its poses as handles that you drag, with a heading
-   handle. Selecting a node highlights its poses, and clicking a pose selects its node. The path preview redraws after
-   each edit, and it follows the first child of each fallback. Both robots' AUTO trees show on one timeline, because
-   partners coordinate by the clock and the camera.
+6. **Edit AUTO poses on the field. Done, except the timeline.** Each drive step shows its pose as a handle that you
+   drag, with a heading knob, and each sweep shows its lane points. Selecting a step in the tree view highlights its
+   handles, and grabbing a handle selects its step. The path preview redraws after each edit. The first edit of a
+   built-in tree makes an edited copy, which the robot runs and the browser keeps. See
+   [Editing AUTO poses](#editing-auto-poses). `e70-drive-nudge` and `e71-auto-editor` equal `e69-tree-view` on every
+   seed.
+
+   Still to build: both robots' AUTO trees on one timeline, because partners coordinate by the clock and the camera.
 7. **Edit parameters.** Parameter schemas drive a form. Some robot config settings, such as the FLOWER start time and
    the defense policy, become tree parameters.
 8. **Edit structure and share.** Add, remove, and reorder nodes from a palette of leaf types that fit the tree's

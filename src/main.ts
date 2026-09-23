@@ -1,6 +1,8 @@
 import RAPIER from '@dimforge/rapier3d-compat';
 import { readInput, type Frame } from './input';
 import { AUTO_TREES, SOLO_AUTO, autoFor, autoStart, previewAuto } from './auto/onboard';
+import { FieldEditor } from './field-editor';
+import { loadUserTrees } from './user-trees';
 import { BOT_IDS, REF_ERR, startSide, assignDriver, defaultBot, metaBot, describe, loadBots, robotConfig, sanitize, saveBots, type BotSetup, type DriverKind } from './setup';
 import { MatchAudio } from './audio';
 import { Coach } from './auto/coach';
@@ -34,11 +36,19 @@ let treeBotsKey = '';
 $('treebots').onclick = e => { const btn = (e.target as HTMLElement).closest<HTMLButtonElement>('button[data-k]'); if (!btn) return; treeRobot = Number(btn.dataset.k); paintTree(); };
 
 // Every MATCH has two full alliances: R0, R1, B0, and B1. Each robot has its own setup, edited in the robot config popup.
+// The AUTO trees that the field editor saved load first, so that a setup can name one. A setup that names a tree this
+// browser doesn't have runs the default.
+loadUserTrees();
 const bots: BotSetup[] = loadBots();
+for (const b of bots) if (b.auto !== 'default' && b.auto !== 'none' && !AUTO_TREES[b.auto]) b.auto = 'default';
 let units: Units = getUnits(); const unitsSel = $<HTMLSelectElement>('units'); unitsSel.value = units;
 unitsSel.onchange = () => { units = unitsSel.value as Units; setUnits(units); unitsSel.blur(); paintBots(); if (editing >= 0) openConfig(editing); };
 let sim: Sim; let seed = 1; let startAt = 0; let recorder: TraceRecorder; let traceSaved = false; let coaches: Coach[] = [], referee: Referee | null = null;
 const review = new Review(view, () => sim, canvas); let finalClosed = false;
+// The field editor edits one robot's AUTO poses before the MATCH. An edit switches the robot to the edited copy.
+const editor = new FieldEditor({ view, canvas, bots, sim: () => sim,
+  setAuto: (k, id) => { bots[k].auto = id; saveBots(bots); if (coaches[k]) coaches[k].autoOverride = id; paintBots(); },
+  changed: () => { camSel.value = view.mode; paintEditor(); paintTree(); } });
 /** The robot that the HUD, the chase camera, and the shot preview follow: the first robot with a human driver, or R0. */
 const focus = () => Math.max(0, bots.findIndex(b => b.driver !== 'planner'));
 const settings = () => ({ match: modeSel.value, stage: stageSel.value, referee: refSel.value, ...Object.fromEntries(bots.map((b, i) => [BOT_IDS[i], `plate ${b.plate} · ${describe(b)}`])) });
@@ -47,15 +57,16 @@ async function saveTrace() { try { const res = await fetch(`/api/trace/${recorde
 /** Adds this finished MATCH to the site's live counter. The dev server has no counter, so a failure is silent. */
 async function countMatch() { try { const res = await fetch('/api/matches', { method: 'POST' }); if (!res.ok) return; const { count } = await res.json() as { count: number }; sim.say(`That was simulated match ${count.toLocaleString('en-US')} on this site.`); } catch { /* No counter here. */ } }
 /** Starts the MATCH after the announcer's "3-2-1-go". */
-function startMatch() { if (sim.phase !== 'pre' || startAt) return; closeConfig(); if (!audio.enabled) { sim.start(); return; } audio.play('start_countdown'); startAt = performance.now() + 3000; }
+function startMatch() { if (sim.phase !== 'pre' || startAt) return; closeConfig(); editor.close(); if (!audio.enabled) { sim.start(); return; } audio.play('start_countdown'); startAt = performance.now() + 3000; }
 function reset() {
+  editor.close();
   sim = new Sim(RAPIER, undefined, modeSel.value as MatchMode, seed++, { opponent: true, partners: true, playoff: stageSel.value === 'playoff', configFor: (a, slot) => robotConfig(bots[(a === 'red' ? 0 : 2) + slot]) });
   // Every robot has a Coach: it runs the robot's AUTO tree, and the planner in TELEOP unless a controller drives the robot.
   // Coaches record their trees, for the tree view and the match trace. Recording doesn't change what a robot does.
   coaches = sim.robots.map((_, i) => { const c = new Coach(), b = bots[i]; c.flowerStartSec = b.flowerStartSec; c.defense = b.defense; c.autoOverride = b.auto === 'default' || b.auto === 'none' ? null : b.auto; c.traceTrees = true; return c; });
   referee = refSel.value === 'off' ? null : new Referee(); // The referee calls PINS (G421) by the fixed rule.
   view.plates = bots.map(b => b.plate); review.plates = Object.fromEntries(bots.map((b, i) => [BOT_IDS[i], b.plate]));
-  Object.assign(window, { sim, coaches }); startAt = 0; review.exit(); review.notes = []; traceSaved = false; finalClosed = false;
+  Object.assign(window, { sim, coaches, editor }); startAt = 0; review.exit(); review.notes = []; traceSaved = false; finalClosed = false;
   recorder = new TraceRecorder(sim, settings()); paintBots();
 }
 
@@ -91,11 +102,14 @@ function applyConfig() {
 for (const el of Object.values(bc)) { el.onchange = applyConfig; for (const ev of ['keydown', 'keyup']) el.addEventListener(ev, e => e.stopPropagation()); }
 // The 1x, 3x, and 5x chips fill in the reference launcher's errors times that factor.
 document.querySelectorAll<HTMLButtonElement>('[data-err]').forEach(el => { el.onclick = () => { const k = Number(el.dataset.err); bc.elev.value = String(+(REF_ERR.errElevDeg * k).toFixed(2)); bc.azim.value = String(+(REF_ERR.errAzimDeg * k).toFixed(2)); bc.speed.value = String(speedToInput(+(REF_ERR.errSpeed * k).toFixed(3), units)); applyConfig(); }; });
+// After a MATCH, the editor resets the FIELD first, because the plan preview draws from the start positions.
+$('bcedit').onclick = () => { if (editing < 0) return; const i = editing; closeConfig(); if (sim.phase !== 'pre') reset(); if (!editor.open(i)) sim.say(`${bots[i].plate} runs no AUTO tree, so it has no poses to edit.`); };
 $('bcdone').onclick = closeConfig; const applyPreset = (make: (i: number) => BotSetup) => { if (editing < 0) return; const i = editing, keep = { plate: bots[i].plate, driver: bots[i].driver, stickFrame: bots[i].stickFrame }; bots[i] = { ...make(i), ...keep }; saveBots(bots); reset(); openConfig(i); };
 $('bcdefault').onclick = () => applyPreset(metaBot); $('bcbaseline').onclick = () => applyPreset(defaultBot);
 // A click on the FIELD floor reports the position in the log, in the coordinate system that the floor labels show.
 // In the review, a click on a robot adds a note instead, and the position goes to the review bar.
 canvas.addEventListener('click', e => {
+  if (editor.takeClick()) return;
   if (review.active && view.pickRobot(e.clientX, e.clientY) !== null) return; const q = view.pickFloor(e.clientX, e.clientY); if (!q) return;
   const text = `Field position: ${fmtPos(q.x, q.y, units)}`;
   if (review.active) $('nsaved').textContent = text; else sim.say(text);
@@ -104,7 +118,7 @@ canvas.addEventListener('contextmenu', e => { e.preventDefault(); const i = view
 
 reset();
 // Entering the review saves the trace first, so that annotations always have their trace on disk.
-const openReview = () => { closeConfig(); void saveTrace(); review.enter(recorder.trace); };
+const openReview = () => { closeConfig(); editor.close(); void saveTrace(); review.enter(recorder.trace); };
 $('reviewbtn').onclick = openReview;
 modeSel.onchange = reset; refSel.onchange = reset; stageSel.onchange = reset; $('reset').onclick = reset; $('start').onclick = startMatch;
 camSel.onchange = () => { view.mode = camSel.value as CameraMode; };
@@ -133,9 +147,23 @@ function scoreRows(r: AllianceScore | null, b: AllianceScore | null, totals: { r
   }
   return html;
 }
+// ---------- field editor ----------
+$('aedone').onclick = () => editor.close(); $('aereset').onclick = () => editor.resetSelected(); $('aerevert').onclick = () => editor.revert();
+// In the editor, a click on a step in the tree view selects it, and its handles on the FIELD light up.
+$('treebody').addEventListener('click', e => { if (!editor.active) return; const row = (e.target as HTMLElement).closest<HTMLElement>('.tv[data-path]'); if (row) editor.select(row.dataset.path!); });
+/** Draws the editor bar: the tree, the selected step's pose, and the buttons. */
+function paintEditor() {
+  document.body.classList.toggle('editing', editor.active); $('autoedit').classList.toggle('hidden', !editor.active); if (!editor.active) return;
+  const def = editor.def, plate = bots[editor.robot].plate;
+  $('aehead').textContent = `${plate} · ${def?.name ?? 'AUTO'}`;
+  $('aesel').textContent = editor.describe((x, y) => fmtPos(x, y, units));
+  $<HTMLButtonElement>('aereset').disabled = !editor.selectedEdited();
+  $<HTMLButtonElement>('aerevert').disabled = !editor.isCopy;
+}
+
 /** Draws the tree view for the chosen robot: live during a match, and at the cursor in the review. */
 function paintTree() {
-  const el = $('tree'), on = treeSel.value === 'on'; el.classList.toggle('hidden', !on); if (!on) return;
+  const el = $('tree'), on = treeSel.value === 'on' || editor.active; el.classList.toggle('hidden', !on); if (!on) return;
   const i = treeRobot >= 0 ? treeRobot : focus(), plate = bots[i].plate;
   const botsKey = `${i}:${bots.map(b => b.plate).join(',')}`;
   if (botsKey !== treeBotsKey) {
@@ -143,8 +171,14 @@ function paintTree() {
     $('treebots').innerHTML = bots.map((b, k) => `<button data-k="${k}" class="${k === i ? 'on' : ''}" style="border-color:var(--${k < 2 ? 'red' : 'blue'})">${b.plate}</button>`).join('');
   }
   // The panel fills the space between the score panel and whatever is at the bottom left: the log, or the review bar.
-  const below = review.active ? $('review') : $('log');
+  const below = review.active ? $('review') : editor.active ? $('autoedit') : $('log');
   el.style.top = `${$('left').getBoundingClientRect().bottom + 8}px`; el.style.bottom = `${innerHeight - below.getBoundingClientRect().top + 8}px`;
+  if (editor.active) {
+    $('treebots').classList.add('hidden');
+    treePanel.paint(`${bots[editor.robot].plate} · AUTO · editing`, editor.def, { running: new Set(), last: new Map() }, 'This robot runs no AUTO tree.', editor.treeEdit());
+    return;
+  }
+  $('treebots').classList.remove('hidden');
   const cur = review.cursor, human = bots[i].driver !== 'planner';
   if (cur) {
     const at = treeStateAt(cur.trace, cur.index, i), def = at ? AUTO_TREES[at.tree] ?? TELEOP_TREES[at.tree] ?? null : null;
@@ -191,7 +225,7 @@ function hud(pads: Frame['pads']) {
     : sim.phase === 'pre' ? `Press START or Enter to begin<small>Click a gear icon or right-click a robot to configure it. The dashed orange line is the AUTO plan of ${bots[focus()].plate}.</small>`
     : sim.phase === 'transition' ? `Drivers, pick up your controllers<small>${who}</small>`
     : null);
-  banner.classList.toggle('hidden', !text || editing >= 0); if (text) banner.innerHTML = text;
+  banner.classList.toggle('hidden', !text || editing >= 0 || editor.active); if (text) banner.innerHTML = text;
   $('start').classList.toggle('hidden', sim.phase !== 'pre');
 }
 
@@ -223,8 +257,10 @@ function tick(now: number) {
   const kind = !next ? null : dual ? (me.carried.includes('pollen') ? 'pollen' : 'nectar') : next === 'pollen' ? 'pollen' : 'nectar';
   view.sync(me, kind, humanNow ? null : sim.phase === 'auto' ? coaches[fi].auto?.path ?? null : coaches[fi].executor.path);
   // Project the focus robot's AUTO trajectory onto the FIELD before and during AUTO.
-  const name = bots[fi].auto === 'default' ? autoFor(me, SOLO_AUTO) : bots[fi].auto, tree = AUTO_TREES[name], showPlan = !!tree && (sim.mode === 'full' || sim.mode === 'auto') && (sim.phase === 'pre' || sim.phase === 'auto');
-  if (showPlan && sim.phase === 'pre') { const p = me.robot.translation(); autoPlan = previewAuto(tree, me, { x: p.x, z: p.z }); autoPlanKey = `${name}:${fi}:${seed}`; }
+  // In the field editor, the plan is the edited robot's, and it redraws after each edit.
+  const pi = editor.active ? editor.robot : fi, pv = sim.view(pi);
+  const name = bots[pi].auto === 'default' ? autoFor(pv, SOLO_AUTO) : bots[pi].auto, tree = AUTO_TREES[name], showPlan = !!tree && (editor.active || ((sim.mode === 'full' || sim.mode === 'auto') && (sim.phase === 'pre' || sim.phase === 'auto')));
+  if (showPlan && sim.phase === 'pre') { const key = `${name}:${pi}:${seed}:${editor.rev}`; if (key !== autoPlanKey) { const p = pv.robot.translation(); autoPlan = previewAuto(tree, pv, { x: p.x, z: p.z }); autoPlanKey = key; } }
   view.showAutoPlan(showPlan ? autoPlan : null, autoPlanKey);
   if (frame++ % 6 === 0) hud(inF.pads);
   requestAnimationFrame(tick);

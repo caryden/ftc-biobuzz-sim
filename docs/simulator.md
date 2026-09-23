@@ -108,6 +108,20 @@ CELL's tags from both launch spots. The camera reads the HIVE, not the balls, an
 The sweeps are blind but planned from data: `scripts/plan-sweeps.ts` records where spilled balls come to rest over
 many simulated AUTO periods, prints a heatmap, searches for the lanes that collect the most, and writes them into the
 sweep steps of the trees. Lanes lead with the intake, except along a wall, where the robot faces the wall and strafes.
+
+To move an AUTO pose, follow these steps:
+
+1. Before the MATCH, click a robot's gear icon, and then click **Edit the AUTO poses on the FIELD**. The camera changes
+   to **Overhead**, and the tree view shows the robot's AUTO tree.
+2. Drag an orange disc to move a drive step's pose, or drag the knob at the end of its line to turn its heading. A cyan
+   disc is a sweep's lane point. Click a step in the tree view to find its handles: they turn white.
+3. Click **Done**.
+
+The first edit makes an edited copy of the tree, named "(edited)" in the **AUTO plan** list, and the robot runs the
+copy. This browser keeps the copy. An edited step has a green ring. **Reset this step** moves the selected step back,
+and **Revert to the original** deletes the copy. A drive step's pose stays an expression, and the edit is an offset
+from it, so the copy still fits a robot of another size. For how an edit is stored, see [Editing AUTO
+poses](behavior-trees.md#editing-auto-poses).
 The page projects the tree onto the FIELD as a dashed orange line, with a wedge at each pose and a red ring where the
 robot shoots.
 
