@@ -38,13 +38,15 @@ The field editor drags AUTO poses. Increments 7 to 11 of the [behavior-tree plan
 editor for whole AUTO trees: motion and intake leaves, plans that you create and name, parameter forms and an
 expression editor, structure editing, and a quick AUTO run with a timeline of both red robots.
 
-## Turret shooter
+## A realistic turret
 
-A turret is one more implementation of the shooter interface, beside the catapult, the FIFO shooter, and the dual
-shooter. The two-sided shooter is already a turret with two set points and an instant slew. A turret with a slew
-rate needs the `canShoot` state that [Subsystems](behavior-trees.md#subsystems) describes, so that aiming stays in the
-shooter and the tree only checks `canShoot` and commands `shooter.shoot`. In `e25-dual-shooter-red`,
-launching from both ends had no effect on red's score, so a turret might not either. Measure it.
+The simulator's turret has full range of motion and an instant slew, as an upper bound, and it raised scores:
+`e79-turret-all` is +39.4 ± 13.6 combined points with a turret on all four robots, and in `e80-turret-red` red gains
+15.1 ± 7.8. A real turret has a slew rate and a limited range of motion, so the next step is those two limits, to find
+how much of the gain is left. It also needs the `canShoot` state that [Subsystems](behavior-trees.md#subsystems)
+describes, so that aiming stays in the shooter and the tree only checks `canShoot` and commands `shooter.shoot`.
+Part of the gain can be accuracy rather than time: an AUTO pose arrives within 0.05 rad of its heading, and the
+turret removes that error from each open-loop shot. AUTO points rose from 177 to 190.3. That split isn't measured.
 
 ## Measured bounce and roll
 

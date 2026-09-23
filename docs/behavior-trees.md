@@ -196,9 +196,13 @@ implementation: the drive's path follower, and the shooter's type. Aiming belong
 intended shooter interface is `if (shooter.canShoot) shooter.shoot`. `canShoot` decides whether the shooter can hit the
 target from where the robot is, with read-only access to the other subsystems' state, such as the drive's pose and the
 AprilTags that vision sees. A shooter that launches out of both ends is a turret with two set points and an instant
-slew: it launches out of the end that faces the robot's own HIVE (`src/sim/config.ts`). A turret with a slew rate
-would be one more implementation. `canShoot` and the turret aren't built. `shooter.shoot` launches open loop from where
-the robot stands, and its `cell` parameter holds fire until the camera sees that CELL raised.
+slew: it launches out of the end that faces the robot's own HIVE (`src/sim/config.ts`). The simulator also has a
+turret with full range of motion and an instant slew, which aims each launch at the raised CELL whatever the robot's
+heading. It's an upper bound: a turret with a slew rate or a limited range would be one more implementation, and it
+can't do better. `canShoot` isn't built. `shooter.shoot` launches open loop from where the robot stands, and its
+`cell` parameter holds fire until the camera sees that CELL raised. The TELEOP planner's launch spot has no heading
+for a turret, so the robot doesn't turn to launch. The AUTO trees' launch poses keep their headings. With the turret
+on all four robots, `e79-turret-all` is +39.4 ± 13.6 combined points against `e77-wait-until`.
 
 One problem is open: the loader checks a tree against its environment's schema, not against a robot's config. A
 command that only one implementation has, such as a turret's, would fail when it runs, not when the tree loads.

@@ -61,7 +61,10 @@ Every MATCH has four robots: R0, R1, B0, and B1. To configure a robot before a M
 its number in the scoreboard or in the **Game setup** panel, or right-click the robot. The popup sets the following:
 
 - The number plate, the driver, and the stick frame for a human driver, which is field-centric by default.
-- The shooter's release, whether it launches from both ends, and the intake layout: front, or front and rear.
+- The shooter's release, where it launches from, and the intake layout: front, or front and rear. A shooter
+  launches from the rear end, from both ends, or from a turret. The turret aims at the raised CELL whatever the
+  robot's heading, with full range of motion and an instant slew, so it's an upper bound on what a real turret does.
+  On all four robots it adds 39.4 ± 13.6 combined points over 24 seeds (`e79-turret-all`).
 - The launcher's shot-to-shot error as one standard deviation each: elevation, azimuth, and launch speed. Chips fill
   in 1, 3, or 5 times the reference launcher.
 - The intake success probability, the AUTO plan, the TELEOP plan, and the defense policy.
