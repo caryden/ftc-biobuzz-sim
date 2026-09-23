@@ -86,22 +86,23 @@ Each AUTO plan is a behavior tree in `src/auto/trees/auto/`. It runs in the onbo
 and the camera. It has no ball, FLOWER, or robot positions. For how trees work, see [Behavior-tree
 policies](behavior-trees.md).
 
-A tree is a list of steps, and each step is a leaf:
+A tree is a list of steps. Each step is a leaf that commands one of the robot's subsystems:
 
-- **`auto.driveTo`** drives to a pose on a path that the path planner picks. **`auto.followPath`** follows a path
-  through the tree's own waypoints, with no planner.
-- **`auto.push`** pushes straight ahead, and **`auto.shoot`** launches a count open loop.
-- **`auto.intake`** sets the intake filter, which holds until the next `auto.intake`. AUTO starts with the intake off.
-- **`auto.wait`** waits, and **`auto.waitClock`** waits until a clock time.
-- **`auto.waitHopperFull`** waits until the hopper is full, **`auto.waitCell`** until the camera reads a CELL as
-  raised, and **`auto.waitTip`** until it sees that CELL tip.
+- **`drive.driveTo`** drives to a pose on a path that the path planner picks. **`drive.followPath`** follows a path
+  through the tree's own waypoints, with no planner. **`drive.push`** pushes straight ahead.
+- **`intake.run`** runs the intake for as long as it runs. When no leaf runs the intake, it's stopped.
+- **`shooter.shoot`** launches a count open loop.
+- **`vision.waitTip`** waits until the camera sees a CELL tip.
+- **`wait`** waits a time, and **`waitUntil`** waits until a condition holds, for example `bots.me.transfer.full`,
+  `bots.me.vision.seesRaised('rear')`, or `clock.remaining <= 2.5`.
 
-The driving leaves leave the intake alone, so a step that collects is a composite, as in FTC's command-based code. For
-example, a sweep turns the intake on, races `followPath` against `waitHopperFull`, and turns the intake off in the
-cleanup of an `ensure` node, however the race ends.
+A step that collects runs the intake beside a drive, as in FTC's command-based code. For example, a sweep is a
+`parallel` node that ends when its first child does: `waitUntil` on a full transfer, `intake.run`, and
+`drive.followPath`. For the subsystems and their state, see [Subsystems](behavior-trees.md#subsystems).
 
 Each step ends on its condition or its timeout. The robot then does nothing for one physics step, as a state machine
-that advances on its next loop does. `auto.intake` and `auto.waitHopperFull` end without that idle step. A tree that ends with a PARK races its steps against the clock, so that the PARK
+that advances on its next loop does. `waitUntil` ends without that idle step, and `intake.run` ends only when its
+parent does. A tree that ends with a PARK races its steps against the clock, so that the PARK
 starts in time whatever step is running. Poses are expressions over the robot's size and shooter direction, so one
 tree fits every robot. Each step's note in the tree file says why the step is there.
 

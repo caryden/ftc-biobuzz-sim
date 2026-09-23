@@ -4,7 +4,7 @@
 are done: the runtime in `src/bt/`, both periods as trees in `src/auto/trees/auto/` and `src/auto/trees/teleop/`, every
 TELEOP decision in the TELEOP tree, and a tree view on the simulator page, live and in review. The AUTO editor is the
 second part. Its first two increments are done: trees in FIELD x and y with a field editor that drags AUTO poses, and
-separate leaves for driving, the intake, and waiting. For how the simulator works, see [How the simulator works](simulator.md).
+AUTO leaves that command the robot's subsystems. For how the simulator works, see [How the simulator works](simulator.md).
 
 This document proposes replacing the robot's decision code with behavior trees. A behavior tree is a tree of small
 nodes. The inner nodes decide what runs, and the leaves read the field and drive the robot. The same tree format
@@ -148,12 +148,67 @@ The simulator's code uses three.js axes, where y points up, so the floor is x an
 y. Only the onboard environment converts: `simPoint` and `simHeading` in `src/auto/onboard.ts`. Before increment 6,
 tree files used the code's x and z. `e72-field-xy` checks that the change of axes moved no pose.
 
+### Subsystems
+
+A robot is a set of subsystems, as in FTC's command-based libraries such as FTCLib and NextFTC. Each subsystem has
+state, which expressions read, and commands, which leaves run. The AUTO leaves are named for the subsystem that they
+command:
+
+| Subsystem | State that expressions read | Commands |
+| --- | --- | --- |
+| Drive | `bots.me.drive.pose`, from odometry, and `bots.me.drive.speed` | `drive.driveTo`, `drive.followPath`, `drive.push` |
+| Intake | None | `intake.run(filter)` |
+| Transfer | `bots.me.transfer.count`, `capacity`, and `full` | None |
+| Shooter | `bots.me.shooter.facing` and `type` | `shooter.shoot` |
+| Vision | `bots.me.vision.seesRaised(cell)` | `vision.waitTip` |
+
+Two leaves belong to no subsystem: `wait`, for a time, and `waitUntil`, for a condition. A condition is an expression
+over the environment, such as `bots.me.transfer.full` or `clock.remaining <= 2.5`, so the tree needs no leaf for each
+kind of wait. `waitUntil` uses a *live* parameter, which the runtime evaluates each time that the leaf reads it, where
+other parameters are evaluated once, when the leaf starts.
+
+The runtime keeps command-based semantics, so the idioms carry over:
+
+| Command-based | In this runtime |
+| --- | --- |
+| A command | A leaf |
+| `end(interrupted)` | The leaf's cleanup, which runs when the leaf ends or is halted |
+| Requirements | The subsystems in a leaf's `uses`. The loader rejects a `parallel` node whose children command the same subsystem |
+| A sequential, parallel, or race group | A `sequence`, or a `parallel` node with the `all` or the `any` policy |
+| A deadline group | A `parallel` node with the `any` policy whose other children never end on their own |
+| A default command | What a subsystem does in a physics step that no leaf commands it: the drive and the shooter idle, and the intake stops |
+
+A behavior tree adds what command-based code lacks for TELEOP: a `fallback` that changes its mind, `guard` and `hold`
+conditions, and the reactive recheck.
+
+For example, a sweep runs the intake and a path together, and ends when the transfer is full or the path ends:
+
+```
+parallel(any: waitUntil(bots.me.transfer.full), intake.run(all), drive.followPath(waypoints))
+```
+
+`intake.run` never ends by itself, so the other two children decide when the node ends. When it ends, the intake goes
+back to its default command, which stops it. `waitUntil` comes first, so that in the step that the transfer fills, the
+node ends before the path follower sends another command.
+
+**The robot config picks each subsystem's implementation.** A tree commands the interface, and the config swaps the
+implementation: the drive's path follower, and the shooter's type. Aiming belongs to the shooter, not to the tree. The
+intended shooter interface is `if (shooter.canShoot) shooter.shoot`. `canShoot` decides whether the shooter can hit the
+target from where the robot is, with read-only access to the other subsystems' state, such as the drive's pose and the
+AprilTags that vision sees. A shooter that launches out of both ends is a turret with two set points and an instant
+slew: it launches out of the end that faces the robot's own HIVE (`src/sim/config.ts`). A turret with a slew rate
+would be one more implementation. `canShoot` and the turret aren't built. `shooter.shoot` launches open loop from where
+the robot stands, and its `cell` parameter holds fire until the camera sees that CELL raised.
+
+One problem is open: the loader checks a tree against its environment's schema, not against a robot's config. A
+command that only one implementation has, such as a turret's, would fail when it runs, not when the tree loads.
+
 ### Navigation
 
-In AUTO, two leaves move the robot. `auto.driveTo` drives to a pose on a path that the planner picks, and
-`auto.followPath` follows the tree's own waypoints. Neither runs the intake or ends on a full hopper: a tree combines
-them with `auto.intake` and `auto.waitHopperFull`, as increment 7 of the [plan](#plan) describes. Each leaf ends on
-arrival or on its timeout.
+In AUTO, two drive commands move the robot. `drive.driveTo` drives to a pose on a path that the planner picks, and
+`drive.followPath` follows the tree's own waypoints. Neither runs the intake or ends on a full transfer: a tree runs
+them beside `intake.run` and races them against `waitUntil`, as [Subsystems](#subsystems) describes. Each command ends
+on arrival or on its timeout.
 
 The robot config, not the tree, chooses how the robot gets there:
 
@@ -298,13 +353,9 @@ type, and the loader checks that each child's output matches the next child's in
 
 ### Parallel nodes and subsystems
 
-An action declares the subsystems that it commands: `drive`, `intake`, `shooter`, or `placer`. The loader rejects a
-`parallel` node whose children command the same subsystem. A subsystem command belongs to its node, so halting the
-node stops the command.
-
-For example, "sweep a lane with the intake on until the hopper is full" is a parallel node with the `any` rule and
-three children: navigate the lane, run the intake, and wait for a full hopper. The intake action never finishes on its
-own, so the other two children decide when the node ends.
+A leaf declares the subsystems that it commands in `uses`, for example `drive`, `intake`, or `shooter`. The loader
+rejects a `parallel` node whose children command the same subsystem. A subsystem command belongs to its node, so
+halting the node stops the command. For an example, see [Subsystems](#subsystems).
 
 ## Expressions
 
@@ -338,8 +389,8 @@ a step next to the step.
 
 The following file is `src/auto/trees/auto/lane-sweep-pair-right.json`, a right robot's AUTO, shortened to its first two
 steps, its first sweep, and its PARK. The PARK starts when all the other steps end, or when the clock shows 4.5 s,
-whichever comes first. The sweep and the PARK run the intake in an `ensure` node, whose cleanup turns the intake off
-however the child ends:
+whichever comes first. The sweep and the PARK each run the intake beside the drive, in a `parallel` node that ends when
+the drive ends or the transfer is full:
 
 ```json
 {
@@ -350,6 +401,7 @@ however the child ends:
   "description": "The earlier default for the right start position, with lane sweeps: the first TIP from the ...",
   "meta": { "start": "right", "partner": "lane-sweep-pair-left" },
   "defs": {
+    "full": "bots.me.transfer.full",
     "len": "bots.me.dimensions.length",
     "flip": "if(bots.me.shooter.facing == 'front', 180, 0)",
     "hiveX": "-0.3237",
@@ -361,32 +413,26 @@ however the child ends:
   },
   "root": { "sequence": { "children": [
     { "id": "steps", "parallel": { "policy": "any", "children": [
-      { "id": "finish", "ref": "auto.clockAtMost", "params": { "sec": 4.5 } },
+      { "id": "finish", "ref": "waitUntil", "params": { "condition": "clock.remaining <= 4.5" } },
       { "sequence": { "children": [
-        { "id": "s1", "ref": "auto.driveTo", "params": { "pose": "launchAudience", "timeoutSec": 4 } },
+        { "id": "s1", "ref": "drive.driveTo", "params": { "pose": "launchAudience", "timeoutSec": 4 } },
         { "id": "s2", "note": "The raised CELL starts with 3 NECTAR, so the third POLLEN tips the HIVE.",
-          "ref": "auto.shoot", "params": { "count": 3, "timeoutSec": 2.5 } },
-        { "id": "collect-s9", "ensure": {
-          "child": { "sequence": { "children": [
-            { "ref": "auto.intake", "params": { "filter": "all" } },
-            { "id": "full-s9", "parallel": { "policy": "any", "children": [
-              { "ref": "auto.waitHopperFull" },
-              { "id": "s9", "ref": "auto.followPath", "params": { "tag": "sweep-right", "timeoutSec": 8.3,
-                "waypoints": [{ "x": -1.415, "y": -1.543, "headingDeg": null },
-                              { "x": -0.365, "y": -1.543, "headingDeg": -90 },
-                              { "x": -0.515, "y": -0.985, "headingDeg": null },
-                              { "x": -1.565, "y": -1.135, "headingDeg": null }] } }
-            ] } }
-          ] } },
-          "cleanup": { "ref": "auto.intake", "params": { "filter": "none" } } } }
+          "ref": "shooter.shoot", "params": { "count": 3, "timeoutSec": 2.5 } },
+        { "id": "collect-s9", "parallel": { "policy": "any", "children": [
+          { "ref": "waitUntil", "params": { "condition": "full" } },
+          { "ref": "intake.run", "params": { "filter": "all" } },
+          { "id": "s9", "ref": "drive.followPath", "params": { "tag": "sweep-right", "timeoutSec": 8.3,
+            "waypoints": [{ "x": -1.415, "y": -1.543, "headingDeg": null },
+                          { "x": -0.365, "y": -1.543, "headingDeg": -90 },
+                          { "x": -0.515, "y": -0.985, "headingDeg": null },
+                          { "x": -1.565, "y": -1.135, "headingDeg": null }] } }
+        ] } }
       ] } }
     ] } },
-    { "id": "collect-s15", "ensure": {
-      "child": { "sequence": { "children": [
-        { "ref": "auto.intake", "params": { "filter": "all" } },
-        { "id": "s15", "ref": "auto.driveTo", "params": { "pose": "parkRight", "timeoutSec": 6 } }
-      ] } },
-      "cleanup": { "ref": "auto.intake", "params": { "filter": "none" } } } }
+    { "id": "collect-s15", "parallel": { "policy": "any", "children": [
+      { "ref": "intake.run", "params": { "filter": "all" } },
+      { "id": "s15", "ref": "drive.driveTo", "params": { "pose": "parkRight", "timeoutSec": 6 } }
+    ] } }
   ] } }
 }
 ```
@@ -553,7 +599,7 @@ exact match is the test for increments 2 and 3.
      A `timeout` supervisor fails instead.
    - **Each step ends with one idle physics step.** `AUTO_TUNING.idleAfterStep` switches it. Removing it is a measured
      change.
-   - **The clock race is a parallel node.** An `auto.clockAtMost` leaf races the steps with the `any` policy, and the
+   - **The clock race is a parallel node.** An `auto.clockAtMost` leaf, since increment 7 a `waitUntil` on `clock.remaining`, races the steps with the `any` policy, and the
      PARK follows the race.
    - **Both alliances use red's HIVE pivot,** as the rotated scripts did. Blue's own pivot is 0.4 mm farther out.
 3. **Convert TELEOP. Done.** `src/auto/driver.ts` holds the driver environment, the TELEOP leaves, and `TeleopProgram`.
@@ -627,36 +673,31 @@ tree in the page. Each increment is one pull request.
    pose and its heading, and a sweep's lane points, by the rule in [Editing AUTO poses](#editing-auto-poses).
    `e72-field-xy` equals `e69-tree-view` on every seed, and the leaves' parameters match the old files' on every
    value, for three robot sizes and both shooter directions.
-7. **Motion and intake leaves. Done.** Driving, the intake, and waiting are separate leaves, as in FTC's
-   command-based style:
-   - `auto.driveTo(pose)`: the path planner picks a path around the FIELD elements, as `auto.drive` did.
-   - `auto.followPath(waypoints)`: the robot follows the author's path through the waypoints without stopping, with a
+7. **Subsystem leaves. Done.** The AUTO leaves command the robot's subsystems, as in FTC's command-based style:
+   `drive.driveTo`, `drive.followPath`, `drive.push`, `intake.run`, `shooter.shoot`, and `vision.waitTip`, with `wait`
+   and `waitUntil` for time and conditions. See [Subsystems](#subsystems).
+   - `drive.driveTo(pose)`: the path planner picks a path around the FIELD elements, as `auto.drive` did.
+   - `drive.followPath(waypoints)`: the robot follows the author's path through the waypoints without stopping, with a
      heading per waypoint or along the path, and no planner. It moves on to the next waypoint within 0.15 m of one or
-     past it. The robot config will pick the follower: pure pursuit now, and Road Runner or Pedro Pathing later.
-   - `auto.intake(filter)` sets the intake and ends in the same physics step. The onboard environment holds the filter
-     between steps, and AUTO starts with the intake off.
-   - `auto.waitHopperFull` ends when the hopper is full.
+     past it.
+   - `intake.run(filter)` runs the intake while it runs. A subsystem's default command runs in a step that no leaf
+     commands it, and the intake's stops it.
+   - `waitUntil(condition)` waits for an expression. The runtime gained *live* parameters for it: the leaf gets a
+     function, which evaluates the expression on each step.
 
-   A step that collects is a composite. The `ensure` cleanup turns the intake off however the child ends, including
-   when AUTO's clock race stops the steps. `auto.waitHopperFull` comes first in the race, so that the race ends before
-   the path follower sends another command in the step that the hopper fills:
-
-   ```
-   ensure(
-     child:   sequence(intake(all), parallel(any: waitHopperFull, followPath(waypoints))),
-     cleanup: intake(none))
-   ```
-
-   `auto.drive` and `auto.sweep` are gone, `auto.push` lost its `intake` parameter and its full-hopper end, and
-   `auto.wait` lost `unlessFull`, which a race with `auto.waitHopperFull` replaces. The onboard environment gained the
-   robot's pose, `bots.me.pose`, from odometry. Results, in three steps:
-   - **The plumbing:** `e73-motion-leaves-plumbing`, with the new leaves and the old trees, equals `e72-field-xy` on
-     every seed.
+   A step that collects runs `intake.run` beside the drive in a `parallel` node with the `any` policy. `auto.drive`,
+   `auto.sweep`, and the separate waits for the clock, the camera, and a full hopper are gone. The environment's state
+   has FTC's names: `bots.me.drive.pose`, `bots.me.transfer`, `bots.me.shooter`, and `bots.me.vision`. Results, in five
+   runs:
+   - **New leaves, old trees:** `e73-motion-leaves-plumbing` equals `e72-field-xy` on every seed.
    - **The intake default:** the simulator runs an unset intake as `all`, so under the old leaves the intake ran in
-     every shoot, wait, and idle step. `e74-auto-intake-off`, AUTO with the intake off by default and the old trees,
-     is -10.0 ± 10.0 combined points against e73, which is noise.
-   - **The composites:** `e75-motion-leaves`, the converted trees, is +20.8 ± 9.8 against e74, and +10.8 ± 11.9 against
-     e73. AUTO points went from 175.1 to 177.8.
+     every shoot, wait, and idle step. `e74-auto-intake-off` starts AUTO with the intake off: -10.0 ± 10.0 combined
+     points against e73, which is noise.
+   - **Composites:** `e75-motion-leaves`, the trees with separate drive, intake, and wait steps, is +20.8 ± 9.8
+     against e74.
+   - **Subsystem names and `intake.run`:** `e76-subsystem-leaves` equals e75 on every seed.
+   - **`waitUntil`:** `e77-wait-until` is -7.3 ± 11.2 against e76, which is noise. The camera and clock waits lost
+     their idle step. Against e73, before this increment, the total is +3.5 ± 8.4.
 
 8. **The editor flow.** An **Edit AUTO paths** button in the right-hand panel opens the editor, in red's frame, with
    buttons for the two red robots above the tree. Both robots' paths show on the FIELD, and the other robot's is dimmed.

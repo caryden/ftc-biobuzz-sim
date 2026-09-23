@@ -38,6 +38,14 @@ The field editor drags AUTO poses. Increments 7 to 11 of the [behavior-tree plan
 editor for whole AUTO trees: motion and intake leaves, plans that you create and name, parameter forms and an
 expression editor, structure editing, and a quick AUTO run with a timeline of both red robots.
 
+## Turret shooter
+
+A turret is one more implementation of the shooter interface, beside the catapult, the FIFO shooter, and the dual
+shooter. The two-sided shooter is already a turret with two set points and an instant slew. A turret with a slew
+rate needs the `canShoot` state that [Subsystems](behavior-trees.md#subsystems) describes, so that aiming stays in the
+shooter and the tree only checks `canShoot` and commands `shooter.shoot`. In `e25-dual-shooter-red`,
+launching from both ends had no effect on red's score, so a turret might not either. Measure it.
+
 ## Measured bounce and roll
 
 Ball masses are AndyMark's listed weights. Restitution, friction, and damping are estimates. A drop test and a roll

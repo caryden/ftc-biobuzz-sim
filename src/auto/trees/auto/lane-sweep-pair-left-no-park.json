@@ -155,7 +155,7 @@
        },
        {
         "id": "s11",
-        "note": "A blind sweep: a TIP spills the CELL where the robot can't see. scripts/plan-sweeps.ts records where the spill comes to rest over many simulated matches and writes the lanes that collect the most. The path ends early once the hopper is full.",
+        "note": "A blind sweep: a TIP spills the CELL where the robot can't see. scripts/plan-sweeps.ts records where the spill comes to rest over many simulated matches and writes the lanes that collect the most. The path ends early once the transfer is full.",
         "ref": "drive.followPath",
         "params": {
          "waypoints": [
@@ -184,7 +184,7 @@
     },
     {
      "id": "s12",
-     "note": "The right robot's third TIP raises the rear CELL again: launch what the sweep found, then sweep once more so that TELEOP starts with a full hopper.",
+     "note": "The right robot's third TIP raises the rear CELL again: launch what the sweep found, then sweep once more so that TELEOP starts with a full transfer.",
      "ref": "drive.driveTo",
      "params": {
       "pose": "angledRear",
@@ -219,7 +219,7 @@
        },
        {
         "id": "s14",
-        "note": "A blind sweep: a TIP spills the CELL where the robot can't see. scripts/plan-sweeps.ts records where the spill comes to rest over many simulated matches and writes the lanes that collect the most. The path ends early once the hopper is full.",
+        "note": "A blind sweep: a TIP spills the CELL where the robot can't see. scripts/plan-sweeps.ts records where the spill comes to rest over many simulated matches and writes the lanes that collect the most. The path ends early once the transfer is full.",
         "ref": "drive.followPath",
         "params": {
          "waypoints": [
