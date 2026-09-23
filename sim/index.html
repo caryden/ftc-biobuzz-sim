@@ -62,6 +62,16 @@
   #botcfg { top: 84px; left: 50%; transform: translateX(-50%); width: 300px; z-index: 6; } #botcfg h2 { color: var(--fg); } #botcfg input { width: 120px; } #botcfg select { max-width: 176px; } #botcfg label { gap: 8px; white-space: nowrap; } #botcfg .btns { display: flex; gap: 6px; margin-top: 8px; } #botcfg .btns button { margin: 0; }
   input[type=number] { background: #232831; color: var(--fg); border: 1px solid var(--line); border-radius: 6px; padding: 4px 8px; font: inherit; }
   .errhead { display: flex; justify-content: space-between; align-items: center; margin: 8px 0 2px; color: var(--fg); font-size: 12px; } .chips { display: flex; gap: 4px; } .chips button { width: auto; margin: 0; padding: 2px 9px; border-radius: 999px; font-size: 11px; }
+  /* The tree view: the chosen robot's behavior tree as an outline. It sits on the left, between the score and the log. */
+  #tree { left: 12px; width: 360px; display: flex; flex-direction: column; font: 11.5px/1.45 ui-monospace, SFMono-Regular, Menlo, monospace; padding: 8px 10px; }
+  #treebody { flex: 1; min-height: 0; overflow: auto; }
+  #tree h2 { font-family: ui-sans-serif, system-ui, sans-serif; margin-bottom: 4px; } #treebots { display: flex; gap: 4px; margin-bottom: 6px; }
+  #treebots button { width: auto; margin: 0; padding: 1px 7px; font: 700 11px ui-monospace, SFMono-Regular, Menlo, monospace; } #treebots button.on { background: var(--fg); color: #14171c; }
+  .tv { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--dim); border-radius: 4px; padding-right: 4px; }
+  .tv b { color: var(--fg); font-weight: 600; } .tv b.leaf { color: var(--pollen); } .tv i { color: #c2c8d2; font-style: normal; } .tv .d { color: #7e8794; } .tv em { font-style: normal; font-size: 10.5px; }
+  .tv.run { background: rgba(65,224,127,.18); } .tv.run em { color: var(--ok); font-weight: 700; }
+  .tv.ok em { color: #6fae86; } .tv.fail em { color: #f0857b; } .tv.halt em { color: #8b939f; } .tv.err em, .tv.err b { color: var(--red); }
+  .tv-empty { color: var(--dim); }
   .hidden { display: none !important; }
 </style>
 </head>
@@ -77,6 +87,7 @@
   <label>Camera <select id="camera"><option value="driver">Driver station</option><option value="overhead">Overhead</option><option value="chase">Chase</option><option value="audience">Audience</option></select></label>
   <label>Units <select id="units"><option value="metric">Metric</option><option value="us">US</option></select></label>
   <label>Sound <select id="sound"><option value="on">On</option><option value="off">Off</option></select></label>
+  <label title="Shows a robot's behavior tree: the running nodes, and each other node's last result. It follows the review cursor too.">Tree view <select id="treeview"><option value="off">Off</option><option value="on">On</option></select></label>
   <label>Referee <select id="referee"><option value="rule">PINS (G421)</option><option value="off">Off</option></select></label>
   <button id="start" class="primary">Start match (Enter)</button><button id="reset">Reset field (R)</button><button id="reviewbtn">Review match (V)</button>
 </div>
@@ -102,6 +113,7 @@
   <div id="bcnote" style="color:var(--dim);font-size:11px;margin-top:4px"></div>
   <div class="btns"><button id="bcdone" class="primary">Done</button><button id="bcdefault" title="A four-element catapult, 30 cm (12 in.), 7 kg (15.4 lb), 500 rpm, and intakes at both ends.">Meta build</button><button id="bcbaseline" title="The reference robot of the experiments: 38 cm (15 in.), 10 kg (22 lb), 600 rpm, two at a time, and a front intake.">Baseline</button></div>
 </div>
+<div id="tree" class="panel hidden"><h2 id="treehead"></h2><div id="treebots"></div><div id="treebody"></div></div>
 <div id="bottom" class="panel"><div id="carry"></div><div id="telemetry"></div></div>
 <div id="log" class="panel"></div>
 <div id="help" class="panel"><b>Left stick</b> drive and strafe · <b>Right stick</b> turn<br><b>LB</b> shoot NECTAR · <b>RB</b> shoot POLLEN<br><b>LT</b> place POLLEN · <b>RT</b> place NECTAR in a FLOWER<br><b>Gear icon</b> or <b>right-click a robot</b> robot config · <a href="/" style="color:var(--fg)">NCSSM FTC home</a> · <a href="https://github.com/caryden/ftc-biobuzz-sim" style="color:var(--fg)">Source on GitHub</a> · <b>C</b> camera · <b>M</b> mark this moment · <b>V</b> review, then click a robot to add a note<br><span id="pad"></span></div>

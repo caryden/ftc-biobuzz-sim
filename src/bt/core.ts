@@ -55,6 +55,8 @@ export interface CNode {
   /** The node's path from the root, for example `root/1.sequence/0.biobuzz.navigate`. */
   readonly path: string;
   readonly note?: string;
+  /** A short description of the node's settings for a tree view, for example a guard's condition or a timeout's seconds. */
+  readonly detail?: string;
   readonly children: readonly CNode[];
   /** The subsystems that the node and its descendants command. */
   readonly uses: ReadonlySet<string>;

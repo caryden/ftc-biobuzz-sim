@@ -2,6 +2,7 @@ import { Defender } from './defend';
 import { TELEOP_TREES, TeleopProgram } from './driver';
 import { Executor } from './executor';
 import { AUTO_TREES, AutoProgram, SOLO_AUTO, autoFor } from './onboard';
+import { Recorder, type TreeDef } from '../bt';
 import { NO_INPUT, type Inputs, type Sim } from '../sim/world';
 
 /**
@@ -26,6 +27,15 @@ export class Coach {
   autoOverride: string | null = null;
   /** The running TELEOP tree, or null before TELEOP. */
   teleop: TeleopProgram | null = null;
+  /** If true, both trees record their spans, for the page's tree view and the match trace. Default: false. */
+  traceTrees = false;
+  private recorder = () => (this.traceTrees ? new Recorder({ values: false }) : undefined);
+
+  /** Gets the tree of the current period and its recorder, or null before the first tree starts or without `traceTrees`. */
+  currentTree(): { period: 'auto' | 'teleop'; def: TreeDef; recorder: Recorder } | null {
+    const p = this.teleop ?? this.auto; if (!p?.recorder) return null;
+    return { period: p === this.teleop ? 'teleop' : 'auto', def: p.def, recorder: p.recorder };
+  }
 
   /** Gets the inputs for one physics step. Call it once per step while a program drives. */
   update(sim: Sim, dt: number): Inputs {
@@ -33,12 +43,12 @@ export class Coach {
     // other robots. An unknown id runs the solo tree.
     if (sim.phase === 'auto') {
       const name = this.autoOverride ?? autoFor(sim, this.autoRoutine);
-      if (!this.auto || this.autoName !== name) { this.autoName = name; this.auto = new AutoProgram(AUTO_TREES[name] ?? AUTO_TREES[SOLO_AUTO]); }
+      if (!this.auto || this.autoName !== name) { this.autoName = name; this.auto = new AutoProgram(AUTO_TREES[name] ?? AUTO_TREES[SOLO_AUTO], this.recorder()); }
       return this.auto.update(sim, dt);
     }
     // The planner runs only in TELEOP. In the transition the sim ignores every command, so a running executor would
     // see no progress, report a stall, and start TELEOP with its first goals on the skip list.
     if (sim.phase !== 'teleop') return NO_INPUT;
-    return (this.teleop ??= new TeleopProgram(TELEOP_TREES['teleop-default'], this)).update(sim, dt);
+    return (this.teleop ??= new TeleopProgram(TELEOP_TREES['teleop-default'], this, this.recorder())).update(sim, dt);
   }
 }

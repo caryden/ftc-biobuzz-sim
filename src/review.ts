@@ -36,6 +36,9 @@ export class Review {
     });
   }
 
+  /** The trace and the frame index at the cursor, or null outside the review. The tree view draws from them. */
+  get cursor(): { trace: Trace; index: number } | null { return this.active && this.trace ? { trace: this.trace, index: this.index } : null; }
+
   /** The trace frame at the cursor, or null outside the review. The scoreboard draws from it. */
   get frame(): Frame | null { return this.active && this.trace ? this.trace.frames[this.index] : null; }
 

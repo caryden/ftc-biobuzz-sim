@@ -366,6 +366,20 @@ describe('trace', () => {
     expect(h.rec.activeAt(0).map(s => s.label)).toEqual(['fallback', 'test.fail', 'test.log']);
     expect(h.rec.activeAt(DT).map(s => s.label)).toEqual(['fallback', 'test.log']);
   });
+  it('keeps the running spans and the order in which spans ended', () => {
+    const h = harness(tree({ sequence: { children: [W('a', 1), W('b', 3)] } }));
+    h.run(3);
+    expect(h.rec.running().map(s => s.path)).toEqual(['root', 'root/1.test.wait']);
+    expect(h.rec.closed.map(s => s.path)).toEqual(['root/0.test.wait']);
+    h.run();
+    expect(h.rec.running()).toEqual([]);
+    expect(h.rec.closed.map(s => s.path)).toEqual(['root/0.test.wait', 'root/1.test.wait', 'root']);
+  });
+  it('describes each node\'s settings for a tree view', () => {
+    const def = loadTree(tree({ fallback: { recheckSec: 1, children: [{ guard: { when: 'flag', child: { timeout: { sec: 2, child: W('a') } } } }, W('b')] } }), REG);
+    const g = def.root.children[0], to = g.children[0];
+    expect([def.root.detail, g.detail, to.detail, to.children[0].detail]).toEqual(['recheck every 1 s', 'flag', '2 s', 'name a, steps 1']);
+  });
   it('uses node ids in paths', () => {
     const h = harness(tree({ id: 'top', sequence: { children: [{ id: 'first', ...W('a') }] } }));
     h.run();

@@ -7,6 +7,8 @@ import { Coach } from './auto/coach';
 import { Referee } from './ref/referee';
 import { Review, clockText } from './review';
 import { TraceRecorder } from './trace';
+import { LiveTreeState, TreePanel, treeStateAt } from './render/tree-view';
+import { TELEOP_TREES } from './auto/driver';
 import { CAMERAS, View, type CameraMode } from './render/view';
 import { RP } from './sim/config';
 import { fmtPos, fmtSpeed, getUnits, massFromInput, massToInput, setUnits, sizeFromInput, sizeToInput, speedFromInput, speedToInput, type Units } from './units';
@@ -21,6 +23,15 @@ const banner = $('banner'); let loadMsg: string | null = null;
 const canvas = $<HTMLCanvasElement>('c'), view = new View(canvas, m => { loadMsg = m; });
 const stageSel = $<HTMLSelectElement>('stage'), modeSel = $<HTMLSelectElement>('mode'), camSel = $<HTMLSelectElement>('camera'), refSel = $<HTMLSelectElement>('referee');
 const audio = new MatchAudio(), soundSel = $<HTMLSelectElement>('sound'); soundSel.onchange = () => { audio.enabled = soundSel.value === 'on'; soundSel.blur(); };
+// The tree view shows one robot's behavior tree. The setting is a convenience that this browser keeps.
+const treeSel = $<HTMLSelectElement>('treeview'), treePanel = new TreePanel($('treebody'), $('treehead')), liveTrees = [0, 1, 2, 3].map(() => new LiveTreeState());
+try { treeSel.value = localStorage.getItem('biobuzz.treeview') === 'on' ? 'on' : 'off'; } catch { /* Storage is a convenience. */ }
+treeSel.onchange = () => { try { localStorage.setItem('biobuzz.treeview', treeSel.value); } catch { /* Storage is a convenience. */ } treeSel.blur(); paintTree(); };
+let treeRobot = -1; // -1 follows the focus robot.
+// One handler for the robot buttons. The buttons are rebuilt only when the robots or the choice change: a button that is
+// replaced between the press and the release of a click never receives the click.
+let treeBotsKey = '';
+$('treebots').onclick = e => { const btn = (e.target as HTMLElement).closest<HTMLButtonElement>('button[data-k]'); if (!btn) return; treeRobot = Number(btn.dataset.k); paintTree(); };
 
 // Every MATCH has two full alliances: R0, R1, B0, and B1. Each robot has its own setup, edited in the robot config popup.
 const bots: BotSetup[] = loadBots();
@@ -40,7 +51,8 @@ function startMatch() { if (sim.phase !== 'pre' || startAt) return; closeConfig(
 function reset() {
   sim = new Sim(RAPIER, undefined, modeSel.value as MatchMode, seed++, { opponent: true, partners: true, playoff: stageSel.value === 'playoff', configFor: (a, slot) => robotConfig(bots[(a === 'red' ? 0 : 2) + slot]) });
   // Every robot has a Coach: it runs the robot's AUTO tree, and the planner in TELEOP unless a controller drives the robot.
-  coaches = sim.robots.map((_, i) => { const c = new Coach(), b = bots[i]; c.flowerStartSec = b.flowerStartSec; c.defense = b.defense; c.autoOverride = b.auto === 'default' || b.auto === 'none' ? null : b.auto; return c; });
+  // Coaches record their trees, for the tree view and the match trace. Recording doesn't change what a robot does.
+  coaches = sim.robots.map((_, i) => { const c = new Coach(), b = bots[i]; c.flowerStartSec = b.flowerStartSec; c.defense = b.defense; c.autoOverride = b.auto === 'default' || b.auto === 'none' ? null : b.auto; c.traceTrees = true; return c; });
   referee = refSel.value === 'off' ? null : new Referee(); // The referee calls PINS (G421) by the fixed rule.
   view.plates = bots.map(b => b.plate); review.plates = Object.fromEntries(bots.map((b, i) => [BOT_IDS[i], b.plate]));
   Object.assign(window, { sim, coaches }); startAt = 0; review.exit(); review.notes = []; traceSaved = false; finalClosed = false;
@@ -121,7 +133,32 @@ function scoreRows(r: AllianceScore | null, b: AllianceScore | null, totals: { r
   }
   return html;
 }
+/** Draws the tree view for the chosen robot: live during a match, and at the cursor in the review. */
+function paintTree() {
+  const el = $('tree'), on = treeSel.value === 'on'; el.classList.toggle('hidden', !on); if (!on) return;
+  const i = treeRobot >= 0 ? treeRobot : focus(), plate = bots[i].plate;
+  const botsKey = `${i}:${bots.map(b => b.plate).join(',')}`;
+  if (botsKey !== treeBotsKey) {
+    treeBotsKey = botsKey;
+    $('treebots').innerHTML = bots.map((b, k) => `<button data-k="${k}" class="${k === i ? 'on' : ''}" style="border-color:var(--${k < 2 ? 'red' : 'blue'})">${b.plate}</button>`).join('');
+  }
+  // The panel fills the space between the score panel and whatever is at the bottom left: the log, or the review bar.
+  const below = review.active ? $('review') : $('log');
+  el.style.top = `${$('left').getBoundingClientRect().bottom + 8}px`; el.style.bottom = `${innerHeight - below.getBoundingClientRect().top + 8}px`;
+  const cur = review.cursor, human = bots[i].driver !== 'planner';
+  if (cur) {
+    const at = treeStateAt(cur.trace, cur.index, i), def = at ? AUTO_TREES[at.tree] ?? TELEOP_TREES[at.tree] ?? null : null;
+    treePanel.paint(`${plate} · ${def?.name ?? 'Tree'} · at the cursor`, def, at?.state ?? null, at ? `This trace names the tree ${at.tree}, which this version doesn't have.` : 'No tree ran at this moment, or the trace predates tree recording.');
+    return;
+  }
+  if (human && (sim.phase === 'teleop' || sim.phase === 'post')) { treePanel.paint(`${plate} · Tree`, null, null, 'A person drives this robot in TELEOP.'); return; }
+  const t = coaches[i]?.currentTree();
+  if (!t) { treePanel.paint(`${plate} · Tree`, null, null, 'The tree starts with the MATCH.'); return; }
+  treePanel.paint(`${plate} · ${t.period === 'auto' ? 'AUTO' : 'TELEOP'} · ${t.def.name}`, t.def, liveTrees[i].read(t.recorder));
+}
+
 function hud(pads: Frame['pads']) {
+  paintTree();
   // In the review, the scoreboard, the clock, and the score table show the trace frame at the cursor.
   const f = review.frame, r = f ? f.scores?.red ?? null : sim.score('red'), b = f ? f.scores?.blue ?? null : sim.score('blue');
   const totals = f ? f.score : { red: r!.total, blue: b!.total }, phase = (f ? f.phase : sim.phase) as Sim['phase'], clock = f ? f.clock : sim.timer;

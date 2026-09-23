@@ -39,14 +39,15 @@ default TELEOP tree in TELEOP. For how the trees work, see [Behavior-tree polici
   picks something else. Inside 0.56 m, robots also push straight away from each other, so they don't wedge.
 - **Shooter.** The shooter has a fixed azimuth, with no turret. The default
   shooter faces the rear of the robot, opposite the intake.
-- **Endgame by value.** When the drive time to the LOADING ZONE says that it is time to PARK, the TELEOP tree's
-  endgame branch compares values, on every step: a launch that finishes a TIP is worth 20 points, a launch that doesn't is worth 2 per element, and PARK is
-  worth 5. In a qualification MATCH, a robot whose PARK the alliance still needs for the SWARM ranking point always
-  parks. **Stage** in the game setup selects a qualification or a playoff MATCH.
+- **Endgame by value.** When the drive time to the LOADING ZONE says that it is time to PARK, the TELEOP tree's endgame
+  branch compares values, on every step: a launch that finishes a TIP is worth 20 points, a launch that doesn't is worth
+  2 per element, and PARK is worth 5. In a qualification MATCH, a robot whose PARK the alliance still needs for the
+  SWARM ranking point always parks. **Stage** in the game setup selects a qualification or a playoff MATCH.
 - **Reading a TIP.** A TIP counts as under way only when the HIVE is past level or turning away from its stop. A partly
   loaded CELL sags off its stop, and a driver can see that it hasn't tipped.
 - **Defense.** The TELEOP tree's `defend` subtree is a full-time defender, with its bookkeeping in `src/auto/defend.ts`,
-  and its `bump` branch is an opportunistic shove. Both limit a contact burst, so that no PIN count reaches 3 s. **Defense** in the robot config selects one.
+  and its `bump` branch is an opportunistic shove. Both limit a contact burst, so that no PIN count reaches 3 s.
+  **Defense** in the robot config selects one.
 
 | Period | Decision maker | Setting |
 | --- | --- | --- |
@@ -80,9 +81,10 @@ the same motor, so the stall torque scales inversely, and the size scales the wh
 
 ### AUTO trees
 
-Each AUTO plan is a behavior tree in `src/auto/trees/auto/`. It runs in the onboard environment of `src/auto/onboard.ts`,
-which has what an OpMode can know: the robot's own pose, its carried count, its size, the clock, and the camera. It
-has no ball, FLOWER, or robot positions. For how trees work, see [Behavior-tree policies](behavior-trees.md).
+Each AUTO plan is a behavior tree in `src/auto/trees/auto/`. It runs in the onboard environment of
+`src/auto/onboard.ts`, which has what an OpMode can know: the robot's own pose, its carried count, its size, the clock,
+and the camera. It has no ball, FLOWER, or robot positions. For how trees work, see [Behavior-tree
+policies](behavior-trees.md).
 
 A tree is a list of steps, and each step is a leaf:
 
@@ -189,10 +191,15 @@ The page records every match at 10 Hz, with each frame's full score breakdown, s
 4. Click a robot, type what went wrong, and press Enter. The note attaches to that robot at the cursor time, and a dot
    marks it on the timeline.
 
+To see why a robot did something, set **Tree view** to **On** in the options. The panel shows a robot's behavior tree,
+with the running nodes highlighted and every other node's last result, live during a match and at the cursor in
+review. The buttons at the top of the panel pick the robot.
+
 With the dev server, the trace saves to `traces/<name>.json` and the notes to `traces/<name>.annotations.md` and
 `.json`. On the deployed site there is no server, so notes stay in the browser's storage, and **Export** downloads the
-notes and the trace as files. The Markdown file repeats every robot's position, tactic, goal, and stall at each note,
-in field coordinates, so it can be read without the trace. To summarize a trace, run `npx tsx scripts/trace-report.ts`.
+notes and the trace as files. The Markdown file repeats every robot's position, tactic, goal, stall, and running tree
+leaf at each note, in field coordinates, so it can be read without the trace. To summarize a trace, run `npx tsx
+scripts/trace-report.ts`.
 
 Field coordinates: the origin is the FIELD center, +x is the blue wall, +y is the rear wall, and the unit is the meter.
 Field y is the negative of the z axis in the code. A click on the FIELD floor reports the position.

@@ -1,8 +1,8 @@
 # Behavior-tree policies
 
-**Status: increments 1 to 4 are built; the rest is proposed.** The first four increments of the [plan](#plan) are done:
-the runtime in `src/bt/`, both periods as trees in `src/auto/trees/auto/` and `src/auto/trees/teleop/`, and every TELEOP
-decision in the TELEOP tree, including the endgame, the bump, the yield, and full defense. For how the simulator works,
+**Status: increments 1 to 5 are built; the rest is proposed.** The first five increments of the [plan](#plan) are done:
+the runtime in `src/bt/`, both periods as trees in `src/auto/trees/auto/` and `src/auto/trees/teleop/`, every TELEOP
+decision in the TELEOP tree, and a tree view on the simulator page, live and in review. For how the simulator works,
 see [How the simulator works](simulator.md).
 
 This document proposes replacing the robot's decision code with behavior trees. A behavior tree is a tree of small
@@ -361,13 +361,22 @@ Each time a node runs, the runtime records a *span*: the node's path, its type, 
 seconds, its result or failure tag, its input and output, and its log events. A match's spans form a timeline of the
 whole tree.
 
-The tree view uses the spans in two ways:
+The simulator page's tree view, **Tree view** in the options, draws a robot's tree as an outline in
+`src/render/tree-view.ts`. Each line shows a node's type or leaf, its id, its state, and its settings, and the node's
+note is its tooltip. The buttons at the top pick the robot. The view works in two ways:
 
-- **Live.** The view highlights the branch that is running now.
-- **In review mode.** Scrubbing to a moment shows the spans that were active then. Clicking a chain node shows the
-  value that it passed on. A match note can name the node that was running, which makes a precise bug report.
+- **Live.** Each coach records its trees with a `Recorder`. The view highlights the running chain from the root to the
+  running leaf, and it marks every other node with its last result: done, a failure tag such as `ConditionFalse`,
+  halted, or error.
+- **In review mode.** The match trace stores, 10 times per second, each robot's tree id, its running nodes, its
+  running leaf's path, and the nodes that ended since the previous frame. Scrubbing to a moment rebuilds the tree's
+  state then from those frames, so the view shows the tree as it was at the cursor.
 
-A span per activation takes far less space than a status for every node on every step.
+A match note records the tree and the running leaf of every robot, for example `tree teleop-default at
+root/match/play/child/tip/child`, which makes a bug report precise. Recording doesn't change what a robot does, and a
+test checks that. The headless scripts don't record trees.
+
+Chain values aren't recorded yet: the page's recorders don't store node inputs and outputs, to keep traces small.
 
 ## Code leaves in a sandbox
 
@@ -540,7 +549,8 @@ exact match is the test for increments 2 and 3.
 
    Increment 4 is done. The executor makes no policy decisions: it runs the tactic, the mode, and the target that the
    tree gives it.
-5. **Show the tree running,** live and in review mode, from the spans.
+5. **Show the tree running. Done.** The simulator page's tree view shows a robot's tree live and at the review cursor,
+   and match notes name the running leaf. See [Tracing and the tree view](#tracing-and-the-tree-view).
 6. **Edit AUTO poses on the field.** Each navigate node shows its poses as handles that you drag, with a heading
    handle. Selecting a node highlights its poses, and clicking a pose selects its node. The path preview redraws after
    each edit, and it follows the first child of each fallback. Both robots' AUTO trees show on one timeline, because
