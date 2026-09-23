@@ -39,8 +39,8 @@ default TELEOP tree in TELEOP. For how the trees work, see [Behavior-tree polici
   picks something else. Inside 0.56 m, robots also push straight away from each other, so they don't wedge.
 - **Shooter.** The shooter has a fixed azimuth, with no turret. The default
   shooter faces the rear of the robot, opposite the intake.
-- **Endgame by value.** When the drive time to the LOADING ZONE says that it is time to PARK, the executor compares
-  values: a launch that finishes a TIP is worth 20 points, a launch that doesn't is worth 2 per element, and PARK is
+- **Endgame by value.** When the drive time to the LOADING ZONE says that it is time to PARK, the TELEOP tree's
+  endgame branch compares values, on every step: a launch that finishes a TIP is worth 20 points, a launch that doesn't is worth 2 per element, and PARK is
   worth 5. In a qualification MATCH, a robot whose PARK the alliance still needs for the SWARM ranking point always
   parks. **Stage** in the game setup selects a qualification or a playoff MATCH.
 - **Reading a TIP.** A TIP counts as under way only when the HIVE is past level or turning away from its stop. A partly

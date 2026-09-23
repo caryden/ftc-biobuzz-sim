@@ -98,6 +98,7 @@ Transit is about 73% of TELEOP. The changes that paid were the ones that removed
 | `e55-old-planner-reference` | The reference for e56: `main` at `3ca1eb9`, with random CELL NECTAR, plus the two timing fixes of e51 and e53 on the old planner code | 809 ± 7.5 | The reference. -2.7 against e49-random-cell-nectar, so on the random layout the two timing fixes together cost nothing measurable. |
 | `e56-trees-on-random-nectar` | Both trees, merged with `main` at `3ca1eb9` | 809 ± 7.5 | Kept. Identical to e55 on every seed and in every field. |
 | `e57-renamed-trees` | The trees get new ids and display names, for example `wall-sweep-pair-right` for `right_harvest`. See experiments/README.md. | 809 ± 7.5 | Kept. Identical to e56 on every seed and in every field. |
+| `e58-endgame-branch` | The endgame check moves out of the executor into the TELEOP tree: a branch above the normal choice, checked every step, that picks a last launch or PARK by value | 809 ± 7.5 | Kept. Identical to e57 on every seed and in every field. Nine matches with FLOWER work, both kinds of defense, and the meta build scored the same as before, too. |
 
 Net for the planner: 736 to 800 combined on the default robots, or about +32 per alliance. The standard error of that difference is about 11.
 

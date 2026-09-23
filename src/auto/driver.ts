@@ -3,7 +3,8 @@
  * TELEOP tree. See docs/behavior-trees.md.
  *
  * The driver environment models a drive team that watches the whole FIELD. This version holds what the default tree
- * reads: the clock, the robot's config and hopper, and which tactics can make progress now.
+ * reads: the clock, the robot's config, hopper, and tactic, which tactics can make progress now, and the values that
+ * the endgame decision weighs.
  *
  * The tactic leaves drive one shared `Executor`, which keeps its state across tactics, as it did under the coach. A
  * tactic leaf ends when the executor reports that the tactic is done or blocked, on the step after it reports it.
@@ -12,7 +13,8 @@
 import { defineLeaf, loadTree, t, TreeRunner, type Registry, type TreeDef } from '../bt';
 import { NO_INPUT, type Inputs, type Sim } from '../sim/world';
 import { Defender } from './defend';
-import { TACTICS, type Executor, type FlowerId } from './executor';
+import { POINTS } from '../sim/config';
+import { TACTICS, parkLeadSec, type Executor, type FlowerId, type Tactic } from './executor';
 import { available, flowerStep } from './policy';
 import teleopDefault from './trees/teleop-default.json';
 
@@ -24,7 +26,21 @@ export const DRIVER_SCHEMA = t.object({
     flowerStartSec: t.number('s'),
     defense: t.enum('none', 'full', 'opportunistic'),
   }),
-  bots: t.object({ me: t.object({ hopper: t.object({ count: t.number(), capacity: t.number() }) }) }),
+  bots: t.object({ me: t.object({
+    hopper: t.object({ count: t.number(), capacity: t.number() }),
+    /** The executor's tactic now, which the tree chose last. */
+    tactic: t.enum(...TACTICS),
+  }) }),
+  /** The values that the endgame decision weighs. Each is computed when a tree reads it. */
+  endgame: t.object({
+    /** The seconds that the PARK needs: the drive to the LOADING ZONE plus a margin. The endgame starts then. */
+    parkLeadSec: t.number('s'),
+    /** The points from launching what the robot carries: 20 for a TIP that finishes in time, or 2 per element that stays in the CELL. */
+    launchValue: t.number(),
+    parkPoints: t.number(),
+    /** Whether the alliance still needs this robot's PARK for the SWARM ranking point. A playoff MATCH has none. */
+    parkNeededForSwarm: t.boolean(),
+  }),
   /** Whether a tactic can make progress now. Each is computed when a tree reads it. */
   available: t.object({
     /** A FLOWER action, or the pickup that the next one needs. See `flowerStep`. */
@@ -38,12 +54,13 @@ export const DRIVER_SCHEMA = t.object({
 export interface DriverEnv {
   clock: { remaining: number };
   config: { flowerStartSec: number; defense: 'none' | 'full' | 'opportunistic' };
-  bots: { me: { hopper: { count: number; capacity: number } } };
+  bots: { me: { hopper: { count: number; capacity: number }; tactic: Tactic } };
   available: { readonly flowerWork: boolean; readonly tipHive: boolean };
+  endgame: { readonly parkLeadSec: number; readonly launchValue: number; readonly parkPoints: number; readonly parkNeededForSwarm: boolean };
   executor: Executor;
   sim: Sim;
-  /** Runs the executor for this physics step, and records its inputs. Call it once per step. */
-  runExecutor(): void;
+  /** Runs the executor for this physics step, and records its inputs. Call it once per step. See `Executor.update` for `mode`. */
+  runExecutor(mode?: 'normal' | 'park' | 'lastLaunch'): void;
   /** Runs the full-time defender for this physics step, and records its inputs. */
   runDefender(): void;
   inputs: Inputs;
@@ -54,7 +71,7 @@ export interface DriverHost { executor: Executor; defender: Defender; flowerStar
 
 class DriverAdapter implements DriverEnv {
   sim!: Sim; inputs: Inputs = NO_INPUT; private dt = 0;
-  clock!: DriverEnv['clock']; config!: DriverEnv['config']; bots!: DriverEnv['bots']; available!: DriverEnv['available'];
+  clock!: DriverEnv['clock']; config!: DriverEnv['config']; bots!: DriverEnv['bots']; available!: DriverEnv['available']; endgame!: DriverEnv['endgame'];
   constructor(private readonly host: DriverHost) {}
   get executor() { return this.host.executor; }
 
@@ -63,18 +80,24 @@ class DriverAdapter implements DriverEnv {
     this.sim = sim; this.dt = dt; this.inputs = NO_INPUT;
     this.clock = { remaining: sim.timer };
     this.config = { flowerStartSec: host.flowerStartSec, defense: host.defense };
-    this.bots = { me: { hopper: { count: sim.carried.length, capacity: sim.cfg.capacity } } };
+    this.bots = { me: { hopper: { count: sim.carried.length, capacity: sim.cfg.capacity }, tactic: ex.tactic } };
     this.available = {
       get flowerWork() { return flowerStep(sim, null, ex.avoidedFlowers()) !== null; },
       get tipHive() { return available(sim, 'tip_hive'); },
     };
+    this.endgame = {
+      get parkLeadSec() { return parkLeadSec(sim); },
+      get launchValue() { return ex.launchValue(sim); },
+      parkPoints: POINTS.park,
+      get parkNeededForSwarm() { return ex.parkNeededForSwarm(sim); },
+    };
   }
 
-  runExecutor() {
+  runExecutor(mode: 'normal' | 'park' | 'lastLaunch' = 'normal') {
     const ex = this.host.executor;
     ex.opportunistic = this.host.defense === 'opportunistic';
     ex.nectarReserve = this.sim.timer < 75 ? 1 : 0; // Near the endgame, always keep a NECTAR for a FLOWER cap.
-    this.inputs = ex.update(this.sim, this.dt);
+    this.inputs = ex.update(this.sim, this.dt, mode);
   }
 
   runDefender() { this.inputs = this.host.defender.update(this.sim, this.dt); }
@@ -118,7 +141,21 @@ const flowerWork = leaf({
   },
 });
 
-export const DRIVER_REGISTRY: Registry = { envs: { driver: DRIVER_SCHEMA }, leaves: Object.fromEntries([defend, tactic, flowerWork].map(l => [l.id, l])) };
+const lastLaunch = leaf({
+  id: 'teleop.lastLaunch', version: 1, uses: ALL,
+  doc: 'The endgame\'s launch: the robot launches everything that it carries, keeps no NECTAR in reserve, and doesn\'t go back to collecting, for the rest of the MATCH. It runs until a parent halts it.',
+  params: {},
+  *run(ctx) { for (;;) { ctx.env.runExecutor('lastLaunch'); yield; } },
+});
+
+const parkNow = leaf({
+  id: 'teleop.parkNow', version: 1, uses: ALL,
+  doc: 'The endgame\'s PARK: the robot drives to its end of the LOADING ZONE and stops there. It doesn\'t change the tactic, so that a later step can still choose a last launch. It runs until a parent halts it.',
+  params: {},
+  *run(ctx) { for (;;) { ctx.env.runExecutor('park'); yield; } },
+});
+
+export const DRIVER_REGISTRY: Registry = { envs: { driver: DRIVER_SCHEMA }, leaves: Object.fromEntries([defend, tactic, flowerWork, lastLaunch, parkNow].map(l => [l.id, l])) };
 
 /** The TELEOP tree files. The catalog in D1 is seeded from them. */
 export const TELEOP_FILES: readonly unknown[] = [teleopDefault];

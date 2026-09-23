@@ -29,8 +29,8 @@ The planner code is in `src/auto/`. Before increments 2 and 3, three layers made
 - **`Executor`** in `src/auto/executor.ts` runs one of six tactics. It also contains decisions that belong to the
   policy: the endgame check that switches to PARK or a last launch, the opportunistic bump, and yielding to a partner.
 
-The coach now only hosts the two trees, and `scriptedTeleop` is gone. The executor's tactics run as TELEOP leaves, and
-its three buried decisions move into the tree in increment 4.
+The coach now only hosts the two trees, and `scriptedTeleop` is gone. The executor's tactics run as TELEOP leaves.
+Increment 4 moves its three buried decisions into the tree, and the endgame check is already there.
 
 Before increment 2, `ScriptRunner` in `src/auto/script.ts` ran AUTO. An AUTO script was a list of steps with
 timeouts, plus a clock check that jumped to the last step, which is the PARK. `buildScripts` computed most poses from
@@ -457,13 +457,20 @@ exact match is the test for increments 2 and 3.
      from the top, as the coach did. A failure would have sent the fallback on to the next branch instead.
    - **`teleop.flowerWork` picks its FLOWER again once per second** on the fallback's schedule, because the coach's
      review could change the FLOWER without changing the branch.
-   - **The endgame check stays in the executor.** It moves in increment 4, which is a measured change.
+   - **The endgame check stays in the executor.** It moved in increment 4.
 
    The driver environment holds only what the default tree reads so far: the clock, the robot's config and hopper,
    and which tactics can make progress. It grows as the buried decisions move into the tree.
 4. **Move the buried behaviors into the tree.** The endgame check, the opportunistic bump, and the partner yield become
    branches. Writes to the shared plan go through the partner channel. The defender becomes a subtree. Decision
    timing can shift here, so this increment is measured.
+   - **The endgame check. Done.** The TELEOP tree's `endgame` branch sits above the normal choice, in a fallback that
+     checks it every step. Once the time left is no more than the PARK needs, it runs a last launch if that is worth
+     more than PARK and SWARM doesn't need this robot's PARK, and PARK otherwise. The driver environment's `endgame`
+     fields hold the values, and `Executor.update` takes the decision as a mode. `e58-endgame-branch` equals
+     `e57-renamed-trees` on every seed, and nine more matches with FLOWER work, both kinds of defense, and the meta
+     build scored the same as before, in every score component.
+   - **The opportunistic bump, the partner yield, the partner channel, and the defender** are still to do.
 5. **Show the tree running,** live and in review mode, from the spans.
 6. **Edit AUTO poses on the field.** Each navigate node shows its poses as handles that you drag, with a heading
    handle. Selecting a node highlights its poses, and clicking a pose selects its node. The path preview redraws after

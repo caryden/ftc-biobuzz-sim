@@ -227,8 +227,9 @@ export class Executor {
    * Gets the points that launching the carried load earns before the MATCH ends, or 0 if the launch can't finish in
    * time. The estimate is the drive to the launch spot at 1.1 m/s, 0.8 s to settle, and 0.3 s per element. A TIP also
    * needs about 1.8 s for the HIVE to swing (measured: 1.2 s to 1.7 s from the threshold to the TIP).
+   * The TELEOP tree's endgame branch reads it: see `DriverEnv.endgame`.
    */
-  private launchValue(sim: Sim): number {
+  launchValue(sim: Sim): number {
     const own = ownNectar(sim.alliance), keep = 0, pollen = sim.carried.filter(k => k === 'pollen').length, nectar = sim.carried.filter(k => k === own).length - keep, n = pollen + nectar; if (n <= 0) return 0;
     const tgt = tipTarget(sim, 0, this.own(sim)), hive = sim.hives[sim.alliance]; if (tgt.tipPending || tgt.side !== hive.upCell) return 0;
     const p = sim.robot.translation(), spot = this.launchSpot(sim), secs = Math.hypot(spot.x - p.x, spot.z - p.z) / 1.1 + 0.8 + 0.3 * n; if (secs > sim.timer) return 0;
@@ -237,7 +238,7 @@ export class Executor {
   }
 
   /** Checks whether the alliance still needs this robot's PARK for the SWARM ranking point. A playoff MATCH has no ranking points. */
-  private parkNeededForSwarm(sim: Sim): boolean {
+  parkNeededForSwarm(sim: Sim): boolean {
     if (sim.options.playoff) return false;
     const s = sim.score(sim.alliance), mate = sim.partner(), mateParks = mate && mate.plan.phase === 'park' ? POINTS.park : 0;
     // `s.park` counts robots in the LOADING ZONE now, which can include this robot. The partner's PARK counts once.
@@ -398,22 +399,21 @@ export class Executor {
 
   private ballStill(sim: Sim, s: Source) { const b = sim.balls.get(Number(s.key.slice(5))); if (!b) return false; const q = b.body.translation(), ref = s.approach ? { x: s.approach.touch.x, z: s.approach.touch.z } : s; return q.y < 0.13 && Math.hypot(q.x - ref.x, q.z - ref.z) < (s.approach ? 0.45 : 0.25); }
 
-  /** Gets the robot inputs for this physics step. */
-  update(sim: Sim, dt: number): Inputs {
+  /**
+   * Gets the robot inputs for this physics step.
+   * @param mode What the TELEOP tree's endgame branch decided for this step. `park` runs the PARK without changing the
+   *   tactic, so that a later step can still choose a last launch. `lastLaunch` launches everything that the robot
+   *   carries and stops collecting, for the rest of the MATCH. Default: `normal`, which runs the tactic.
+   */
+  update(sim: Sim, dt: number, mode: 'normal' | 'park' | 'lastLaunch' = 'normal'): Inputs {
     this.t += dt; sim.robots[sim.me].intent = this.tactic === 'work_flower' ? `work_flower:${this.flowerId}` : this.tactic;
     const shared = sim.robots[sim.me].plan; shared.claims = this.tactic === 'tip_hive' || this.tactic.startsWith('collect') ? this.pickup.slice(0, 2).map(q => q.key) : []; shared.phase = 'other'; shared.side = null; shared.load = 0; shared.goal = null; shared.zone = this.own(sim);
     const me = sim.alliance, free = sim.cfg.capacity - sim.carried.length, carriedPollen = sim.carried.filter(k => k === 'pollen').length;
     let goal: Goal | null = null, status: Status = 'in_progress', intake: IntakeFilter = 'none', tactic = this.tactic; this.note = '';
     const buttons = { shootNectar: false, shootPollen: false, placeNectar: false, placePollen: false };
-    // Code owns the clock: PARK starts when the drive time to the LOADING ZONE says so, whatever the tactic is.
-    // Code owns the clock, and it decides by value. PARK is worth 5 points. A launch that finishes a TIP is worth 20, and
-    // a launch that doesn't is worth 2 per element in the CELL at the end of the MATCH. In a qualification MATCH, the
-    // SWARM ranking point outranks points, so a robot whose PARK the alliance still needs for it always parks.
-    if (sim.phase === 'teleop' && sim.timer <= parkLeadSec(sim)) {
-      const launchPts = this.tactic === 'tip_hive' ? this.launchValue(sim) : 0;
-      if (launchPts > POINTS.park && !this.parkNeededForSwarm(sim)) { this.endgame = true; this.tipPhase = 'launch'; this.note = `launch for ${launchPts} points, not PARK for ${POINTS.park}`; }
-      else { tactic = 'park'; this.note = 'park guard'; }
-    }
+    // The endgame: the TELEOP tree decides between a last launch and PARK, by value, and passes the decision in `mode`.
+    if (mode === 'lastLaunch') { this.endgame = true; this.tipPhase = 'launch'; this.note = 'last launch, not PARK'; }
+    else if (mode === 'park') { tactic = 'park'; this.note = 'park guard'; }
 
     const own = ownNectar(me), carriedNectar = sim.carried.filter(k => k === own).length;
     const launch = (keepNectar: number, onlyWhatTips = false) => {

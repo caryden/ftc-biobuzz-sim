@@ -3,7 +3,7 @@
  "id": "teleop-default",
  "name": "Default TELEOP policy",
  "env": "driver",
- "description": "The default TELEOP policy. A full-time defender defends for the whole period. Otherwise the robot works FLOWERS once the clock passes the FLOWER start time, then TIPS, then launches what it carries, then PARKS. It decides again when a tactic ends, and at least once per second.",
+ "description": "The default TELEOP policy. A full-time defender defends for the whole period. Otherwise, once the time left is no more than the PARK needs, the robot makes a last launch if that is worth more than PARK, and PARKS if not. Before that, it works FLOWERS once the clock passes the FLOWER start time, then TIPS, then launches what it carries, then PARKS. It decides again when a tactic ends, and at least once per second.",
  "meta": {},
  "root": {
   "fallback": {
@@ -18,59 +18,95 @@
      }
     },
     {
-     "id": "play",
-     "note": "The robot decides again whenever a tactic ends: the repeat runs the choice again from the top.",
-     "repeat": {
-      "stopOn": "never",
-      "child": {
-       "fallback": {
-        "recheckSec": 1,
-        "children": [
-         {
-          "id": "flowers",
-          "note": "FLOWER work starts when config.flowerStartSec seconds remain. 0 means TIPS only.",
-          "guard": {
-           "when": "clock.remaining < config.flowerStartSec and available.flowerWork",
-           "child": {
-            "ref": "teleop.flowerWork"
-           }
-          }
-         },
-         {
-          "id": "tip",
-          "guard": {
-           "when": "available.tipHive",
-           "child": {
-            "ref": "teleop.tactic",
-            "params": {
-             "tactic": "tip_hive"
+     "id": "match",
+     "fallback": {
+      "recheckSec": 0,
+      "children": [
+       {
+        "id": "endgame",
+        "note": "The endgame starts when the time left is no more than the PARK needs: the drive to the LOADING ZONE plus a margin. This fallback checks it every step.",
+        "guard": {
+         "when": "clock.remaining <= endgame.parkLeadSec",
+         "child": {
+          "fallback": {
+           "recheckSec": 0,
+           "children": [
+            {
+             "id": "last-launch",
+             "note": "PARK is worth 5 points. A launch that finishes a TIP is worth 20, and one that doesn't is worth 2 per element in the CELL at the end. In a qualification MATCH the SWARM ranking point outranks points, so a robot whose PARK the alliance still needs always parks. Checked every step.",
+             "guard": {
+              "when": "bots.me.tactic == 'tip_hive' and endgame.launchValue > endgame.parkPoints and not endgame.parkNeededForSwarm",
+              "child": {
+               "ref": "teleop.lastLaunch"
+              }
+             }
+            },
+            {
+             "id": "park-now",
+             "ref": "teleop.parkNow"
             }
-           }
-          }
-         },
-         {
-          "id": "launch",
-          "guard": {
-           "when": "bots.me.hopper.count > 0",
-           "child": {
-            "ref": "teleop.tactic",
-            "params": {
-             "tactic": "launch_into_hive"
-            }
-           }
-          }
-         },
-         {
-          "id": "park",
-          "note": "The executor's park guard starts the PARK on time whatever the tactic is, so this branch runs only when nothing else can make progress.",
-          "ref": "teleop.tactic",
-          "params": {
-           "tactic": "park"
+           ]
           }
          }
-        ]
+        }
+       },
+       {
+        "id": "play",
+        "note": "The robot decides again whenever a tactic ends: the repeat runs the choice again from the top.",
+        "repeat": {
+         "stopOn": "never",
+         "child": {
+          "fallback": {
+           "recheckSec": 1,
+           "children": [
+            {
+             "id": "flowers",
+             "note": "FLOWER work starts when config.flowerStartSec seconds remain. 0 means TIPS only.",
+             "guard": {
+              "when": "clock.remaining < config.flowerStartSec and available.flowerWork",
+              "child": {
+               "ref": "teleop.flowerWork"
+              }
+             }
+            },
+            {
+             "id": "tip",
+             "guard": {
+              "when": "available.tipHive",
+              "child": {
+               "ref": "teleop.tactic",
+               "params": {
+                "tactic": "tip_hive"
+               }
+              }
+             }
+            },
+            {
+             "id": "launch",
+             "guard": {
+              "when": "bots.me.hopper.count > 0",
+              "child": {
+               "ref": "teleop.tactic",
+               "params": {
+                "tactic": "launch_into_hive"
+               }
+              }
+             }
+            },
+            {
+             "id": "park",
+             "note": "The executor's park guard starts the PARK on time whatever the tactic is, so this branch runs only when nothing else can make progress.",
+             "ref": "teleop.tactic",
+             "params": {
+              "tactic": "park"
+             }
+            }
+           ]
+          }
+         }
+        }
        }
-      }
+      ]
      }
     }
    ]
