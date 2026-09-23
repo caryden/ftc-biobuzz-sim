@@ -142,7 +142,7 @@ export class FieldEditor {
   describe(fmtPos: (x: number, y: number) => string): string {
     const hs = this.handles.filter(h => h.path === this.selected);
     if (!hs.length) return this.selected ? 'This step has no pose on the FIELD.' : 'Drag a pose or its heading knob, or click a step in the tree.';
-    if (hs[0].kind === 'lane') return `${hs.length} lane points · drag one to move it`;
+    if (hs[0].kind === 'waypoint') return `${hs.length} waypoints · drag one to move it`;
     const h = hs[0], deg = wrap(h.pose.headingDeg), def = this.def, shared = def ? sharedWith(this.tree, def, h) : [];
     return `${fmtPos(h.pose.x, h.pose.y)}, heading ${deg.toFixed(1)}° · pose ${poseText(this.tree, h)}`
       + (shared.length ? ` · also used by ${shared.join(', ')}: a drag moves this step only` : '');

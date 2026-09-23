@@ -151,7 +151,7 @@ export class View {
    * A selected handle is white and larger, and an edited one has a green ring. Handles draw over the FIELD elements, so
    * that a pose under a FLOWER stays visible. An empty list clears them.
    */
-  showHandles(list: readonly { x: number; z: number; heading?: number; kind: 'drive' | 'lane'; selected: boolean; edited: boolean }[]) {
+  showHandles(list: readonly { x: number; z: number; heading?: number; kind: 'drive' | 'waypoint'; selected: boolean; edited: boolean }[]) {
     if (!this.handleGroup.parent) { this.handleGroup.renderOrder = 10; this.scene.add(this.handleGroup); }
     this.handleGroup.traverse(o => { const m = o as THREE.Mesh; if (m.isMesh || (o as THREE.Line).isLine) { m.geometry.dispose(); (m.material as THREE.Material).dispose(); } });
     this.handleGroup.clear();

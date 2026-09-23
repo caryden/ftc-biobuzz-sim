@@ -159,7 +159,7 @@ class OnboardAdapter implements OnboardEnv {
 
 /** Experiment switches for AUTO, set from a script. */
 export const AUTO_TUNING: {
-  /** For scripts/plan-sweeps.ts: replace every sweep with a wait of this many seconds, then a wait tagged `sweep`. */
+  /** For scripts/plan-sweeps.ts: replace every path tagged `sweep-ROLE` with a wait of this many seconds, then a wait tagged `sweep`. */
   sweepSnapshotDelay: number | null;
   /**
    * If true, the robot does nothing for one physics step after each AUTO step ends, as `ScriptRunner` did, and the next
@@ -168,10 +168,10 @@ export const AUTO_TUNING: {
   idleAfterStep: boolean;
   /**
    * The intake filter that AUTO starts with, until an `auto.intake` step sets one. Null leaves the intake input unset,
-   * which the simulator runs as `all`, except in a step that sets the intake itself. Default: null.
+   * which the simulator runs as `all`, as AUTO did before increment 7. Default: `none`.
    */
   intakeDefault: IntakeFilter | null;
-} = { sweepSnapshotDelay: null, idleAfterStep: true, intakeDefault: null };
+} = { sweepSnapshotDelay: null, idleAfterStep: true, intakeDefault: 'none' };
 
 // ---- Step timing ----
 
@@ -188,71 +188,28 @@ function* idle(): Behavior<null> { if (AUTO_TUNING.idleAfterStep) yield; return 
 const stepName = (path: string) => { const id = path.split('/').pop() ?? ''; const m = /^s(\d+)$/.exec(id); return m ? `step ${m[1]}` : id; };
 const begin = (e: OnboardEnv, path: string, kind: string, tag?: string) => { e.out.note = `${stepName(path)}: ${kind}`; e.out.step = tag ? { do: kind, tag } : { do: kind }; };
 
-/**
- * Drives to a pose and turns to its heading. It ends on arrival, on a full hopper if `untilFull`, or on its timeout.
- * With an `intake` filter, it runs the intake with that filter on each step. With null, it leaves the intake as it is.
- */
-function* driveStep(e: OnboardEnv, pose: Pose, intake: IntakeFilter | null, untilFull: boolean, timeoutSec: number): Behavior<null> {
+/** Drives to a pose and turns to its heading. It ends on arrival or on its timeout. */
+function* driveStep(e: OnboardEnv, pose: Pose, timeoutSec: number): Behavior<null> {
   const timer = stepTimer(e), me = () => e.bots.me; let plannedAt = -1; // `me` is rebuilt each step.
   for (;;) {
     if (timer.over(timeoutSec)) return yield* idle();
-    if (untilFull && me().hopper.full) return yield* idle();
     // The robot replans every 0.15 s, which is 36 steps at 240 steps per second.
     if (plannedAt < 0 || (e.clock.step - plannedAt) * e.clock.dt >= 0.15 - 1e-9) { me().drive.plan(pose); plannedAt = e.clock.step; }
     const cmd = me().drive.follow(pose.headingDeg);
     if (cmd.remaining < 0.05 && Math.abs(cmd.headingError) < 0.05 && me().drive.speed < 0.15) return yield* idle();
-    me().drive.send(cmd); if (intake) me().intake.set(intake);
+    me().drive.send(cmd);
     yield;
   }
 }
 
-/** Waits `timeoutSec`, or less if `unlessFull` and the hopper is full. */
-function* waitStep(e: OnboardEnv, timeoutSec: number, unlessFull: boolean): Behavior<null> {
+/** Waits `timeoutSec`. */
+function* waitStep(e: OnboardEnv, timeoutSec: number): Behavior<null> {
   const timer = stepTimer(e);
-  for (;;) { if (timer.over(timeoutSec) || (unlessFull && e.bots.me.hopper.full)) return yield* idle(); yield; }
+  for (;;) { if (timer.over(timeoutSec)) return yield* idle(); yield; }
 }
 
 const leaf = defineLeaf<OnboardEnv>();
 const NEEDS_CAMERA = ['sensors.camera'];
-
-const drive = leaf({
-  id: 'auto.drive', version: 1, uses: ['drive', 'intake'],
-  doc: 'Drives to a pose and turns to its heading, with the intake set to `intake`. It ends on arrival, on a full hopper if `untilFull`, or after `timeoutSec`.',
-  params: {
-    pose: { type: POSE, doc: 'The goal, in the alliance frame.' },
-    intake: { type: INTAKE, default: 'none' },
-    untilFull: { type: t.boolean(), default: false, doc: 'If true, ends the step as soon as the hopper is full.' },
-    timeoutSec: { type: t.number('s'), min: 0, unit: 's' },
-    tag: { type: t.string(), default: '', doc: 'A label for tools.' },
-  },
-  *run(ctx) { const p = ctx.params; begin(ctx.env, ctx.path, 'drive', p.tag || undefined); return yield* driveStep(ctx.env, p.pose, p.intake, p.untilFull, p.timeoutSec); },
-});
-
-const sweep = leaf({
-  id: 'auto.sweep', version: 1, uses: ['drive', 'intake'],
-  doc: 'Drives a list of lanes with the intake leading, each as its own drive step that ends when the hopper is full. A lane with a wall name strafes along that wall with the intake facing it. `scripts/plan-sweeps.ts` writes the lanes.',
-  params: {
-    from: { type: POSE, doc: 'Where the sweep starts. It sets the first lane\'s heading and timeout.' },
-    role: { type: t.enum('solo', 'right', 'left'), doc: 'Which of the planned lane sets `scripts/plan-sweeps.ts` writes into `lanes`.' },
-    lanes: { type: t.array(t.object({ x: t.number('m'), y: t.number('m'), wall: t.nullable(t.enum('rear', 'audience', 'red')) })), doc: 'The lane ends, in the alliance frame.' },
-  },
-  *run(ctx) {
-    const e = ctx.env;
-    if (AUTO_TUNING.sweepSnapshotDelay !== null) {
-      begin(e, ctx.path, 'wait'); yield* waitStep(e, AUTO_TUNING.sweepSnapshotDelay, false);
-      begin(e, ctx.path, 'wait', 'sweep'); return yield* waitStep(e, 30, false);
-    }
-    const facing = { rear: 90, audience: -90, red: 180 } as const;
-    let at = { x: ctx.params.from.x, y: ctx.params.from.y };
-    for (const [i, lane] of ctx.params.lanes.entries()) {
-      const { x, y, wall } = lane, dist = Math.hypot(x - at.x, y - at.y);
-      const headingDeg = wall ? facing[wall] : (Math.atan2(y - at.y, x - at.x) * 180) / Math.PI; at = { x, y };
-      begin(e, ctx.path, 'drive', i === 0 ? 'sweep' : undefined);
-      yield* driveStep(e, { x, y, headingDeg }, 'all', true, dist / 1.1 + 1.2);
-    }
-    return null;
-  },
-});
 
 const WAYPOINT = t.object({ x: t.number('m'), y: t.number('m'), headingDeg: t.nullable(t.number('deg')) });
 const driveTo = leaf({
@@ -263,7 +220,7 @@ const driveTo = leaf({
     timeoutSec: { type: t.number('s'), min: 0, unit: 's' },
     tag: { type: t.string(), default: '', doc: 'A label for tools.' },
   },
-  *run(ctx) { const p = ctx.params; begin(ctx.env, ctx.path, 'drive', p.tag || undefined); return yield* driveStep(ctx.env, p.pose, null, false, p.timeoutSec); },
+  *run(ctx) { const p = ctx.params; begin(ctx.env, ctx.path, 'drive', p.tag || undefined); return yield* driveStep(ctx.env, p.pose, p.timeoutSec); },
 });
 
 /** Where a follower moves on to the next waypoint: within this distance of it, in meters, or past it along the path. */
@@ -279,8 +236,8 @@ const followPath = leaf({
   *run(ctx) {
     const e = ctx.env, p = ctx.params, me = () => e.bots.me; // `me` is rebuilt each step.
     if (AUTO_TUNING.sweepSnapshotDelay !== null && p.tag.startsWith('sweep')) {
-      begin(e, ctx.path, 'wait'); yield* waitStep(e, AUTO_TUNING.sweepSnapshotDelay, false);
-      begin(e, ctx.path, 'wait', 'sweep'); return yield* waitStep(e, 30, false);
+      begin(e, ctx.path, 'wait'); yield* waitStep(e, AUTO_TUNING.sweepSnapshotDelay);
+      begin(e, ctx.path, 'wait', 'sweep'); return yield* waitStep(e, 30);
     }
     const wps = p.waypoints; if (!wps.length) return null;
     begin(e, ctx.path, 'follow', p.tag || undefined);
@@ -319,15 +276,12 @@ const waitHopperFull = leaf({
 });
 
 const push = leaf({
-  id: 'auto.push', version: 1, uses: ['drive', 'intake'],
-  doc: 'Pushes straight ahead with the intake on, for example against the bottom of a FLOWER. It ends when the hopper is full or after `timeoutSec`.',
-  params: { power: { type: t.number(), min: -1, max: 1 }, intake: { type: INTAKE }, timeoutSec: { type: t.number('s'), min: 0, unit: 's' } },
+  id: 'auto.push', version: 2, uses: ['drive'],
+  doc: 'Pushes straight ahead for `timeoutSec`, for example against the bottom of a FLOWER to pick up its POLLEN. It leaves the intake as it is.',
+  params: { power: { type: t.number(), min: -1, max: 1 }, timeoutSec: { type: t.number('s'), min: 0, unit: 's' } },
   *run(ctx) {
     const e = ctx.env, p = ctx.params, timer = stepTimer(e); begin(e, ctx.path, 'push');
-    for (;;) {
-      if (timer.over(p.timeoutSec) || e.bots.me.hopper.full) return yield* idle();
-      e.bots.me.drive.push(p.power); e.bots.me.intake.set(p.intake); yield;
-    }
+    for (;;) { if (timer.over(p.timeoutSec)) return yield* idle(); e.bots.me.drive.push(p.power); yield; }
   },
 });
 
@@ -373,10 +327,10 @@ const waitTip = leaf({
 });
 
 const wait = leaf({
-  id: 'auto.wait', version: 1,
-  doc: 'Waits `timeoutSec`. With `unlessFull`, a full hopper ends the wait, for a wait whose only purpose is a pickup that follows.',
-  params: { timeoutSec: { type: t.number('s'), min: 0, unit: 's' }, unlessFull: { type: t.boolean(), default: false }, tag: { type: t.string(), default: '' } },
-  *run(ctx) { begin(ctx.env, ctx.path, 'wait', ctx.params.tag || undefined); return yield* waitStep(ctx.env, ctx.params.timeoutSec, ctx.params.unlessFull); },
+  id: 'auto.wait', version: 2,
+  doc: 'Waits `timeoutSec`. To skip a wait whose only purpose is a pickup that follows, race it against `auto.waitHopperFull`.',
+  params: { timeoutSec: { type: t.number('s'), min: 0, unit: 's' }, tag: { type: t.string(), default: '' } },
+  *run(ctx) { begin(ctx.env, ctx.path, 'wait', ctx.params.tag || undefined); return yield* waitStep(ctx.env, ctx.params.timeoutSec); },
 });
 
 const waitClock = leaf({
@@ -404,7 +358,7 @@ const FNS: Record<string, FnSpec> = {
 
 export const AUTO_REGISTRY: Registry = {
   envs: { onboard: ONBOARD_SCHEMA },
-  leaves: Object.fromEntries([drive, sweep, driveTo, followPath, intake, waitHopperFull, push, shoot, waitCell, waitTip, wait, waitClock, clockAtMost].map(l => [l.id, l])),
+  leaves: Object.fromEntries([driveTo, followPath, intake, waitHopperFull, push, shoot, waitCell, waitTip, wait, waitClock, clockAtMost].map(l => [l.id, l])),
   fns: FNS,
 };
 
@@ -501,21 +455,24 @@ export function leafParams(def: TreeDef, sim: Sim): { node: CNode; params: Recor
  */
 export function previewAuto(def: TreeDef, sim: Sim, start: Pt): { path: Pt[]; poses: (Pt & { heading: number; shoots: boolean })[] } {
   const rotate = sim.alliance === 'blue', R = Math.hypot(sim.cfg.length, sim.cfg.width) / 2;
-  const leaves = leafParams(def, sim);
-  const goals: { pose: Pose; next: CNode | undefined }[] = [];
+  const leaves = leafParams(def, sim).filter(l => l.node.label !== 'auto.waitHopperFull' && l.node.label !== 'auto.intake');
+  // A goal is a pose that the planner routes to, or a waypoint that the robot drives to in a straight line.
+  const goals: { pose: Pose; planned: boolean; next: CNode | undefined }[] = [];
+  let at: { x: number; y: number } = alliancePose(start, 0, rotate);
   leaves.forEach(({ node: n, params: p }, i) => {
-    if (n.label === 'auto.drive') goals.push({ pose: p.pose as Pose, next: leaves[i + 1]?.node });
-    if (n.label === 'auto.sweep') {
-      const facing = { rear: 90, audience: -90, red: 180 } as const, from = p.from as Pose; let at = { x: from.x, y: from.y };
-      for (const l of p.lanes as { x: number; y: number; wall: keyof typeof facing | null }[]) {
-        goals.push({ pose: { x: l.x, y: l.y, headingDeg: l.wall ? facing[l.wall] : (Math.atan2(l.y - at.y, l.x - at.x) * 180) / Math.PI }, next: undefined }); at = { x: l.x, y: l.y };
-      }
+    if (n.label === 'auto.driveTo') { const pose = p.pose as Pose; goals.push({ pose, planned: true, next: leaves[i + 1]?.node }); at = pose; }
+    if (n.label === 'auto.followPath') {
+      const wps = p.waypoints as { x: number; y: number; headingDeg: number | null }[];
+      wps.forEach((w, k) => {
+        goals.push({ pose: { x: w.x, y: w.y, headingDeg: w.headingDeg ?? (Math.atan2(w.y - at.y, w.x - at.x) * 180) / Math.PI }, planned: false, next: k === wps.length - 1 ? leaves[i + 1]?.node : undefined });
+        at = w;
+      });
     }
   });
-  const path: Pt[] = [start], poses: (Pt & { heading: number; shoots: boolean })[] = []; let at = start;
-  for (const { pose, next } of goals) {
+  const path: Pt[] = [start], poses: (Pt & { heading: number; shoots: boolean })[] = []; let from = start;
+  for (const { pose, planned, next } of goals) {
     const goal = simPoint(pose, rotate);
-    path.push(...planPath(at, goal, R, [...fieldObstacles(), centerWall(rotate)]).slice(1)); at = goal;
+    path.push(...(planned ? planPath(from, goal, R, [...fieldObstacles(), centerWall(rotate)]).slice(1) : [goal])); from = goal;
     poses.push({ ...goal, heading: simHeading(pose.headingDeg, rotate), shoots: next?.label === 'auto.shoot' });
   }
   return { path, poses };
