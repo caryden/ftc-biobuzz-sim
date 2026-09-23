@@ -72,8 +72,10 @@ export const startSide = (i: number): 'right' | 'left' => (i % 2 === 0 ? 'right'
 
 /** Clamps a setup to what the simulator accepts. Only the red robots can have a human driver. */
 export function sanitize(b: BotSetup, i: number): BotSetup {
-  // A setup that was stored with the single `spreadX` multiplier maps to the three errors.
-  const old = (b as unknown as { spreadX?: number }).spreadX; if (old) b = { ...b, errElevDeg: REF_ERR.errElevDeg * old, errAzimDeg: REF_ERR.errAzimDeg * old, errSpeed: REF_ERR.errSpeed * old };
+  // A setup that was stored with the single `spreadX` multiplier maps to the three errors. The result drops `spreadX`:
+  // if it stayed, then every later call would reset the three errors, and the 1x, 3x, and 5x chips would do nothing (#8).
+  const { spreadX: old, ...rest } = b as BotSetup & { spreadX?: number }; b = rest;
+  if (old) b = { ...b, errElevDeg: REF_ERR.errElevDeg * old, errAzimDeg: REF_ERR.errAzimDeg * old, errSpeed: REF_ERR.errSpeed * old };
   const num = (v: number, lo: number, hi: number, d: number) => (Number.isFinite(v) ? Math.min(hi, Math.max(lo, v)) : d);
   return { ...b, auto: RENAMED[b.auto] ?? b.auto, plate: (b.plate || BOT_IDS[i]).trim().slice(0, 6) || BOT_IDS[i], driver: i < 2 ? b.driver : 'planner', driveRpm: Math.round(num(b.driveRpm, 100, 1200, DEFAULT_SETUP.driveRpm)), sizeIn: Math.round(num(b.sizeIn, 10, 18, DEFAULT_SETUP.sizeIn) * 10) / 10, massLb: Math.round(num(b.massLb, 10, 42, DEFAULT_SETUP.massLb) * 10) / 10,
     errElevDeg: Math.round(num(b.errElevDeg, 0, 15, REF_ERR.errElevDeg) * 100) / 100, errAzimDeg: Math.round(num(b.errAzimDeg, 0, 15, REF_ERR.errAzimDeg) * 100) / 100, errSpeed: Math.round(num(b.errSpeed, 0, 1.5, REF_ERR.errSpeed) * 1000) / 1000,
