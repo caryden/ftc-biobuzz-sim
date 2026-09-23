@@ -3,6 +3,7 @@ import type { RobotState } from '../sim/world';
 import type { Alliance } from '../sim/hive';
 import { NO_INPUT, retrievable, stackTop, type BallKind, type Flower, type Inputs, type IntakeFilter, type Sim } from '../sim/world';
 import { pursue } from './follow';
+import { Shooter } from './shooter';
 import { ballApproach, fieldObstacles, pathLength, planPath, segmentClear, type Capsule, type Pt } from './planner';
 
 export const TACTICS = ['tip_hive', 'collect_pollen', 'collect_own_nectar', 'launch_into_hive', 'work_flower', 'park'] as const;
@@ -18,7 +19,8 @@ const ownNectar = (a: Alliance): BallKind => (a === 'red' ? 'nectar_red' : 'nect
 export const FILL_TARGET = 4;
 /** Executor tuning. `standoff` picks the launch distance within the scoring range: 0 is the closest spot, 1 the farthest. */
 /** `tipByMotion`: if true, a TIP counts as under way only when the HIVE is past level or turning away from its stop. See `tipTarget`. */
-export const EXEC = { standoff: 0.4, tipByMotion: true };
+/** `turretIntakeHeading`: if true, a robot with a turret turns its intakes toward the most balls on its way to launch. See `intakeHeading`. */
+export const EXEC = { standoff: 0.4, tipByMotion: true, turretIntakeHeading: true };
 
 /**
  * How alliance partners divide the FIELD. With `sides`, the robot that starts on the left of its drivers (the second
@@ -223,6 +225,7 @@ export class Executor {
   }
   private endgame = false; private stagedReverse = { key: '', rev: false };
   private mateLoad = 0; private mateDecidedAt = -9; private launchSide: 'rear' | 'audience' | null = null; private launchCount = 0;
+  private readonly shooter = new Shooter(); private intakeAim: { at: number; heading: number | null } = { at: -1, heading: null };
   private pickup: Source[] = []; private pickupAt = -1; private pickupCost = Infinity; private pickupEnd: Pt | null = null; private staged = ''; private tipPhase: 'collect' | 'launch' = 'collect';
 
   setTactic(t: Tactic, flower: FlowerId | null) {
@@ -289,6 +292,40 @@ export class Executor {
   }
 
   private R(sim: Sim) { return Math.hypot(sim.cfg.length, sim.cfg.width) / 2; }
+
+  /**
+   * Gets the heading that points the robot's intakes at the most floor elements that the planner collects: POLLEN and
+   * own NECTAR, still, and outside the own GARDEN. Each element in an intake's corridor, as wide as the intake and up
+   * to 1.2 m ahead of it, counts more the nearer it is. A dual-sided intake counts both ends. The heading is chosen
+   * again every 0.25 s, and it changes only for one that scores 25% more, so that the robot doesn't swing between two
+   * groups. Null means no element is in reach: the robot keeps its heading.
+   */
+  private intakeHeading(sim: Sim): number | null {
+    if (this.intakeAim.at >= 0 && this.t - this.intakeAim.at < 0.25) return this.intakeAim.heading;
+    const p = sim.robot.translation(), c = sim.cfg, own = ownNectar(sim.alliance), g = FIELD.garden[sim.alliance], half = c.length / 2, reach = 1.2;
+    const balls: Pt[] = [];
+    for (const b of sim.balls.values()) {
+      const q = b.body.translation(), v = b.body.linvel();
+      if ((b.kind !== 'pollen' && b.kind !== own) || q.y > 0.13 || Math.hypot(v.x, v.z) > 1.2) continue;
+      if (q.x > g[0] - 0.05 && q.x < g[1] + 0.05 && q.z > g[2] - 0.05 && q.z < g[3] + 0.05) continue;
+      balls.push({ x: q.x - p.x, z: q.z - p.z });
+    }
+    const score = (h: number) => {
+      const fx = Math.cos(h), fz = -Math.sin(h); let sum = 0;
+      for (const b of balls) {
+        const along = b.x * fx + b.z * fz, lateral = Math.abs(-b.x * Math.sin(h) - b.z * Math.cos(h)); if (lateral > c.intake.width / 2 + 0.05) continue;
+        if (along - half >= 0 && along - half <= reach) sum += 1 / (0.25 + along - half);
+        else if (c.intake.dualSided && -along - half >= 0 && -along - half <= reach) sum += 1 / (0.25 - along - half);
+      }
+      return sum;
+    };
+    let best: number | null = null, bestScore = 0;
+    for (let k = 0; k < 24; k++) { const h = wrap((k * Math.PI) / 12), sc = score(h); if (sc > bestScore) { bestScore = sc; best = h; } }
+    const prev = this.intakeAim.heading;
+    const heading = prev !== null && best !== null && score(prev) * 1.25 >= bestScore ? prev : best;
+    this.intakeAim = { at: this.t, heading };
+    return heading;
+  }
 
   /**
    * Gets the launch pose for the raised CELL. A fixed shooter aims with the robot's heading. A turret aims itself, so
@@ -470,11 +507,11 @@ export class Executor {
       // 10 cm off its spot still launches if the predicted path enters the CELL.
       const at = Math.hypot(goal.x - p.x, goal.z - p.z) < 0.22 && (goal.heading === null || Math.abs(wrap(goal.heading - sim.heading)) < 0.08);
       const dual = sim.cfg.shooter.type === 'dual', next = dual ? (carriedPollen > 0 ? 'pollen' : 'nectar') : sim.carried[0] === 'pollen' ? 'pollen' : 'nectar';
-      // Fire-control interlock: release a shot only if the predicted path enters the CELL now and the robot is still.
-      // The HIVE must be calm too: the shot preview uses the CELL's pose now, and a CELL that rocks has moved by the time
-      // the element arrives. A sagging CELL that is still is fine.
-      const hv = sim.hives[sim.alliance], calm = !EXEC.tipByMotion || Math.abs(hv.body.angvel().x) < 0.35;
-      if (at && calm && sim.telemetry.speed < 0.2 && Math.abs(sim.robot.angvel().y) < 0.3 && sim.previewShot(next).scores) {
+      // Fire control is the shooter's: see `Shooter.canShoot`. A fixed shooter launches from its spot. A turret aims
+      // itself, so it launches as soon as the shot works, on the way to the spot, and it turns its intakes toward balls.
+      const turret = !!sim.cfg.shooter.turret;
+      if (turret && EXEC.turretIntakeHeading) goal = { ...goal, heading: this.intakeHeading(sim) };
+      if ((turret || at) && this.shooter.canShoot(sim, next, EXEC.tipByMotion)) {
         buttons.shootNectar = !dual || carriedNectar > keepNectar; buttons.shootPollen = true;
         if (onlyWhatTips && dual) {
           // The dual shooter can fire both types at once. Fire only what the TIP still needs, counting balls in

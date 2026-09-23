@@ -588,15 +588,21 @@ export class Sim {
     return { ...s, total, rp: { swarm: s.leave + s.autoPark + s.park >= RP.swarm, pollinator1: tips >= RP.pollinator1, pollinator2: tips >= RP.pollinator2 } };
   }
 
-  /** Predicts the mean shot path for the next ball, for the aiming overlay. Points are world coordinates. */
-  previewShot(kind: 'pollen' | 'nectar', pose?: { x: number; z: number; heading: number }): { points: number[][]; scores: boolean } {
+  /**
+   * Predicts the mean shot path for the next ball, for the aiming overlay and fire control. Points are world
+   * coordinates. `off` shifts the launch from its mean, in degrees of elevation and azimuth and m/s of speed, so that
+   * fire control can check the shots that are one standard deviation off.
+   */
+  previewShot(kind: 'pollen' | 'nectar', pose?: { x: number; z: number; heading: number }, off?: { elevationDeg?: number; speed?: number; yawDeg?: number }): { points: number[][]; scores: boolean } {
     const lp = kind === 'pollen' ? this.cfg.shooter.pollen : this.cfg.shooter.nectar, r = kind === 'pollen' ? FIELD.pollenRadius : FIELD.nectarRadius;
-    const m = kind === 'pollen' ? BALL.pollenMass : BALL.nectarMass, el = (lp.elevationDeg.mean * Math.PI) / 180;
+    const m = kind === 'pollen' ? BALL.pollenMass : BALL.nectarMass, el = ((off?.elevationDeg ? lp.elevationDeg.mean + off.elevationDeg : lp.elevationDeg.mean) * Math.PI) / 180;
+    const speed = off?.speed ? lp.speed.mean + off.speed : lp.speed.mean;
     // The launch direction is the robot heading, or the opposite direction for a rear-facing shooter, or a turret's aim.
-    const th = this.cfg.shooter.turret ? this.turretHeading(pose) : (pose?.heading ?? this.heading) + (this.launchesRear(pose) ? Math.PI : 0), base = pose ?? { x: this.robot.translation().x, z: this.robot.translation().z };
+    const aim = this.cfg.shooter.turret ? this.turretHeading(pose) : (pose?.heading ?? this.heading) + (this.launchesRear(pose) ? Math.PI : 0), base = pose ?? { x: this.robot.translation().x, z: this.robot.translation().z };
+    const th = off?.yawDeg ? aim + (off.yawDeg * Math.PI) / 180 : aim;
     const o = { x: base.x + Math.cos(th) * lp.offset[0], z: base.z - Math.sin(th) * lp.offset[0] };
     const rv = pose ? { x: 0, y: 0, z: 0 } : this.robot.linvel();
-    const p = [o.x, 0.02 + lp.offset[2], o.z], v = [rv.x + lp.speed.mean * Math.cos(el) * Math.cos(th), lp.speed.mean * Math.sin(el), rv.z - lp.speed.mean * Math.cos(el) * Math.sin(th)];
+    const p = [o.x, 0.02 + lp.offset[2], o.z], v = [rv.x + speed * Math.cos(el) * Math.cos(th), speed * Math.sin(el), rv.z - speed * Math.cos(el) * Math.sin(th)];
     const k = (0.5 * BALL.airDensity * Math.PI * r * r * BALL.dragCd) / m, pts: number[][] = []; let scores = false; const h = 1 / 120;
     for (let i = 0; i < 240 && p[1] > 0; i++) {
       const sp = Math.hypot(v[0], v[1], v[2]);
