@@ -60,14 +60,3 @@ export function flowerStep(sim: Sim, preferred: FlowerId | null = null, avoid: F
   if (unfinished && free > 0 && sim.carried.filter(k => k === own(sim)).length < 2 && available(sim, 'collect_own_nectar')) return { tactic: 'collect_own_nectar', flower: null };
   return null;
 }
-
-/**
- * The scripted baseline: a fixed plan with no model. It cycles TIPS until `flowerStartSec` seconds remain, and then
- * works FLOWERS. Default: 66. A value of 0 never works FLOWERS.
- */
-export function scriptedTeleop(sim: Sim, flowerStartSec = 66, avoid: FlowerId[] = []): Decision {
-  const step = sim.phase === 'teleop' && sim.timer < flowerStartSec ? flowerStep(sim, null, avoid) : null; if (step) return step;
-  if (available(sim, 'tip_hive')) return { tactic: 'tip_hive', flower: null };
-  if (sim.carried.length > 0) return { tactic: 'launch_into_hive', flower: null };
-  return { tactic: 'park', flower: null };
-}

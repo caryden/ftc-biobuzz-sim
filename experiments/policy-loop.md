@@ -90,8 +90,26 @@ Transit is about 73% of TELEOP. The changes that paid were the ones that removed
 | `e48-step-cache` | A speed change, not a planner change. Between two world steps, `Sim` reads each ball's position from Rapier once, and it counts the raised CELL's load once per alliance. `Hive` reads its angle, angular velocity, and pivot position once per step. | 820 ± 7.2 | Kept. Every per-seed score and summary field is identical to e48-step-cache-base. One MATCH on seed 11, timed by `scripts/match-timing.ts` as the mean of three runs: the planner falls from 16.99 s to 6.80 s, physics from 9.81 s to 9.56 s, and the referee from 0.29 s to 0.26 s. The MATCH falls from 27.08 s to 16.63 s. The 24-seed eval on 10 workers falls from 111 s to 73 s. |
 | `e49-random-cell-nectar` | A setup change, not a planner change. The three NECTAR that start in each raised CELL drop in at random spots drawn from the seed, and the sim runs 1.5 s of physics before the MATCH. The FIELD reset crew tosses them in, so the layout differs from MATCH to MATCH. The CAD spots put them in a row against the back skin. | 812 ± 7.7 | Kept, because it models the FIELD reset. -8.5 ± 10.3 against e48-step-cache, which is noise, so the published results stand. On six seeds that I checked, all three NECTAR roll to the back skin and stay in the CELL: only their positions across the CELL change, and the load is 4.95 on every seed. |
 | `e49-fixed-cell-check` | `FIXED_CELL=1`, which sets `STAGING.randomCellNectar` to false | 820 ± 7.2 | Identical to e48-step-cache in every field, so the switch restores the old layout. |
+| `e50-baseline-main` | The baseline again, on the public repository's `main` | 820 ± 7.2 | The reference for e51. It ran on commit `89c2f2e`, before the random CELL NECTAR of e49-random-cell-nectar. Identical to e47 on all 24 seeds, so the code hasn't changed since e47. |
+| `e51-script-counts-steps` | `ScriptRunner` times each AUTO step and its 0.15 s replanning by counting physics steps, where it added `dt` on every step. The sum drifted, so 7 of the 16 timeout lengths in the scripts, including 2.5 s, 3 s, and 4 s, ended one step early. | 802 ± 9 | Kept for the timing, not for points. -18.0 ± 9.5 is under the 20-point threshold, but 18 of 24 seeds went down. AUTO falls from 172.2 to 167.4. Exact timing lets the AUTO trees of docs/behavior-trees.md match the script runner step for step. See [How much AUTO depends on 4 ms](#how-much-auto-depends-on-4-ms). |
+| `e52-auto-trees` | AUTO runs as behavior trees in `src/auto/trees/`, which replace `ScriptRunner` and `buildScripts`. See docs/behavior-trees.md. | 802 ± 9 | Kept. Identical to e51 on every seed. A separate check ran each tree alongside the script runner and found the same inputs on every physics step of 45 AUTO periods. |
+| `e53-coach-counts-steps` | The coach's once-per-second TELEOP review counts physics steps, where it added `dt` on every step. Under the sum, 114 of a MATCH's 150 timed reviews came 241 steps apart, and 35 came at 240. | 803 ± 7.9 | Kept. +0.5 ± 2.7, no measurable effect. The TELEOP tree's reactive fallback counts exactly, so it needs this change to match the coach. |
+| `e54-teleop-tree` | TELEOP runs as the behavior tree `src/auto/trees/teleop_default.json`, which replaces the coach's decision code and `scriptedTeleop`. See docs/behavior-trees.md. | 803 ± 7.9 | Kept. Identical to e53 on every seed. A separate check ran the tree alongside the coach's old code and found the same inputs on every physics step of full matches. |
+| `e55-old-planner-reference` | The reference for e56: `main` at `3ca1eb9`, with random CELL NECTAR, plus the two timing fixes of e51 and e53 on the old planner code | 809 ± 7.5 | The reference. -2.7 against e49-random-cell-nectar, so on the random layout the two timing fixes together cost nothing measurable. |
+| `e56-trees-on-random-nectar` | Both trees, merged with `main` at `3ca1eb9` | 809 ± 7.5 | Kept. Identical to e55 on every seed and in every field. |
+| `e57-renamed-trees` | The trees get new ids and display names, for example `wall-sweep-pair-right` for `right_harvest`. See experiments/README.md. | 809 ± 7.5 | Kept. Identical to e56 on every seed and in every field. |
 
 Net for the planner: 736 to 800 combined on the default robots, or about +32 per alliance. The standard error of that difference is about 11.
+
+## How much AUTO depends on 4 ms
+
+e51 changed when some AUTO steps end by one physics step, which is 4 ms. That changed AUTO in 10 of the 24 seeds. In 9
+of them, an alliance made one or two AUTO TIPS more or fewer. Over the 24 seeds, AUTO lost 115 points: 3 alliances
+gained points and 8 lost them. The choreography was tuned on the drifting timer, so some of its timing sat on
+an edge that the drift happened to be on the good side of.
+
+A real robot's timing varies by far more than 4 ms from one MATCH to the next. So a single seed's AUTO score says
+little about a choreography, and a change to AUTO needs all 24 seeds.
 
 ## How fast the HIVE tips
 

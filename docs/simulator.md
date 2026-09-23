@@ -17,9 +17,10 @@ friction, and damping are estimates.
 
 ## Program drivers
 
-Code drives the robot and presses the buttons. A decision maker picks what to
-work on. `src/auto/executor.ts` runs six tactics: `tip_hive`, `collect_pollen`,
-`collect_own_nectar`, `launch_into_hive`, `work_flower`, and `park`.
+Code drives the robot and presses the buttons. A behavior tree picks what to work on: an AUTO tree in AUTO, and the
+default TELEOP tree in TELEOP. For how the trees work, see [Behavior-tree policies](behavior-trees.md). In TELEOP,
+`src/auto/executor.ts` runs the tactic that the tree picks: `tip_hive`, `collect_pollen`, `collect_own_nectar`,
+`launch_into_hive`, `work_flower`, or `park`.
 
 - **`tip_hive`** collects only the POLLEN that the next TIP needs. It counts
   balls in flight, and when a TIP is certain it collects for the opposite CELL.
@@ -34,7 +35,7 @@ work on. `src/auto/executor.ts` runs six tactics: `tip_hive`, `collect_pollen`,
   preference. `nectarReserve` keeps one NECTAR in hand for a FLOWER cap. The policy sets it when 75
   seconds remain.
 - **Stalls.** If the robot makes no progress toward a target, the executor backs away, avoids that target for 7
-  to 12 seconds, and reports `blocked` with a reason, for example "another robot is in the way". The coach then
+  to 12 seconds, and reports `blocked` with a reason, for example "another robot is in the way". The TELEOP tree then
   picks something else. Inside 0.56 m, robots also push straight away from each other, so they don't wedge.
 - **Shooter.** The shooter has a fixed azimuth, with no turret. The default
   shooter faces the rear of the robot, opposite the intake.
@@ -49,8 +50,8 @@ work on. `src/auto/executor.ts` runs six tactics: `tip_hive`, `collect_pollen`,
 
 | Period | Decision maker | Setting |
 | --- | --- | --- |
-| AUTO | A pure script in `AUTO_SCRIPTS`, for every robot | **AUTO plan** in the robot config |
-| TELEOP | The scripted policy in `src/auto/policy.ts`: TIPS, and FLOWERS from the time that **TELEOP plan** sets | **Driver**: Planner |
+| AUTO | A behavior tree in `src/auto/trees/`, for every robot | **AUTO plan** in the robot config |
+| TELEOP | The default TELEOP tree, `src/auto/trees/teleop-default.json`: TIPS, and FLOWERS from the time that **TELEOP plan** sets | **Driver**: Planner |
 | TELEOP | A person with controller 1 or controller 2. Only the red robots can have a human driver. | **Driver**: Controller 1 or Controller 2 |
 
 ### Robot config
@@ -77,23 +78,36 @@ every visit, until you configure a robot. R0, R1, B0, and B1 stay the robot ids 
 setups. `src/setup.ts` turns a setup into a `RobotConfig`: the rpm changes the gear ratio of
 the same motor, so the stall torque scales inversely, and the size scales the wheelbase, the track, and the intake.
 
-### AUTO scripts
+### AUTO trees
 
-An AUTO script in `src/auto/script.ts` is a fixed list of steps: `drive` to a
-pose, `push` with the intake on for a set time, `shoot` a count open loop,
-`wait`, `waitUntil` a clock time, `waitCell` until the camera reads a CELL as raised, and `waitTip` until the camera
-sees that CELL tip. The `ScriptRunner` reads only the robot's own pose, its carried count,
-and the clock. It doesn't read ball, FLOWER, or robot positions. Paths avoid the fixed FIELD elements and a
-virtual wall on the FIELD center line, so each robot stays on its own side
+Each AUTO plan is a behavior tree in `src/auto/trees/`. It runs in the onboard environment of `src/auto/onboard.ts`,
+which has what an OpMode can know: the robot's own pose, its carried count, its size, the clock, and the camera. It
+has no ball, FLOWER, or robot positions. For how trees work, see [Behavior-tree policies](behavior-trees.md).
+
+A tree is a list of steps, and each step is a leaf:
+
+- **`auto.drive`** drives to a pose. **`auto.sweep`** drives a list of planned lanes.
+- **`auto.push`** pushes with the intake on, and **`auto.shoot`** launches a count open loop.
+- **`auto.wait`** waits, and **`auto.waitClock`** waits until a clock time.
+- **`auto.waitCell`** waits until the camera reads a CELL as raised, and **`auto.waitTip`** until it sees that CELL tip.
+
+Each step ends on its condition or its timeout. The robot then does nothing for one physics step, as a state machine
+that advances on its next loop does. A tree that ends with a PARK races its steps against the clock, so that the PARK
+starts in time whatever step is running. Poses are expressions over the robot's size and shooter direction, so one
+tree fits every robot. Each step's note in the tree file says why the step is there.
+
+Paths avoid the fixed FIELD elements and a virtual wall on the FIELD center line, so each robot stays on its own side
 (G402). A blue robot mirrors the red poses through the FIELD center. One sensor is modeled: a Limelight 3A that reads
 the AprilTag cluster under each CELL, so a `waitCell` step or a `shoot` step with a `cell` holds until the camera
 reads that CELL as raised. `src/sim/camera.ts` applies the camera's 54.5° by 42° field of view, a range limit, and
 a grazing-angle limit. The camera sits on the shooter side, 0.30 m up and pitched 50°, which frames the raised
-CELL's tags from both launch spots. The camera reads the HIVE, not the balls, and only AUTO uses it. The sweeps are blind but planned from data: `scripts/plan-sweeps.ts` records where spilled balls come to rest over
-many simulated AUTO periods, prints a heatmap, and searches for the waypoints in `src/auto/sweep-lanes.json` that
-collect the most. Lanes lead with the intake, except along a wall, where the robot faces the wall and strafes. The page
-projects the script onto the FIELD as a dashed orange line, with a wedge at
-each pose and a red ring where the robot shoots.
+CELL's tags from both launch spots. The camera reads the HIVE, not the balls, and only AUTO uses it.
+
+The sweeps are blind but planned from data: `scripts/plan-sweeps.ts` records where spilled balls come to rest over
+many simulated AUTO periods, prints a heatmap, searches for the lanes that collect the most, and writes them into the
+sweep steps of the trees. Lanes lead with the intake, except along a wall, where the robot faces the wall and strafes.
+The page projects the tree onto the FIELD as a dashed orange line, with a wedge at each pose and a red ring where the
+robot shoots.
 
 ### Alliance partners
 
@@ -117,9 +131,10 @@ shared `plan`, the way drive teams talk:
 - **Yield and swap.** When both partners head for the same CELL, the one with the smaller load waits until the other is
   lined up. If each arrives on the other's launch spot, they swap spots.
 - **FLOWERS.** A FLOWER that the partner works on is taken.
-- **AUTO.** `right_harvest` and `left_harvest` are the default pair, named by start position as the drivers see it.
-  They sweep walls at 30° toward the wall, wait for a spill to land, and take the pocket behind the launch spot.
-  `right_cycle` and `left_cycle` are the earlier pair, with lane sweeps.
+- **AUTO.** The wall-sweep pair is the default: `wall-sweep-pair-right` and `wall-sweep-pair-left`, one half per
+  start position as the drivers see it. They sweep walls at 30° toward the wall, wait for a spill to land, and take the
+  pocket behind the launch spot. The lane-sweep pair is the earlier pair, with lane sweeps. Each half waits for its
+  partner's TIP, so a half runs well only with its own partner.
   The right robot (R0 or B0) starts on the alliance wall and takes the first TIP. The left robot (R1 or B1) starts on
   the rear wall for red, which is the audience wall for blue, and fills the CELL that the first TIP raises. Both robots
   score LEAVE and AUTO PARK, which earns the SWARM ranking point.
@@ -127,7 +142,7 @@ shared `plan`, the way drive teams talk:
 
 ### Opponent robots
 
-The blue robots run the same AUTO scripts and the same TELEOP policy as the red robots, with their own robot
+The blue robots run the same AUTO trees and the same TELEOP policy as the red robots, with their own robot
 configs. Robots collide with each other, and each planner treats the other robots as obstacles. To compare
 scripted strategies against the blue alliance, run `npx tsx scripts/sweep.ts`.
 

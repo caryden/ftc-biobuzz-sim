@@ -14,7 +14,7 @@ const g = spec.global ?? {}; if (g.margin !== undefined) PLAN.margin = g.margin;
 await RAPIER.init();
 const side = (a: 'red' | 'blue'): Side => spec[a] ?? {};
 const sim = new Sim(RAPIER, undefined, 'full', seed, { opponent: true, partners: true, configFor: (a, slot) => { const c = robotConfig(defaultBot((a === 'red' ? 0 : 2) + slot)); side(a).cfg?.(c, slot); return c; } });
-const coaches = sim.robots.map(r => { const s = side(r.alliance), c = new Coach(); c.flowerStartSec = s.flowerStart?.[r.slot] ?? 0; c.autoOverride = s.auto?.[r.slot] ?? null; c.scriptTuning = s.tuning ?? {}; return c; });
+const coaches = sim.robots.map(r => { const s = side(r.alliance), c = new Coach(); c.flowerStartSec = s.flowerStart?.[r.slot] ?? 0; c.autoOverride = s.auto?.[r.slot] ?? null; return c; });
 sim.start(); let stalls = 0; const seen = new Set<string>(); let auto: Record<string, number> | null = null, hopper = 0;
 while (sim.phase !== 'post') {
   sim.step(coaches.map((c, i) => (sim.phase === 'auto' && c.autoOverride === 'none' ? NO_INPUT : c.update(sim.view(i), DT))), coaches.map(() => true));

@@ -10,7 +10,7 @@ import { DT, Sim, flowerHeights } from '../src/sim/world';
 beforeAll(async () => { await RAPIER.init(); });
 
 /** Runs a one-robot match: a pure AUTO script, then the scripted TELEOP baseline. */
-export function runScripted(mode: 'full' | 'teleop', routine = 'cycle_and_park', seed = 3) {
+export function runScripted(mode: 'full' | 'teleop', routine = 'solo-two-tip-sweep', seed = 3) {
   const sim = new Sim(RAPIER, undefined, mode, seed), coach = new Coach();
   coach.flowerStartSec = 66; coach.autoRoutine = routine; sim.start(); // This test covers FLOWER work.
   while (sim.phase !== 'post') sim.step(coach.update(sim, DT), true);

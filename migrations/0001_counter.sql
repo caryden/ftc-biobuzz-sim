@@ -1,3 +1,5 @@
+-- The first migration: the match counter's tables, which existed before migrations did. Every statement is idempotent,
+-- so applying it to the live database changes nothing.
 -- The match counter of the site. It starts at the number of matches that we had simulated when the counter went live on
 -- September 21, 2026: 2,304 in experiments/results.jsonl and 1,164 in experiments/policy-loop.jsonl.
 CREATE TABLE IF NOT EXISTS counter (name TEXT PRIMARY KEY, n INTEGER NOT NULL);

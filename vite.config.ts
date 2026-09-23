@@ -1,6 +1,9 @@
+/// <reference types="vitest/config" />
+import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { defineConfig, type Plugin } from 'vite';
+import { configDefaults } from 'vitest/config';
 
 /**
  * Saves match traces and annotations into the repository's traces/ folder, so that they can be read from disk later.
@@ -35,4 +38,30 @@ function folderIndex(): Plugin {
 }
 
 // src/main.ts awaits the physics engine at the top level, which needs an ES2022 target: Chrome 89, Firefox 89, Safari 15.
-export default defineConfig({ plugins: [folderIndex(), traceStore()], build: { target: 'es2022', rollupOptions: { input: { home: 'index.html', sim: 'sim/index.html' } } } });
+/**
+ * Writes trees/catalog.json into the build: every tree file in src/auto/trees/, with its text and its SHA-256, and one
+ * hash over the whole set. The file ships in the same deployment as the code that runs the trees, and
+ * functions/api/trees.js copies it into the D1 catalog, so that the catalog's system rows always match the live code.
+ */
+function treeCatalog(): Plugin {
+  const sha = (s: string) => crypto.createHash('sha256').update(s).digest('hex');
+  return {
+    name: 'tree-catalog',
+    generateBundle() {
+      const dir = path.resolve('src/auto/trees'), kinds: Record<string, string> = { onboard: 'auto', driver: 'teleop' };
+      const trees = fs.readdirSync(dir).filter(f => f.endsWith('.json')).sort().map(f => {
+        const text = fs.readFileSync(path.join(dir, f), 'utf8'), t = JSON.parse(text);
+        if (!kinds[t.env]) throw new Error(`${f}: no catalog kind for the environment '${t.env}'`);
+        return { id: t.id, kind: kinds[t.env], env: t.env, name: t.name, description: t.description ?? '', meta: t.meta ?? {}, hash: sha(text), json: text };
+      });
+      const hash = sha(trees.map(t => `${t.id}:${t.hash}`).join('\n'));
+      this.emitFile({ type: 'asset', fileName: 'trees/catalog.json', source: JSON.stringify({ version: 1, hash, trees }) });
+    },
+  };
+}
+
+export default defineConfig({
+  plugins: [folderIndex(), traceStore(), treeCatalog()], build: { target: 'es2022', rollupOptions: { input: { home: 'index.html', sim: 'sim/index.html' } } },
+  // Agent sessions can keep git worktrees in .claude/worktrees/, each with its own copy of the tests.
+  test: { exclude: [...configDefaults.exclude, '.claude/**'] },
+});

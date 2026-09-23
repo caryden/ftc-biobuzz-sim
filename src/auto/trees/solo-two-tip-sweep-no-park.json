@@ -1,0 +1,157 @@
+{
+ "kind": "bt.tree",
+ "id": "solo-two-tip-sweep-no-park",
+ "name": "Solo: two TIPS and sweep, no PARK",
+ "env": "onboard",
+ "description": "Two TIPS and the sweeps, without the PARK. It leaves the LOADING ZONE to a partner.",
+ "meta": {
+  "start": "any"
+ },
+ "defs": {
+  "len": "bots.me.dimensions.length",
+  "flip": "if(bots.me.shooter.facing == 'front', 180, 0)",
+  "hiveX": "-0.3237",
+  "stand": "len / 2 + field.flowerHalfSize + 0.02",
+  "launchAudience": "pose(hiveX, 1.32, -90 + flip)",
+  "launchRear": "pose(hiveX, -1.32, 90 + flip)",
+  "ownFlower": "pose(-1.7282 + stand, 0.5942, 180)",
+  "rearFlower": "pose(-0.5942, -1.7282 + stand, 90)"
+ },
+ "root": {
+  "sequence": {
+   "children": [
+    {
+     "id": "s1",
+     "ref": "auto.drive",
+     "params": {
+      "pose": "launchAudience",
+      "timeoutSec": 4
+     }
+    },
+    {
+     "id": "s2",
+     "note": "The raised CELL starts with 3 NECTAR, so the third POLLEN tips the HIVE. The fourth stays for the next CELL.",
+     "ref": "auto.shoot",
+     "params": {
+      "count": 3,
+      "timeoutSec": 2.5
+     }
+    },
+    {
+     "id": "s3",
+     "ref": "auto.drive",
+     "params": {
+      "pose": "offset(ownFlower, 0.2, 0)",
+      "timeoutSec": 3.5
+     }
+    },
+    {
+     "id": "s4",
+     "ref": "auto.drive",
+     "params": {
+      "pose": "ownFlower",
+      "intake": "pollen",
+      "timeoutSec": 1.5
+     }
+    },
+    {
+     "id": "s5",
+     "ref": "auto.push",
+     "params": {
+      "power": 0.35,
+      "intake": "pollen",
+      "timeoutSec": 2.2
+     }
+    },
+    {
+     "id": "s6",
+     "ref": "auto.drive",
+     "params": {
+      "pose": "launchRear",
+      "timeoutSec": 5
+     }
+    },
+    {
+     "id": "s7",
+     "ref": "auto.shoot",
+     "params": {
+      "count": 4,
+      "timeoutSec": 4,
+      "cell": "rear"
+     }
+    },
+    {
+     "id": "s8",
+     "ref": "auto.drive",
+     "params": {
+      "pose": "offset(rearFlower, 0, 0.2)",
+      "timeoutSec": 3
+     }
+    },
+    {
+     "id": "s9",
+     "ref": "auto.drive",
+     "params": {
+      "pose": "rearFlower",
+      "intake": "pollen",
+      "timeoutSec": 1.5
+     }
+    },
+    {
+     "id": "s10",
+     "ref": "auto.push",
+     "params": {
+      "power": 0.35,
+      "intake": "pollen",
+      "timeoutSec": 2.2
+     }
+    },
+    {
+     "id": "s11",
+     "ref": "auto.drive",
+     "params": {
+      "pose": "launchRear",
+      "timeoutSec": 3
+     }
+    },
+    {
+     "id": "s12",
+     "ref": "auto.shoot",
+     "params": {
+      "count": 4,
+      "timeoutSec": 3
+     }
+    },
+    {
+     "id": "s13",
+     "note": "From the rear launch spot the camera can't see the audience CELL, so the robot can't watch the TIP finish. It waits 1.5 s for the spill to land instead.",
+     "ref": "auto.wait",
+     "params": {
+      "timeoutSec": 1.5
+     }
+    },
+    {
+     "id": "s14",
+     "note": "A blind sweep: a TIP spills the CELL where the robot can't see. scripts/plan-sweeps.ts records where the spill comes to rest over many simulated matches and writes the lanes that collect the most. Each lane ends early once the hopper is full.",
+     "ref": "auto.sweep",
+     "params": {
+      "from": "launchRear",
+      "role": "solo",
+      "lanes": [
+       {
+        "x": -0.515,
+        "z": -0.965,
+        "wall": null
+       },
+       {
+        "x": -1.565,
+        "z": -0.965,
+        "wall": null
+       }
+      ]
+     }
+    }
+   ]
+  }
+ }
+}

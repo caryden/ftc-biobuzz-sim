@@ -1,11 +1,13 @@
 // Plans the blind AUTO sweeps from data. For each role it runs many simulated AUTO periods, records where the
 // collectable balls rest at the instant the sweep begins, prints a heatmap, and searches for the waypoints that
-// collect the most balls with the intake leading. It writes src/auto/sweep-lanes.json.
+// collect the most balls with the intake leading. It writes the lanes into every `auto.sweep` leaf of the AUTO trees in
+// src/auto/trees/, by the leaf's `role`.
 // Run: npx tsx scripts/plan-sweeps.ts [seeds=30]
 import RAPIER from '@dimforge/rapier3d-compat';
 import fs from 'node:fs';
 import { segmentClear } from '../src/auto/planner';
 import { Coach } from '../src/auto/coach';
+import { AUTO_TUNING } from '../src/auto/onboard';
 import { FIELD, HIVE } from '../src/sim/config';
 import { DT, Sim } from '../src/sim/world';
 
@@ -26,11 +28,12 @@ function snapshots(partners: boolean): Record<string, Snap[]> {
   for (let k = 0; k < seeds; k++) {
     const sim = new Sim(RAPIER, undefined, 'full', 1000 + 7 * k, { opponent: true, partners }); sim.start();
     // The robot waits 2.5 s where its sweep would start, so the snapshot shows where the latest spill comes to rest.
-    const coaches = sim.robots.map(() => { const c = new Coach(); c.scriptTuning = { sweepSnapshotDelay: 2.5 }; return c; }), taken = new Set<number>();
+    AUTO_TUNING.sweepSnapshotDelay = 2.5;
+    const coaches = sim.robots.map(() => new Coach()), taken = new Set<number>();
     while (sim.phase === 'auto') {
       sim.step(coaches.map((c, i) => c.update(sim.view(i), DT)), coaches.map(() => true));
       coaches.forEach((c, i) => {
-        const step = c.script?.script.steps[c.script.index]; if (taken.has(i) || !step || step.do !== 'wait' || step.tag !== 'sweep') return; taken.add(i);
+        const step = c.auto?.step; if (taken.has(i) || !step || step.do !== 'wait' || step.tag !== 'sweep') return; taken.add(i);
         const r = sim.robots[i], m = r.alliance === 'blue' ? -1 : 1, own = r.alliance === 'red' ? 'nectar_red' : 'nectar_blue', g = FIELD.garden.red, p = r.body.translation();
         // Blue robots are mirrored into the red frame, which doubles the data.
         const balls = [...sim.balls.values()].filter(b => (b.kind === 'pollen' || b.kind === own) && b.body.translation().y < 0.13).map(b => ({ x: m * b.body.translation().x, z: m * b.body.translation().z }))
@@ -84,14 +87,25 @@ function plan(snaps: Snap[], parkAt: Pt | null, keep: (q: Pt) => boolean): { lan
   return { lanes: best.path.slice(1).map((q, i) => { const w = wallOf(best.path[i], q); return w ? [+q.x.toFixed(3), +q.z.toFixed(3), w] : [+q.x.toFixed(3), +q.z.toFixed(3)]; }), mean: snaps.reduce((s, sn) => s + collected(best.path, sn), 0) / snaps.length };
 }
 
-const park = { x: -(FIELD.half - 0.43 / 2 - 0.06), z: -0.9 }, all = { ...snapshots(false), ...snapshots(true) }, out: Record<string, unknown> = { note: 'Sweep waypoints in red-alliance field meters, written by scripts/plan-sweeps.ts from simulated spill snapshots.' };
+const park = { x: -(FIELD.half - 0.43 / 2 - 0.06), z: -0.9 }, all = { ...snapshots(false), ...snapshots(true) }, out: Record<string, (number | string)[][]> = {};
 void HIVE;
 for (const role of ['solo', 'right', 'left']) {
   const snaps = all[role] ?? []; if (!snaps.length) { console.log(`\n${role}: no script reached its sweep`); continue; }
   console.log(`\n=== ${role}: ${snaps.length} snapshots, sweep starts at clock ${(snaps.reduce((s, q) => s + q.clock, 0) / snaps.length).toFixed(1)} s with ${(snaps.reduce((s, q) => s + q.free, 0) / snaps.length).toFixed(1)} free slots, ${(snaps.reduce((s, q) => s + q.balls.length, 0) / snaps.length).toFixed(1)} collectable balls on the own side`);
   // Partners keep to their own half of the alliance's side, so their sweeps never cross: the lead robot works the
   // audience half and its partner the rear half. A solo robot may go anywhere on its side.
-  heatmap(snaps); const p = plan(snaps, park, q => (role === 'right' ? q.z > 0.3 : role === 'left' ? q.z < -0.3 : true)); out[role] = p.lanes;
+  heatmap(snaps); const p = plan(snaps, park, q => (role === 'right' ? q.z > 0.3 : role === 'left' ? q.z < -0.3 : true)); out[role] = p.lanes as (number | string)[][];
   console.log(`planned lanes ${JSON.stringify(p.lanes)} collect ${p.mean.toFixed(2)} balls per sweep in the snapshots`);
 }
-const prev = JSON.parse(fs.readFileSync('src/auto/sweep-lanes.json', 'utf8')); fs.writeFileSync('src/auto/sweep-lanes.json', JSON.stringify({ ...prev, ...out }, null, 1));
+// Write each role's lanes into the sweeps of that role, in every tree. A role with no snapshots keeps its lanes.
+for (const file of fs.readdirSync('src/auto/trees').filter(f => f.endsWith('.json'))) {
+  const path = `src/auto/trees/${file}`, tree = JSON.parse(fs.readFileSync(path, 'utf8')); let changed = 0;
+  const visit = (n: unknown) => {
+    if (typeof n !== 'object' || n === null) return;
+    const node = n as { ref?: string; params?: { role?: string; lanes?: unknown } };
+    if (node.ref === 'auto.sweep' && node.params?.role && out[node.params.role]) { node.params.lanes = out[node.params.role].map(([x, z, wall]) => ({ x, z, wall: wall ?? null })); changed++; }
+    Object.values(n).forEach(visit);
+  };
+  visit(tree.root);
+  if (changed) { fs.writeFileSync(path, JSON.stringify(tree, null, 1) + '\n'); console.log(`wrote ${changed} sweeps in ${path}`); }
+}
