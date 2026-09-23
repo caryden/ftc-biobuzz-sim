@@ -37,18 +37,25 @@ export class LiveTreeState {
   }
 }
 
+/** Options of the tree view in the field editor: the selected node, and the nodes that have handles on the FIELD. */
+export interface TreeEdit { selected: string | null; editable: ReadonlySet<string> }
+
 export class TreePanel {
-  private lastLeaf = ''; private lastHtml = '';
+  private lastLeaf = ''; private lastHtml = ''; private lastSel: string | null = null;
   constructor(private readonly body: HTMLElement, private readonly head: HTMLElement) {}
 
-  /** Draws a tree, or a message when there is none. */
-  paint(title: string, def: TreeDef | null, state: TreeState | null, message = 'No tree is running.') {
+  /**
+   * Draws a tree, or a message when there is none.
+   * @param edit In the field editor, the selection. A row with handles gets the class `ed`, and the selected row `sel`.
+   */
+  paint(title: string, def: TreeDef | null, state: TreeState | null, message = 'No tree is running.', edit?: TreeEdit) {
     this.head.textContent = title;
     if (!def || !state) { this.set(`<div class="tv-empty">${esc(message)}</div>`); this.lastLeaf = ''; return; }
     const rows: string[] = []; let deepest = '';
     const walk = (n: CNode, depth: number) => {
       const code = state.last.get(n.idx), running = state.running.has(n.idx);
-      const cls = running ? 'run' : code === undefined ? '' : code === 's' ? 'ok' : code.startsWith('f') ? 'fail' : code === 'h' ? 'halt' : 'err';
+      const cls = (running ? 'run' : code === undefined ? '' : code === 's' ? 'ok' : code.startsWith('f') ? 'fail' : code === 'h' ? 'halt' : 'err')
+        + (edit?.editable.has(n.path) ? ' ed' : '') + (edit?.selected === n.path ? ' sel' : '');
       // A single child's path segment is its parent's key, such as `child`, which says nothing, so it isn't shown.
       const name = n.leaf ? n.label.replace(/^(auto|teleop)\./, '') : n.kind, id = segment(n), idText = id !== n.kind && id !== n.label && !['child', 'cleanup', 'otherwise'].includes(id) ? id : '';
       const result = running ? 'running' : code === undefined ? '' : code === 's' ? 'done' : code.startsWith('f:') ? code.slice(2) || 'failed' : code === 'h' ? 'halted' : 'error';
@@ -64,6 +71,9 @@ export class TreePanel {
     // Keep the running leaf in view when it changes, without fighting a reader who scrolls.
     if (deepest && deepest !== this.lastLeaf) this.body.querySelector(`[data-path="${CSS.escape(deepest)}"]`)?.scrollIntoView({ block: 'nearest' });
     this.lastLeaf = deepest;
+    const sel = edit?.selected ?? null;
+    if (sel && sel !== this.lastSel) this.body.querySelector(`[data-path="${CSS.escape(sel)}"]`)?.scrollIntoView({ block: 'nearest' });
+    this.lastSel = sel;
   }
 
   /** Replaces the outline only when it changed, so that a tooltip under the pointer stays open and a click lands. */

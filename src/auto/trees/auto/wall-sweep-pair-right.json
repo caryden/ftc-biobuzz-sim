@@ -13,14 +13,14 @@
   "flip": "if(bots.me.shooter.facing == 'front', 180, 0)",
   "hiveX": "-0.3237",
   "stand": "len / 2 + field.flowerHalfSize + 0.02",
-  "launchAudience": "pose(hiveX, 1.32, -90 + flip)",
-  "launchRear": "pose(hiveX, -1.32, 90 + flip)",
-  "ownFlower": "pose(-1.7282 + stand, 0.5942, 180)",
-  "park": "pose(-(field.half - len / 2 - 0.09), -0.8954, 180)",
-  "parkRight": "pose(park.x, -0.8954 + 0.33, park.headingDeg)",
+  "launchAudience": "pose(hiveX, -1.32, -90 + flip)",
+  "launchRear": "pose(hiveX, 1.32, 90 + flip)",
+  "ownFlower": "pose(-1.7282 + stand, -0.5942, 180)",
+  "park": "pose(-(field.half - len / 2 - 0.09), 0.8954, 180)",
+  "parkRight": "pose(park.x, 0.8954 - 0.33, park.headingDeg)",
   "wallStand": "field.half - len / 2 - 0.035",
   "yaw": "rad(30)",
-  "wallZ": "field.half - (len / 2) * sin(yaw) - (len / 2) * cos(yaw) - 0.015",
+  "wallReach": "field.half - (len / 2) * sin(yaw) - (len / 2) * cos(yaw) - 0.015",
   "sweepFrom": "-(len / 2) * cos(yaw) - (len / 2) * sin(yaw) - 0.02"
  },
  "root": {
@@ -117,11 +117,7 @@
            "note": "An angled wall sweep: the robot yaws 30 degrees toward the wall, puts its wall-side front corner 1.5 cm from the wall, and drives toward the drivers' corner. The intake is 4.5 cm narrower than the chassis on each side, so a robot that is square to its path never reaches a ball on the wall. At 30 degrees the wall line crosses the front of the intake. The sweep starts as near the center line as G402 allows. The first TIP's spill rests along the audience wall, and the corner holds staged POLLEN.",
            "ref": "auto.drive",
            "params": {
-            "pose": {
-             "x": "sweepFrom",
-             "z": "1 * wallZ",
-             "headingDeg": -150
-            },
+            "pose": "pose(sweepFrom, -wallReach, -150)",
             "intake": "all",
             "untilFull": true,
             "timeoutSec": 2.5
@@ -131,11 +127,7 @@
            "id": "s10",
            "ref": "auto.drive",
            "params": {
-            "pose": {
-             "x": "-(field.half - 0.31)",
-             "z": "1 * wallZ",
-             "headingDeg": -150
-            },
+            "pose": "pose(-(field.half - 0.31), -wallReach, -150)",
             "intake": "all",
             "untilFull": true,
             "timeoutSec": 3
@@ -163,11 +155,7 @@
            "note": "That volley was the third TIP, which raises the rear CELL. The robot backs under the HIVE, so that the spill passes over it to the wall, and sweeps after the spill lands.",
            "ref": "auto.drive",
            "params": {
-            "pose": {
-             "x": "hiveX",
-             "z": 0.62,
-             "headingDeg": "-90 + flip"
-            },
+            "pose": "pose(hiveX, -0.62, -90 + flip)",
             "untilFull": true,
             "timeoutSec": 2
            }
@@ -186,11 +174,7 @@
            "note": "An angled wall sweep: the robot yaws 30 degrees toward the wall, puts its wall-side front corner 1.5 cm from the wall, and drives toward the drivers' corner. The intake is 4.5 cm narrower than the chassis on each side, so a robot that is square to its path never reaches a ball on the wall. At 30 degrees the wall line crosses the front of the intake. The sweep starts as near the center line as G402 allows.",
            "ref": "auto.drive",
            "params": {
-            "pose": {
-             "x": "sweepFrom",
-             "z": "1 * wallZ",
-             "headingDeg": -150
-            },
+            "pose": "pose(sweepFrom, -wallReach, -150)",
             "intake": "all",
             "untilFull": true,
             "timeoutSec": 2.5
@@ -200,11 +184,7 @@
            "id": "s16",
            "ref": "auto.drive",
            "params": {
-            "pose": {
-             "x": "-(field.half - 0.31)",
-             "z": "1 * wallZ",
-             "headingDeg": -150
-            },
+            "pose": "pose(-(field.half - 0.31), -wallReach, -150)",
             "intake": "all",
             "untilFull": true,
             "timeoutSec": 3
@@ -232,11 +212,7 @@
            "note": "Spill collects on the rear wall between the rear FLOWER and the center line, 0.25 m behind the launch spot, and the intake already faces it. The pose is 3 cm toward the center line, so that a 0.43 m robot clears the FLOWER. In trace 20260920-155206, three POLLEN rested there and the robot parked with 6 s left.",
            "ref": "auto.drive",
            "params": {
-            "pose": {
-             "x": "hiveX + 0.03",
-             "z": "-wallStand",
-             "headingDeg": "90 + flip"
-            },
+            "pose": "pose(hiveX + 0.03, wallStand, 90 + flip)",
             "intake": "all",
             "untilFull": true,
             "timeoutSec": 1.5

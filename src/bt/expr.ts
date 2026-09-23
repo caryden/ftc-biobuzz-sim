@@ -17,9 +17,14 @@ export class ExprError extends Error {
   }
 }
 
-/** A function that expressions can call. `args` is a fixed list, or one type that repeats at least `min` times. */
+/**
+ * A function that expressions can call. `args` is a fixed list, or one type that repeats at least `min` times. With a
+ * fixed list, `required` is how many values a call must give. The rest are optional, and `impl` gets `undefined` for
+ * each one that a call leaves out. Default: every value is required.
+ */
 export interface FnSpec {
   args: readonly Type[] | { readonly variadic: Type; readonly min?: number };
+  required?: number;
   returns: Type;
   impl: (...args: any[]) => unknown;
 }
@@ -258,7 +263,7 @@ export function compile<S>(source: string, scope: StaticScope<S>, expected?: Typ
       }
       const spec = scope.fns[name];
       if (!spec) return err(scope.lookup(name) ? `'${name}' isn't a function` : `unknown function '${name}'`, a.p);
-      checkArgs(name, spec.args, args, a);
+      checkArgs(name, spec.args, args, a, spec.required);
       const impl = spec.impl, fs = args.map(x => x.fn);
       return { type: spec.returns, fn: s => impl(...fs.map(f => f(s))) };
     }
@@ -273,12 +278,13 @@ export function compile<S>(source: string, scope: StaticScope<S>, expected?: Typ
     return err('only a function name or a field can be called', a.p);
   };
 
-  const checkArgs = (name: string, spec: FnSpec['args'], args: { type: Type }[], a: Extract<Ast, { t: 'call' }>) => {
+  const checkArgs = (name: string, spec: FnSpec['args'], args: { type: Type }[], a: Extract<Ast, { t: 'call' }>, required?: number) => {
     if ('variadic' in spec) {
       if (args.length < (spec.min ?? 0)) err(`${name}() needs at least ${spec.min} values`, a.p);
       args.forEach((x, i) => { if (!assignable(x.type, spec.variadic)) err(`${name}() takes ${describe(spec.variadic)} values, not a ${describe(x.type)}`, a.args[i].p); });
     } else {
-      if (args.length !== spec.length) err(`${name}() takes ${spec.length} values, not ${args.length}`, a.p);
+      const least = required ?? spec.length;
+      if (args.length < least || args.length > spec.length) err(`${name}() takes ${least === spec.length ? spec.length : `${least} to ${spec.length}`} values, not ${args.length}`, a.p);
       args.forEach((x, i) => { if (!assignable(x.type, spec[i])) err(`value ${i + 1} of ${name}() must be a ${describe(spec[i])}, not a ${describe(x.type)}`, a.args[i].p); });
     }
   };
@@ -286,4 +292,33 @@ export function compile<S>(source: string, scope: StaticScope<S>, expected?: Typ
   const out = walk(parse(source));
   if (expected && !assignable(out.type, expected)) err(`this expression gives a ${describe(out.type)}, but a ${describe(expected)} is needed`, 0);
   return { source, type: out.type, eval: out.fn };
+}
+
+/**
+ * Splits an expression that is one function call, such as `offset(home, 0.2, -0.1)`, into the function's name and the
+ * source text of each argument. Tools use it to edit one argument and keep the rest as written. Returns null if the
+ * expression isn't a single call of a named function, or doesn't parse.
+ */
+export function splitCall(source: string): { name: string; args: string[] } | null {
+  let ast: Ast; try { ast = parse(source); } catch { return null; }
+  if (ast.t !== 'call' || ast.callee.t !== 'id') return null;
+  const toks = tokenize(source), open = toks.findIndex(k => k.k === 'op' && k.v === '(');
+  if (open !== 1) return null;
+  const args: string[] = []; let depth = 0, from = toks[open].p + 1;
+  for (let i = open + 1; i < toks.length; i++) {
+    const k = toks[i]; if (k.k !== 'op') continue;
+    if (k.v === '(' || k.v === '[') depth++;
+    else if ((k.v === ')' || k.v === ']') && depth > 0) depth--;
+    else if (k.v === ',' && depth === 0) { args.push(source.slice(from, k.p).trim()); from = k.p + 1; }
+    else if (k.v === ')' && depth === 0) { const last = source.slice(from, k.p).trim(); if (last || args.length) args.push(last); break; }
+  }
+  return { name: ast.callee.name, args };
+}
+
+/** Gets the number that an expression is, such as `1.5` or `-0.2`, or null if the expression is anything else. */
+export function literalNumber(source: string): number | null {
+  let ast: Ast; try { ast = parse(source); } catch { return null; }
+  if (ast.t === 'lit' && typeof ast.v === 'number') return ast.v;
+  if (ast.t === 'unary' && ast.op === '-' && ast.arg.t === 'lit' && typeof ast.arg.v === 'number') return -ast.arg.v;
+  return null;
 }

@@ -6,6 +6,8 @@ import { flowerHeights, type BallKind, type Sim } from '../sim/world';
 const COLOR: Record<BallKind, number> = { pollen: 0xf2c81e, nectar_red: 0xd8261c, nectar_blue: 0x1f4fd8 };
 export const CAMERAS = ['driver', 'overhead', 'chase', 'audience'] as const;
 export type CameraMode = (typeof CAMERAS)[number];
+/** The distance from a drive handle to its heading knob, in meters. */
+export const KNOB = 0.3;
 
 /** Draws the simulation with three.js. The official field CAD supplies every FIELD element mesh. */
 export class View {
@@ -141,6 +143,46 @@ export class View {
       const w = new THREE.Mesh(new THREE.ConeGeometry(0.05, 0.13, 3), mat); w.rotation.set(0, q.heading, -Math.PI / 2, 'YXZ'); w.position.set(q.x, 0.01, q.z); w.scale.y = 1; this.autoPoses.add(w);
       if (q.shoots) { const ring = new THREE.Mesh(new THREE.RingGeometry(0.2, 0.225, 40), shootMat); ring.rotation.x = -Math.PI / 2; ring.position.set(q.x, 0.009, q.z); this.autoPoses.add(ring); }
     }
+  }
+
+  private handleGroup = new THREE.Group();
+  /**
+   * Draws the field editor's handles: a disc at each pose, and for a drive step a line to a knob that sets its heading.
+   * A selected handle is white and larger, and an edited one has a green ring. Handles draw over the FIELD elements, so
+   * that a pose under a FLOWER stays visible. An empty list clears them.
+   */
+  showHandles(list: readonly { x: number; z: number; heading?: number; kind: 'drive' | 'lane'; selected: boolean; edited: boolean }[]) {
+    if (!this.handleGroup.parent) { this.handleGroup.renderOrder = 10; this.scene.add(this.handleGroup); }
+    this.handleGroup.traverse(o => { const m = o as THREE.Mesh; if (m.isMesh || (o as THREE.Line).isLine) { m.geometry.dispose(); (m.material as THREE.Material).dispose(); } });
+    this.handleGroup.clear();
+    const flat = (geo: THREE.BufferGeometry, color: number, x: number, z: number, y: number) => {
+      const m = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ color, depthTest: false, transparent: true, side: THREE.DoubleSide }));
+      m.rotation.x = -Math.PI / 2; m.position.set(x, y, z); m.renderOrder = 10; this.handleGroup.add(m); return m;
+    };
+    for (const h of list) {
+      const color = h.selected ? 0xffffff : h.kind === 'drive' ? 0xffa726 : 0x4dd0e1, r = h.selected ? 0.085 : 0.065;
+      if (h.edited) flat(new THREE.RingGeometry(r + 0.012, r + 0.03, 32), 0x41e07f, h.x, h.z, 0.021);
+      flat(new THREE.CircleGeometry(r, 32), color, h.x, h.z, 0.022);
+      if (h.heading === undefined) continue;
+      const kx = h.x + KNOB * Math.cos(h.heading), kz = h.z - KNOB * Math.sin(h.heading);
+      const line = new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(h.x, 0.022, h.z), new THREE.Vector3(kx, 0.022, kz)]), new THREE.LineBasicMaterial({ color, depthTest: false, transparent: true }));
+      line.renderOrder = 10; line.frustumCulled = false; this.handleGroup.add(line);
+      flat(new THREE.CircleGeometry(0.035, 20), color, kx, kz, 0.023);
+    }
+  }
+
+  /**
+   * Gets the handle under a screen point, from the same list as `showHandles`: its index, and whether the point is on
+   * its heading knob. A knob wins over a disc at the same distance. Returns null if no handle is within 16 pixels.
+   */
+  handleAt(clientX: number, clientY: number, list: readonly { x: number; z: number; heading?: number }[]): { index: number; part: 'pose' | 'heading' } | null {
+    const px = (x: number, z: number) => { const q = new THREE.Vector3(x, 0.022, z).project(this.camera); return Math.hypot(((q.x + 1) / 2) * innerWidth - clientX, ((1 - q.y) / 2) * innerHeight - clientY); };
+    let best: { index: number; part: 'pose' | 'heading' } | null = null, bestPx = 16;
+    list.forEach((h, index) => {
+      if (h.heading !== undefined) { const d = px(h.x + KNOB * Math.cos(h.heading), h.z - KNOB * Math.sin(h.heading)); if (d <= bestPx) { bestPx = d; best = { index, part: 'heading' }; } }
+      const d = px(h.x, h.z); if (d < bestPx) { bestPx = d; best = { index, part: 'pose' }; }
+    });
+    return best;
   }
 
   private debugLines = new THREE.Group();

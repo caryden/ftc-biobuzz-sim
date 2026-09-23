@@ -9,7 +9,7 @@
  },
  "defs": {
   "len": "bots.me.dimensions.length",
-  "park": "pose(-(field.half - len / 2 - 0.09), -0.8954, 180)"
+  "park": "pose(-(field.half - len / 2 - 0.09), 0.8954, 180)"
  },
  "root": {
   "sequence": {

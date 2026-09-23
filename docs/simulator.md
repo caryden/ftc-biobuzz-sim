@@ -99,7 +99,8 @@ starts in time whatever step is running. Poses are expressions over the robot's 
 tree fits every robot. Each step's note in the tree file says why the step is there.
 
 Paths avoid the fixed FIELD elements and a virtual wall on the FIELD center line, so each robot stays on its own side
-(G402). A blue robot mirrors the red poses through the FIELD center. One sensor is modeled: a Limelight 3A that reads
+(G402). A tree is written for red, in FIELD x and y, and a blue robot runs it rotated 180° about the FIELD center. For
+the coordinate system, see [Coordinates and alliances](behavior-trees.md#coordinates-and-alliances). One sensor is modeled: a Limelight 3A that reads
 the AprilTag cluster under each CELL, so a `waitCell` step or a `shoot` step with a `cell` holds until the camera
 reads that CELL as raised. `src/sim/camera.ts` applies the camera's 54.5° by 42° field of view, a range limit, and
 a grazing-angle limit. The camera sits on the shooter side, 0.30 m up and pitched 50°, which frames the raised
@@ -108,6 +109,23 @@ CELL's tags from both launch spots. The camera reads the HIVE, not the balls, an
 The sweeps are blind but planned from data: `scripts/plan-sweeps.ts` records where spilled balls come to rest over
 many simulated AUTO periods, prints a heatmap, searches for the lanes that collect the most, and writes them into the
 sweep steps of the trees. Lanes lead with the intake, except along a wall, where the robot faces the wall and strafes.
+
+To move an AUTO pose, follow these steps:
+
+1. Before the MATCH, click a red robot's gear icon, and then click **Edit the AUTO poses on the FIELD**. The camera
+   changes to **Overhead**, and the tree view shows the robot's AUTO tree. You edit in red's frame, and blue robots run
+   the same tree rotated 180°, so the button is disabled for a blue robot.
+2. Drag an orange disc to move a drive step's pose, or drag the knob at the end of its line to turn its heading. A cyan
+   disc is a sweep's lane point. Click a step in the tree view to find its handles: they turn white.
+3. Click **Done**.
+
+The first edit makes an edited copy of the tree, named "(edited)" in the **AUTO plan** list, and the robot runs the
+copy. This browser keeps the copy. An edited step has a green ring. **Reset this step** moves the selected step back,
+and **Revert to the original** deletes the copy. The bar shows the selected step's pose in FIELD x and y, and the pose
+as the tree writes it, for example `offset(launchAudience, 0.2, -0.1)`: a drag keeps the expression and adds an offset
+to it, so the copy still fits a robot of another size. For the rule, see [Editing AUTO
+poses](behavior-trees.md#editing-auto-poses).
+
 The page projects the tree onto the FIELD as a dashed orange line, with a wedge at each pose and a red ring where the
 robot shoots.
 

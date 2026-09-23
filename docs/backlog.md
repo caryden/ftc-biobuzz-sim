@@ -32,10 +32,11 @@ About half of each rear spill lands at or across the FIELD center line. The path
 circle on its own side, so a robot can't stand in the pocket between the rear FLOWER and the center line, although a
 robot that is square to the wall fits legally.
 
-## AUTO path editor
+## The AUTO editor
 
-Edit the AUTO paths in the page between matches: drag a waypoint, double-click it to edit its pose, its intake filter,
-and its timeout, and save the paths per start position.
+The field editor drags AUTO poses. Increments 7 to 11 of the [behavior-tree plan](behavior-trees.md#plan) make it an
+editor for whole AUTO trees: motion and intake leaves, plans that you create and name, parameter forms and an
+expression editor, structure editing, and a quick AUTO run with a timeline of both red robots.
 
 ## Measured bounce and roll
 

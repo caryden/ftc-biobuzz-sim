@@ -110,6 +110,9 @@ Transit is about 73% of TELEOP. The changes that paid were the ones that removed
 | `e67-defender-subtree` | Full defense runs as a subtree of the TELEOP tree: PARK when the clock requires it, wait while both opponents rest, take the target's launch spot, or drive into it. The defender keeps only its bookkeeping. | 643 ± 5.1 | Kept. Identical to e66 on every seed and in every field. |
 | `e68-after-merging-main` | The branch after merging `main` at `b4dcd0a`, which changed how saved setups migrate | 814 ± 7.7 | Identical to e65 on every seed, so the merge changed no match. |
 | `e69-tree-view` | The tree view: the recorder tracks running and ended spans, nodes carry a short description of their settings, and the page's coaches record their trees | 814 ± 7.7 | Identical to e68 on every seed. The headless scripts don't record trees, and recording doesn't change play. |
+| `e70-drive-nudge` | `auto.drive` takes a `nudge` parameter, an offset that the field editor sets, with a default of zero | 814 ± 7.7 | Identical to e69 on every seed. Kept, then removed in e72, which writes an `offset()` expression instead. |
+| `e71-auto-editor` | The field editor: AUTO trees load through `addAutoTree`, which the page also uses for edited copies, and the path preview reads parameters through `leafParams` | 814 ± 7.7 | Kept. Identical to e69 on every seed. |
+| `e72-field-xy` | Tree files use FIELD x and y instead of the simulator's x and z, a blue robot's rotation is written as one conversion, `nudge` is gone, and `offset()` takes an optional heading | 814 ± 7.7 | Kept. Identical to e69 on every seed. Before the run, every leaf parameter of every AUTO tree matched the old files' value for value, 4,926 values over three robot sizes and both shooter directions. |
 
 Net for the planner: 736 to 800 combined on the default robots, or about +32 per alliance. The standard error of that difference is about 11.
 

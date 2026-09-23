@@ -70,6 +70,7 @@ The results are in [experiments/](experiments/README.md). Every number on the si
 | `src/bt/` | The behavior-tree runtime: coroutines that advance once per physics step. It knows nothing about BIOBUZZ. See [docs/behavior-trees.md](docs/behavior-trees.md). |
 | `src/ref/`, `src/render/` | The PIN referee, and the three.js view |
 | `src/main.ts`, `src/review.ts`, `src/setup.ts` | The simulator page, the review mode, and the robot setups |
+| `src/field-editor.ts`, `src/user-trees.ts` | The field editor for AUTO poses, and the edited trees that the browser keeps |
 | `index.html`, `sim/index.html` | The home page and the simulator page. Both are Vite entries. |
 | `public/` | The field and ball models, and the built Match Lab and lessons pages |
 | `scripts/` | Headless runners, the experiment tools, the model converters, and the site builder |
