@@ -425,11 +425,30 @@ export class Sim {
     return Math.cos(p.heading) * (m.x - p.x) - Math.sin(p.heading) * (m.z - p.z) < 0;
   }
 
+  /**
+   * Gets the heading in radians that a turret launches along from the robot's pose, or from `pose`: toward the raised
+   * CELL's mouth of the own HIVE. See `ShooterConfig.turret`.
+   */
+  turretHeading(pose?: { x: number; z: number }): number {
+    const p = pose ?? this.robot.translation(), m = this.hives[this.alliance].mouthCenter();
+    return Math.atan2(-(m.z - p.z), m.x - p.x);
+  }
+
   private launch(kind: BallKind, lateral = 0) {
     const lp: LaunchParams = kind === 'pollen' ? this.cfg.shooter.pollen : this.cfg.shooter.nectar;
     const el = (this.rng.gauss(lp.elevationDeg.mean, lp.elevationDeg.std) * Math.PI) / 180;
     const yaw = (this.rng.gauss(0, lp.yawStdDeg) * Math.PI) / 180, sp = this.rng.gauss(lp.speed.mean, lp.speed.std);
     const spin = (this.rng.gauss(lp.backspinRpm.mean, lp.backspinRpm.std) * 2 * Math.PI) / 60;
+    if (this.cfg.shooter.turret) {
+      // The turret sits at the robot's center and turns the whole shooter, so the offsets are along the launch heading.
+      const aim = this.turretHeading(), th = aim + yaw, fx = Math.cos(th), fz = -Math.sin(th), lx = -Math.sin(th), lz = -Math.cos(th), p = this.robot.translation(), rv = this.robot.linvel();
+      const side = lp.offset[1] + lateral, o = { x: p.x + Math.cos(aim) * lp.offset[0] - Math.sin(aim) * side, z: p.z - Math.sin(aim) * lp.offset[0] - Math.cos(aim) * side };
+      const b = this.spawn(kind, o.x, 0.02 + lp.offset[2], o.z,
+        { x: rv.x + sp * Math.cos(el) * fx, y: sp * Math.sin(el), z: rv.z + sp * Math.cos(el) * fz },
+        { x: -spin * lx, y: 0, z: -spin * lz });
+      b.retryAt = this.simTime + 1;
+      return;
+    }
     const rear = this.launchesRear(), dir = rear ? -1 : 1;
     const th = this.heading + yaw + (rear ? Math.PI : 0), fx = Math.cos(th), fz = -Math.sin(th), lx = -Math.sin(th), lz = -Math.cos(th);
     const o = this.toWorld(dir * lp.offset[0], dir * (lp.offset[1] + lateral)), rv = this.robot.linvel();
@@ -573,8 +592,8 @@ export class Sim {
   previewShot(kind: 'pollen' | 'nectar', pose?: { x: number; z: number; heading: number }): { points: number[][]; scores: boolean } {
     const lp = kind === 'pollen' ? this.cfg.shooter.pollen : this.cfg.shooter.nectar, r = kind === 'pollen' ? FIELD.pollenRadius : FIELD.nectarRadius;
     const m = kind === 'pollen' ? BALL.pollenMass : BALL.nectarMass, el = (lp.elevationDeg.mean * Math.PI) / 180;
-    // The launch direction is the robot heading, or the opposite direction for a rear-facing shooter.
-    const th = (pose?.heading ?? this.heading) + (this.launchesRear(pose) ? Math.PI : 0), base = pose ?? { x: this.robot.translation().x, z: this.robot.translation().z };
+    // The launch direction is the robot heading, or the opposite direction for a rear-facing shooter, or a turret's aim.
+    const th = this.cfg.shooter.turret ? this.turretHeading(pose) : (pose?.heading ?? this.heading) + (this.launchesRear(pose) ? Math.PI : 0), base = pose ?? { x: this.robot.translation().x, z: this.robot.translation().z };
     const o = { x: base.x + Math.cos(th) * lp.offset[0], z: base.z - Math.sin(th) * lp.offset[0] };
     const rv = pose ? { x: 0, y: 0, z: 0 } : this.robot.linvel();
     const p = [o.x, 0.02 + lp.offset[2], o.z], v = [rv.x + lp.speed.mean * Math.cos(el) * Math.cos(th), lp.speed.mean * Math.sin(el), rv.z - lp.speed.mean * Math.cos(el) * Math.sin(th)];

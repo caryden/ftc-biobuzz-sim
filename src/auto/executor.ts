@@ -291,7 +291,8 @@ export class Executor {
   private R(sim: Sim) { return Math.hypot(sim.cfg.length, sim.cfg.width) / 2; }
 
   /**
-   * Gets the launch pose for the raised CELL. The shooter has a fixed azimuth, so the robot aims with its heading.
+   * Gets the launch pose for the raised CELL. A fixed shooter aims with the robot's heading. A turret aims itself, so
+   * its launch pose has no heading, and the robot doesn't turn to launch.
    * The first robot of an alliance launches from straight in front of the CELL. Its partner launches from 0.62 m
    * to the side, angled at the opening, so both can launch without sharing a spot.
    */
@@ -309,7 +310,7 @@ export class Executor {
     const z = side * (this.spot[key] ?? 1.3);
     // A dual-sided shooter launches out of either end, so the robot takes whichever heading needs the smaller turn.
     const h = headingAt(z), flipIt = !!sim.cfg.shooter.dualSided && Math.abs(wrap(h - sim.heading)) > Math.PI / 2;
-    return { x, z, heading: flipIt ? wrap(h + Math.PI) : h, key: `launch:${cell}` };
+    return { x, z, heading: sim.cfg.shooter.turret ? null : flipIt ? wrap(h + Math.PI) : h, key: `launch:${cell}` };
   }
 
   /**
@@ -467,7 +468,7 @@ export class Executor {
       goal = this.launchSpot(sim); const p = sim.robot.translation();
       // The shot preview is the real gate, so the spot itself has a loose tolerance: a robot that a neighbor keeps
       // 10 cm off its spot still launches if the predicted path enters the CELL.
-      const at = Math.hypot(goal.x - p.x, goal.z - p.z) < 0.22 && Math.abs(wrap(goal.heading! - sim.heading)) < 0.08;
+      const at = Math.hypot(goal.x - p.x, goal.z - p.z) < 0.22 && (goal.heading === null || Math.abs(wrap(goal.heading - sim.heading)) < 0.08);
       const dual = sim.cfg.shooter.type === 'dual', next = dual ? (carriedPollen > 0 ? 'pollen' : 'nectar') : sim.carried[0] === 'pollen' ? 'pollen' : 'nectar';
       // Fire-control interlock: release a shot only if the predicted path enters the CELL now and the robot is still.
       // The HIVE must be calm too: the shot preview uses the CELL's pose now, and a CELL that rocks has moved by the time
