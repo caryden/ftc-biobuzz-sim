@@ -6,7 +6,7 @@ import { NO_INPUT, type Inputs, type Sim } from '../sim/world';
 
 /**
  * Drives one robot for a program: a named AUTO tree (see `AutoProgram`) in AUTO, and the default TELEOP tree (see
- * `TeleopProgram` and src/auto/trees/teleop-default.json) in TELEOP. The robot's settings here are what the TELEOP
+ * `TeleopProgram` and src/auto/trees/teleop/teleop-default.json) in TELEOP. The robot's settings here are what the TELEOP
  * tree reads as `config`.
  */
 export class Coach {

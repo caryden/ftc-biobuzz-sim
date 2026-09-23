@@ -1,6 +1,6 @@
 // The tree catalog in D1, for the Pages Functions under functions/api/trees.
 //
-// A deployment's system trees are the files in src/auto/trees/ that it was built from. The build writes them to
+// A deployment's system trees are the files in src/auto/trees/auto/ and src/auto/trees/teleop/ that it was built from. The build writes them to
 // trees/catalog.json, with a SHA-256 per file and one hash over the set (see treeCatalog in vite.config.ts). The first
 // request that reads the catalog after a deployment goes live finds that D1 holds a different set, and replaces the
 // system rows in one batch, which D1 runs as a transaction. So the system rows always match the live code, including

@@ -1,7 +1,7 @@
 // Plans the blind AUTO sweeps from data. For each role it runs many simulated AUTO periods, records where the
 // collectable balls rest at the instant the sweep begins, prints a heatmap, and searches for the waypoints that
 // collect the most balls with the intake leading. It writes the lanes into every `auto.sweep` leaf of the AUTO trees in
-// src/auto/trees/, by the leaf's `role`.
+// src/auto/trees/auto/, by the leaf's `role`.
 // Run: npx tsx scripts/plan-sweeps.ts [seeds=30]
 import RAPIER from '@dimforge/rapier3d-compat';
 import fs from 'node:fs';
@@ -98,8 +98,8 @@ for (const role of ['solo', 'right', 'left']) {
   console.log(`planned lanes ${JSON.stringify(p.lanes)} collect ${p.mean.toFixed(2)} balls per sweep in the snapshots`);
 }
 // Write each role's lanes into the sweeps of that role, in every tree. A role with no snapshots keeps its lanes.
-for (const file of fs.readdirSync('src/auto/trees').filter(f => f.endsWith('.json'))) {
-  const path = `src/auto/trees/${file}`, tree = JSON.parse(fs.readFileSync(path, 'utf8')); let changed = 0;
+for (const file of fs.readdirSync('src/auto/trees/auto').filter(f => f.endsWith('.json'))) {
+  const path = `src/auto/trees/auto/${file}`, tree = JSON.parse(fs.readFileSync(path, 'utf8')); let changed = 0;
   const visit = (n: unknown) => {
     if (typeof n !== 'object' || n === null) return;
     const node = n as { ref?: string; params?: { role?: string; lanes?: unknown } };

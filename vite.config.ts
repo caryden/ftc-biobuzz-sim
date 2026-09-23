@@ -39,7 +39,8 @@ function folderIndex(): Plugin {
 
 // src/main.ts awaits the physics engine at the top level, which needs an ES2022 target: Chrome 89, Firefox 89, Safari 15.
 /**
- * Writes trees/catalog.json into the build: every tree file in src/auto/trees/, with its text and its SHA-256, and one
+ * Writes trees/catalog.json into the build: every tree file in src/auto/trees/auto/ and src/auto/trees/teleop/, with
+ * its text and its SHA-256, and one
  * hash over the whole set. The file ships in the same deployment as the code that runs the trees, and
  * functions/api/trees.js copies it into the D1 catalog, so that the catalog's system rows always match the live code.
  */
@@ -48,10 +49,12 @@ function treeCatalog(): Plugin {
   return {
     name: 'tree-catalog',
     generateBundle() {
-      const dir = path.resolve('src/auto/trees'), kinds: Record<string, string> = { onboard: 'auto', driver: 'teleop' };
-      const trees = fs.readdirSync(dir).filter(f => f.endsWith('.json')).sort().map(f => {
-        const text = fs.readFileSync(path.join(dir, f), 'utf8'), t = JSON.parse(text);
-        if (!kinds[t.env]) throw new Error(`${f}: no catalog kind for the environment '${t.env}'`);
+      // The folder is the kind: AUTO trees run in the onboard environment, and TELEOP trees in the driver environment.
+      const envs: Record<string, string> = { auto: 'onboard', teleop: 'driver' }, kinds: Record<string, string> = { onboard: 'auto', driver: 'teleop' };
+      const files = Object.keys(envs).flatMap(kind => fs.readdirSync(path.resolve('src/auto/trees', kind)).filter(f => f.endsWith('.json')).sort().map(f => ({ kind, f: path.join('src/auto/trees', kind, f) })));
+      const trees = files.map(({ kind, f }) => {
+        const text = fs.readFileSync(path.resolve(f), 'utf8'), t = JSON.parse(text);
+        if (t.env !== envs[kind]) throw new Error(`${f}: a tree in the ${kind} folder must use the ${envs[kind]} environment, not '${t.env}'`);
         return { id: t.id, kind: kinds[t.env], env: t.env, name: t.name, description: t.description ?? '', meta: t.meta ?? {}, hash: sha(text), json: text };
       });
       const hash = sha(trees.map(t => `${t.id}:${t.hash}`).join('\n'));

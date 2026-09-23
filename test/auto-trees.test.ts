@@ -37,15 +37,20 @@ describe('TELEOP tree', () => {
     const def = TELEOP_TREES['teleop-default'];
     expect(def.env).toBe('driver');
     const nodes: { kind: string; path: string }[] = [], walk = (n: typeof def.root) => { nodes.push(n); n.children.forEach(walk); }; walk(def.root);
-    expect(nodes.filter(n => n.kind === 'guard').map(n => n.path)).toEqual(['root/defend', 'root/play/child/flowers', 'root/play/child/tip', 'root/play/child/launch']);
-    expect(nodes.some(n => n.path === 'root/play/child/park')).toBe(true);
+    expect(nodes.filter(n => n.kind === 'guard').map(n => n.path)).toEqual(['root/defend', 'root/defend/child/defend-park', 'root/defend/child/rest', 'root/defend/child/take-spot', 'root/match/endgame', 'root/match/endgame/child/last-launch', 'root/match/bump', 'root/match/yield', 'root/match/play/child/flowers', 'root/match/play/child/tip', 'root/match/play/child/launch']);
+    expect(nodes.some(n => n.path === 'root/match/endgame/child/park-now')).toBe(true);
+    expect(nodes.some(n => n.path === 'root/match/play/child/park')).toBe(true);
   });
 });
 
 describe('tree files', () => {
-  it('names each file after its tree id, which the catalog and the saved setups use', () => {
-    const files = import.meta.glob<{ id: string }>('../src/auto/trees/*.json', { eager: true, import: 'default' });
+  it('names each file after its tree id, and keeps AUTO and TELEOP trees in their own folders', () => {
+    const files = import.meta.glob<{ id: string; env: string }>('../src/auto/trees/*/*.json', { eager: true, import: 'default' });
     expect(Object.keys(files)).toHaveLength(9);
-    for (const [path, tree] of Object.entries(files)) expect(tree.id).toBe(path.split('/').pop()!.replace(/\.json$/, ''));
+    for (const [path, tree] of Object.entries(files)) {
+      const [folder, file] = path.split('/').slice(-2);
+      expect(tree.id).toBe(file.replace(/\.json$/, ''));
+      expect(tree.env).toBe(folder === 'auto' ? 'onboard' : 'driver');
+    }
   });
 });

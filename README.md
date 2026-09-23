@@ -66,8 +66,8 @@ The results are in [experiments/](experiments/README.md). Every number on the si
 | Path | Contents |
 | --- | --- |
 | `src/sim/` | The match simulation. It has no DOM and no three.js dependency, so it runs in Node.js. |
-| `src/auto/` | The planner: the AUTO and TELEOP trees and their leaves, tactics, path planning, the path follower, and the defense policy |
-| `src/bt/` | The behavior-tree runtime. It knows nothing about BIOBUZZ. |
+| `src/auto/` | The planner: the tree files in `trees/auto/` and `trees/teleop/`, their leaves, tactics, path planning, the path follower, and the defense bookkeeping |
+| `src/bt/` | The behavior-tree runtime: coroutines that advance once per physics step. It knows nothing about BIOBUZZ. See [docs/behavior-trees.md](docs/behavior-trees.md). |
 | `src/ref/`, `src/render/` | The PIN referee, and the three.js view |
 | `src/main.ts`, `src/review.ts`, `src/setup.ts` | The simulator page, the review mode, and the robot setups |
 | `index.html`, `sim/index.html` | The home page and the simulator page. Both are Vite entries. |
@@ -92,7 +92,7 @@ two-letter code.
 
 The same database holds the tree catalog: every AUTO and TELEOP tree, with its id, name, and description.
 `functions/api/trees.js` answers `GET /api/trees` and `GET /api/trees/ID`. The system trees are the files in
-`src/auto/trees/`. The build writes them to `trees/catalog.json`, and the first request after a deployment goes live
+`src/auto/trees/auto/` and `src/auto/trees/teleop/`. The build writes them to `trees/catalog.json`, and the first request after a deployment goes live
 copies them into D1, so the catalog always matches the live code, including after a rollback. A preview reads the
 deployment's own files, because it has no database.
 

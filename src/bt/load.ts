@@ -262,10 +262,16 @@ export function loadTree(source: unknown, reg: Registry, limits: Partial<Limits>
         const when = expr(spec.when, here, `${specPath}.when`, t.boolean()), k = one(spec, 'child', here, specPath);
         return N.guard(base([k], k.out), when.eval, when.source);
       }
-      case 'timeout': case 'cooldown': case 'hold': {
+      case 'timeout': case 'hold': {
         checkKeys(spec, ['sec', 'child'], specPath);
         const sec = numberish(spec.sec, here, `${specPath}.sec`), k = one(spec, 'child', here, specPath);
-        return (kind === 'timeout' ? N.timeout : kind === 'cooldown' ? N.cooldown : N.hold)(base([k], k.out), sec);
+        return (kind === 'timeout' ? N.timeout : N.hold)(base([k], k.out), sec);
+      }
+      case 'cooldown': {
+        checkKeys(spec, ['sec', 'from', 'child'], specPath);
+        const sec = numberish(spec.sec, here, `${specPath}.sec`), k = one(spec, 'child', here, specPath), from = spec.from ?? 'failure';
+        if (from !== 'failure' && from !== 'start') issue(specPath, "'from' must be \"failure\" or \"start\"");
+        return N.cooldown(base([k], k.out), sec, from as 'failure' | 'start');
       }
       case 'retry': {
         checkKeys(spec, ['attempts', 'on', 'child'], specPath);

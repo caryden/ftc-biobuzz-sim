@@ -39,19 +39,19 @@ default TELEOP tree in TELEOP. For how the trees work, see [Behavior-tree polici
   picks something else. Inside 0.56 m, robots also push straight away from each other, so they don't wedge.
 - **Shooter.** The shooter has a fixed azimuth, with no turret. The default
   shooter faces the rear of the robot, opposite the intake.
-- **Endgame by value.** When the drive time to the LOADING ZONE says that it is time to PARK, the executor compares
-  values: a launch that finishes a TIP is worth 20 points, a launch that doesn't is worth 2 per element, and PARK is
+- **Endgame by value.** When the drive time to the LOADING ZONE says that it is time to PARK, the TELEOP tree's
+  endgame branch compares values, on every step: a launch that finishes a TIP is worth 20 points, a launch that doesn't is worth 2 per element, and PARK is
   worth 5. In a qualification MATCH, a robot whose PARK the alliance still needs for the SWARM ranking point always
   parks. **Stage** in the game setup selects a qualification or a playoff MATCH.
 - **Reading a TIP.** A TIP counts as under way only when the HIVE is past level or turning away from its stop. A partly
   loaded CELL sags off its stop, and a driver can see that it hasn't tipped.
-- **Defense.** `src/auto/defend.ts` is a full-time defender, and the executor has an opportunistic shove. Both limit a
-  contact burst, so that no PIN count reaches 3 s. **Defense** in the robot config selects one.
+- **Defense.** The TELEOP tree's `defend` subtree is a full-time defender, with its bookkeeping in `src/auto/defend.ts`,
+  and its `bump` branch is an opportunistic shove. Both limit a contact burst, so that no PIN count reaches 3 s. **Defense** in the robot config selects one.
 
 | Period | Decision maker | Setting |
 | --- | --- | --- |
-| AUTO | A behavior tree in `src/auto/trees/`, for every robot | **AUTO plan** in the robot config |
-| TELEOP | The default TELEOP tree, `src/auto/trees/teleop-default.json`: TIPS, and FLOWERS from the time that **TELEOP plan** sets | **Driver**: Planner |
+| AUTO | A behavior tree in `src/auto/trees/auto/`, for every robot | **AUTO plan** in the robot config |
+| TELEOP | The default TELEOP tree, `src/auto/trees/teleop/teleop-default.json`: TIPS, and FLOWERS from the time that **TELEOP plan** sets | **Driver**: Planner |
 | TELEOP | A person with controller 1 or controller 2. Only the red robots can have a human driver. | **Driver**: Controller 1 or Controller 2 |
 
 ### Robot config
@@ -80,7 +80,7 @@ the same motor, so the stall torque scales inversely, and the size scales the wh
 
 ### AUTO trees
 
-Each AUTO plan is a behavior tree in `src/auto/trees/`. It runs in the onboard environment of `src/auto/onboard.ts`,
+Each AUTO plan is a behavior tree in `src/auto/trees/auto/`. It runs in the onboard environment of `src/auto/onboard.ts`,
 which has what an OpMode can know: the robot's own pose, its carried count, its size, the clock, and the camera. It
 has no ball, FLOWER, or robot positions. For how trees work, see [Behavior-tree policies](behavior-trees.md).
 
