@@ -40,7 +40,7 @@ export class FieldEditor {
     const c = host.canvas;
     c.addEventListener('pointerdown', e => {
       if (this.robot < 0 || e.button !== 0) return;
-      const hit = host.view.handleAt(e.clientX, e.clientY, this.handles.map(h => h.sim)); if (!hit) return;
+      const hit = this.handleAt(e); if (!hit) return;
       e.preventDefault(); c.setPointerCapture(e.pointerId);
       // The drag keeps the offset between the pointer and the handle, so that the handle doesn't jump to the pointer.
       const h = this.handles[hit.index], q = this.pointer(e);
@@ -48,7 +48,7 @@ export class FieldEditor {
     });
     c.addEventListener('pointermove', e => {
       if (this.robot < 0) return;
-      if (!this.drag) { c.style.cursor = host.view.handleAt(e.clientX, e.clientY, this.handles.map(h => h.sim)) ? 'grab' : ''; return; }
+      if (!this.drag) { c.style.cursor = this.handleAt(e) ? 'grab' : ''; return; }
       c.style.cursor = 'grabbing'; this.dragTo(e);
     });
     const end = (e: PointerEvent) => {
@@ -60,6 +60,16 @@ export class FieldEditor {
       this.swallowClick = true; if (this.drag.moved) this.save(); this.drag = null; c.style.cursor = '';
     };
     c.addEventListener('pointerup', end); c.addEventListener('pointercancel', end);
+  }
+
+  /**
+   * Gets the handle under the pointer. Two steps can put handles on one spot, as two sweeps with the same waypoints do,
+   * so the selected step's handles come first and win a tie.
+   */
+  private handleAt(e: PointerEvent): { index: number; part: 'pose' | 'heading' } | null {
+    const order = this.handles.map((_, i) => i).sort((a, b) => Number(this.handles[b].path === this.selected) - Number(this.handles[a].path === this.selected));
+    const hit = this.host.view.handleAt(e.clientX, e.clientY, order.map(i => this.handles[i].sim));
+    return hit && { index: order[hit.index], part: hit.part };
   }
 
   /** Gets the FIELD point under the pointer in the edited robot's alliance frame, or null off the FIELD. */

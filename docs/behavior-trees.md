@@ -1,10 +1,10 @@
 # Behavior-tree policies
 
-**Status: increments 1 to 6 are built; the rest is proposed.** The [plan](#plan) has two parts. Increments 1 to 5
+**Status: increments 1 to 7 are built; the rest is proposed.** The [plan](#plan) has two parts. Increments 1 to 5
 are done: the runtime in `src/bt/`, both periods as trees in `src/auto/trees/auto/` and `src/auto/trees/teleop/`, every
 TELEOP decision in the TELEOP tree, and a tree view on the simulator page, live and in review. The AUTO editor is the
-second part. Its first increment, increment 6, is done: trees in FIELD x and y, and a field editor that drags AUTO
-poses. For how the simulator works, see [How the simulator works](simulator.md).
+second part. Its first two increments are done: trees in FIELD x and y with a field editor that drags AUTO poses, and
+separate leaves for driving, the intake, and waiting. For how the simulator works, see [How the simulator works](simulator.md).
 
 This document proposes replacing the robot's decision code with behavior trees. A behavior tree is a tree of small
 nodes. The inner nodes decide what runs, and the leaves read the field and drive the robot. The same tree format
@@ -150,9 +150,10 @@ tree files used the code's x and z. `e72-field-xy` checks that the change of axe
 
 ### Navigation
 
-A leaf moves the robot with one action: `drive.navigate(poses, options)`. The options apply to each segment, for
-example the intake mode, whether to stop when the hopper is full, and a timeout. The action reports that it's running,
-that it arrived, or that it stalled. A stall is a failure of the leaf.
+In AUTO, two leaves move the robot. `auto.driveTo` drives to a pose on a path that the planner picks, and
+`auto.followPath` follows the tree's own waypoints. Neither runs the intake or ends on a full hopper: a tree combines
+them with `auto.intake` and `auto.waitHopperFull`, as increment 7 of the [plan](#plan) describes. Each leaf ends on
+arrival or on its timeout.
 
 The robot config, not the tree, chooses how the robot gets there:
 
@@ -335,40 +336,57 @@ A leaf is a `ref` to a registered leaf type, with `params`. Each parameter's sch
 An enum parameter, such as an intake mode, takes a plain value. Any node can carry a `note`, which keeps the reason for
 a step next to the step.
 
-The following file is `src/auto/trees/auto/wall-sweep-pair-right.json`, the right robot's AUTO, shortened to its first
-three steps and its last. Its last step, the PARK, starts when all the other steps end, or when the clock shows 2.5 s,
-whichever comes first:
+The following file is `src/auto/trees/auto/lane-sweep-pair-right.json`, a right robot's AUTO, shortened to its first two
+steps, its first sweep, and its PARK. The PARK starts when all the other steps end, or when the clock shows 4.5 s,
+whichever comes first. The sweep and the PARK run the intake in an `ensure` node, whose cleanup turns the intake off
+however the child ends:
 
 ```json
 {
   "kind": "bt.tree",
-  "id": "wall-sweep-pair-right",
-  "name": "Wall-sweep pair: right robot",
+  "id": "lane-sweep-pair-right",
+  "name": "Lane-sweep pair: right robot",
   "env": "onboard",
-  "description": "For the right start position, on the alliance wall: the first TIP from the pre-loads, then ...",
-  "meta": { "start": "right", "partner": "wall-sweep-pair-left" },
+  "description": "The earlier default for the right start position, with lane sweeps: the first TIP from the ...",
+  "meta": { "start": "right", "partner": "lane-sweep-pair-left" },
   "defs": {
     "len": "bots.me.dimensions.length",
     "flip": "if(bots.me.shooter.facing == 'front', 180, 0)",
     "hiveX": "-0.3237",
     "stand": "len / 2 + field.flowerHalfSize + 0.02",
-    "launchAudience": "pose(hiveX, 1.32, -90 + flip)",
-    "ownFlower": "pose(-1.7282 + stand, 0.5942, 180)",
-    "park": "pose(-(field.half - len / 2 - 0.09), -0.8954, 180)",
-    "parkRight": "pose(park.x, -0.8954 + 0.33, park.headingDeg)"
+    "launchAudience": "pose(hiveX, -1.32, -90 + flip)",
+    "ownFlower": "pose(-1.7282 + stand, -0.5942, 180)",
+    "park": "pose(-(field.half - len / 2 - 0.09), 0.8954, 180)",
+    "parkRight": "pose(park.x, 0.8954 - 0.33, park.headingDeg)"
   },
   "root": { "sequence": { "children": [
     { "id": "steps", "parallel": { "policy": "any", "children": [
-      { "id": "finish", "ref": "auto.clockAtMost", "params": { "sec": 2.5 } },
+      { "id": "finish", "ref": "auto.clockAtMost", "params": { "sec": 4.5 } },
       { "sequence": { "children": [
-        { "id": "s1", "ref": "auto.drive", "params": { "pose": "launchAudience", "timeoutSec": 4 } },
+        { "id": "s1", "ref": "auto.driveTo", "params": { "pose": "launchAudience", "timeoutSec": 4 } },
         { "id": "s2", "note": "The raised CELL starts with 3 NECTAR, so the third POLLEN tips the HIVE.",
           "ref": "auto.shoot", "params": { "count": 3, "timeoutSec": 2.5 } },
-        { "id": "s3", "note": "The red FLOWER's POLLEN fills the wait for the left robot's TIP.",
-          "ref": "auto.drive", "params": { "pose": "offset(ownFlower, 0.2, 0)", "timeoutSec": 3.5 } }
+        { "id": "collect-s9", "ensure": {
+          "child": { "sequence": { "children": [
+            { "ref": "auto.intake", "params": { "filter": "all" } },
+            { "id": "full-s9", "parallel": { "policy": "any", "children": [
+              { "ref": "auto.waitHopperFull" },
+              { "id": "s9", "ref": "auto.followPath", "params": { "tag": "sweep-right", "timeoutSec": 8.3,
+                "waypoints": [{ "x": -1.415, "y": -1.543, "headingDeg": null },
+                              { "x": -0.365, "y": -1.543, "headingDeg": -90 },
+                              { "x": -0.515, "y": -0.985, "headingDeg": null },
+                              { "x": -1.565, "y": -1.135, "headingDeg": null }] } }
+            ] } }
+          ] } },
+          "cleanup": { "ref": "auto.intake", "params": { "filter": "none" } } } }
       ] } }
     ] } },
-    { "id": "s23", "ref": "auto.drive", "params": { "pose": "parkRight", "intake": "all", "timeoutSec": 6 } }
+    { "id": "collect-s15", "ensure": {
+      "child": { "sequence": { "children": [
+        { "ref": "auto.intake", "params": { "filter": "all" } },
+        { "id": "s15", "ref": "auto.driveTo", "params": { "pose": "parkRight", "timeoutSec": 6 } }
+      ] } },
+      "cleanup": { "ref": "auto.intake", "params": { "filter": "none" } } } }
   ] } }
 }
 ```
@@ -417,8 +435,8 @@ direction. A drag changes the expression by one rule, in `shiftPose` in `src/aut
 
 So a step keeps following the robot's size, and the other steps that use the same definition don't move. The bar names
 them, for example "also used by s6, s11". An offset that comes back to zero goes away, so a drag back to the start
-restores the step as it was written. Positions round to 1 mm and headings to 0.5°. A sweep's lanes are numbers, which
-`scripts/plan-sweeps.ts` writes, so a drag changes a lane point itself. `src/auto/auto-edit.ts` has no DOM, so
+restores the step as it was written. Positions round to 1 mm and headings to 0.5°. A path's waypoints are numbers, which
+`scripts/plan-sweeps.ts` writes for the sweeps, so a drag changes a waypoint itself. `src/auto/auto-edit.ts` has no DOM, so
 `test/auto-edit.test.ts` runs it.
 
 The first edit of a built-in tree makes an edited copy: the id gets `-edited`, the name gets "(edited)", and
@@ -609,27 +627,37 @@ tree in the page. Each increment is one pull request.
    pose and its heading, and a sweep's lane points, by the rule in [Editing AUTO poses](#editing-auto-poses).
    `e72-field-xy` equals `e69-tree-view` on every seed, and the leaves' parameters match the old files' on every
    value, for three robot sizes and both shooter directions.
-7. **Motion and intake leaves.** Driving, the intake, and waiting become separate leaves, as in FTC's command-based
-   style:
-   - `auto.driveTo(pose)`: the path planner picks a path around the FIELD elements, as `auto.drive` does now.
-   - `auto.followPath(waypoints)`: the robot follows the author's path through the waypoints, with a heading per
-     waypoint or along the path, and no planner. The robot config picks the follower: pure pursuit now, and Road
-     Runner or Pedro Pathing later.
-   - `auto.intake(filter)` sets the intake and ends. The onboard environment keeps the intake's state between steps,
-     where it now clears the robot's inputs on every step.
+7. **Motion and intake leaves. Done.** Driving, the intake, and waiting are separate leaves, as in FTC's
+   command-based style:
+   - `auto.driveTo(pose)`: the path planner picks a path around the FIELD elements, as `auto.drive` did.
+   - `auto.followPath(waypoints)`: the robot follows the author's path through the waypoints without stopping, with a
+     heading per waypoint or along the path, and no planner. It moves on to the next waypoint within 0.15 m of one or
+     past it. The robot config will pick the follower: pure pursuit now, and Road Runner or Pedro Pathing later.
+   - `auto.intake(filter)` sets the intake and ends in the same physics step. The onboard environment holds the filter
+     between steps, and AUTO starts with the intake off.
    - `auto.waitHopperFull` ends when the hopper is full.
 
-   A sweep becomes a composite, which the palette offers as a template. The `ensure` cleanup turns the intake off
-   however the race ends, including when AUTO's clock race stops the steps:
+   A step that collects is a composite. The `ensure` cleanup turns the intake off however the child ends, including
+   when AUTO's clock race stops the steps. `auto.waitHopperFull` comes first in the race, so that the race ends before
+   the path follower sends another command in the step that the hopper fills:
 
    ```
    ensure(
-     child:   sequence(intake(all), parallel(any: followPath(waypoints), waitHopperFull)),
+     child:   sequence(intake(all), parallel(any: waitHopperFull, followPath(waypoints))),
      cleanup: intake(none))
    ```
 
-   `auto.drive` loses its `intake` and `untilFull` parameters, and `auto.sweep` goes away. The step timing can change,
-   so this increment is measured.
+   `auto.drive` and `auto.sweep` are gone, `auto.push` lost its `intake` parameter and its full-hopper end, and
+   `auto.wait` lost `unlessFull`, which a race with `auto.waitHopperFull` replaces. The onboard environment gained the
+   robot's pose, `bots.me.pose`, from odometry. Results, in three steps:
+   - **The plumbing:** `e73-motion-leaves-plumbing`, with the new leaves and the old trees, equals `e72-field-xy` on
+     every seed.
+   - **The intake default:** the simulator runs an unset intake as `all`, so under the old leaves the intake ran in
+     every shoot, wait, and idle step. `e74-auto-intake-off`, AUTO with the intake off by default and the old trees,
+     is -10.0 ± 10.0 combined points against e73, which is noise.
+   - **The composites:** `e75-motion-leaves`, the converted trees, is +20.8 ± 9.8 against e74, and +10.8 ± 11.9 against
+     e73. AUTO points went from 175.1 to 177.8.
+
 8. **The editor flow.** An **Edit AUTO paths** button in the right-hand panel opens the editor, in red's frame, with
    buttons for the two red robots above the tree. Both robots' paths show on the FIELD, and the other robot's is dimmed.
    For the selected robot:

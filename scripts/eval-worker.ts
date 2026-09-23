@@ -1,8 +1,8 @@
 // Runs one four-robot planner match and prints one JSON line with the score and a waste account per robot.
 // Run: npx tsx scripts/eval-worker.ts <seed>. BOTS works as in scripts/match.ts. OPPONENT=none plays red alone, and
 // REFEREE=1 adds the G421 PIN referee, whose MAJOR FOULS go to the other alliance's score. FIXED_CELL=1 starts the CELL
-// NECTAR at the CAD staging spots instead of a random drop (see `STAGING`). AUTO_INTAKE=none starts AUTO with the
-// intake off, where an unset intake runs as `all` (see `AUTO_TUNING.intakeDefault`).
+// NECTAR at the CAD staging spots instead of a random drop (see `STAGING`). AUTO_INTAKE=all starts AUTO with the
+// intake on, where it starts off (see `AUTO_TUNING.intakeDefault`).
 import RAPIER from '@dimforge/rapier3d-compat';
 import { Coach } from '../src/auto/coach';
 import { EXEC } from '../src/auto/executor';

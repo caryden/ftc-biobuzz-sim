@@ -1,7 +1,7 @@
 // Plans the blind AUTO sweeps from data. For each role it runs many simulated AUTO periods, records where the
 // collectable balls rest at the instant the sweep begins, prints a heatmap, and searches for the waypoints that
-// collect the most balls with the intake leading. It writes the lanes into every `auto.sweep` leaf of the AUTO trees in
-// src/auto/trees/auto/, by the leaf's `role`.
+// collect the most balls with the intake leading. It writes the lanes as the waypoints of every `auto.followPath`
+// leaf tagged `sweep-ROLE` in the AUTO trees in src/auto/trees/auto/. It doesn't change a path's `timeoutSec`.
 // Run: npx tsx scripts/plan-sweeps.ts [seeds=30]
 import RAPIER from '@dimforge/rapier3d-compat';
 import fs from 'node:fs';
@@ -97,14 +97,18 @@ for (const role of ['solo', 'right', 'left']) {
   heatmap(snaps); const p = plan(snaps, park, q => (role === 'right' ? q.z > 0.3 : role === 'left' ? q.z < -0.3 : true)); out[role] = p.lanes as (number | string)[][];
   console.log(`planned lanes ${JSON.stringify(p.lanes)} collect ${p.mean.toFixed(2)} balls per sweep in the snapshots`);
 }
-// Write each role's lanes into the sweeps of that role, in every tree. A role with no snapshots keeps its lanes. The
-// planning above works in the simulator's x and z, and a tree file is in FIELD x and y, where y is the negative of z.
+// Write each role's lanes into the sweep paths of that role, in every tree. A role with no snapshots keeps its path.
+// The planning above works in the simulator's x and z, and a tree file is in FIELD x and y, where y is the negative of
+// z. A lane along a wall faces the wall, and any other lane faces along the path, so that the intake leads.
+const FACING = { rear: 90, audience: -90, red: 180 } as const;
 for (const file of fs.readdirSync('src/auto/trees/auto').filter(f => f.endsWith('.json'))) {
   const path = `src/auto/trees/auto/${file}`, tree = JSON.parse(fs.readFileSync(path, 'utf8')); let changed = 0;
   const visit = (n: unknown) => {
     if (typeof n !== 'object' || n === null) return;
-    const node = n as { ref?: string; params?: { role?: string; lanes?: unknown } };
-    if (node.ref === 'auto.sweep' && node.params?.role && out[node.params.role]) { node.params.lanes = out[node.params.role].map(([x, z, wall]) => ({ x, y: -z, wall: wall ?? null })); changed++; }
+    const node = n as { ref?: string; params?: { tag?: string; waypoints?: unknown } }, role = node.params?.tag?.replace(/^sweep-/, '');
+    if (node.ref === 'auto.followPath' && node.params?.tag?.startsWith('sweep-') && role && out[role]) {
+      node.params.waypoints = out[role].map(([x, z, wall]) => ({ x, y: -(z as number), headingDeg: wall ? FACING[wall as keyof typeof FACING] : null })); changed++;
+    }
     Object.values(n).forEach(visit);
   };
   visit(tree.root);

@@ -88,13 +88,20 @@ policies](behavior-trees.md).
 
 A tree is a list of steps, and each step is a leaf:
 
-- **`auto.drive`** drives to a pose. **`auto.sweep`** drives a list of planned lanes.
-- **`auto.push`** pushes with the intake on, and **`auto.shoot`** launches a count open loop.
+- **`auto.driveTo`** drives to a pose on a path that the path planner picks. **`auto.followPath`** follows a path
+  through the tree's own waypoints, with no planner.
+- **`auto.push`** pushes straight ahead, and **`auto.shoot`** launches a count open loop.
+- **`auto.intake`** sets the intake filter, which holds until the next `auto.intake`. AUTO starts with the intake off.
 - **`auto.wait`** waits, and **`auto.waitClock`** waits until a clock time.
-- **`auto.waitCell`** waits until the camera reads a CELL as raised, and **`auto.waitTip`** until it sees that CELL tip.
+- **`auto.waitHopperFull`** waits until the hopper is full, **`auto.waitCell`** until the camera reads a CELL as
+  raised, and **`auto.waitTip`** until it sees that CELL tip.
+
+The driving leaves leave the intake alone, so a step that collects is a composite, as in FTC's command-based code. For
+example, a sweep turns the intake on, races `followPath` against `waitHopperFull`, and turns the intake off in the
+cleanup of an `ensure` node, however the race ends.
 
 Each step ends on its condition or its timeout. The robot then does nothing for one physics step, as a state machine
-that advances on its next loop does. A tree that ends with a PARK races its steps against the clock, so that the PARK
+that advances on its next loop does. `auto.intake` and `auto.waitHopperFull` end without that idle step. A tree that ends with a PARK races its steps against the clock, so that the PARK
 starts in time whatever step is running. Poses are expressions over the robot's size and shooter direction, so one
 tree fits every robot. Each step's note in the tree file says why the step is there.
 
@@ -107,8 +114,9 @@ a grazing-angle limit. The camera sits on the shooter side, 0.30 m up and pitche
 CELL's tags from both launch spots. The camera reads the HIVE, not the balls, and only AUTO uses it.
 
 The sweeps are blind but planned from data: `scripts/plan-sweeps.ts` records where spilled balls come to rest over
-many simulated AUTO periods, prints a heatmap, searches for the lanes that collect the most, and writes them into the
-sweep steps of the trees. Lanes lead with the intake, except along a wall, where the robot faces the wall and strafes.
+many simulated AUTO periods, prints a heatmap, searches for the lanes that collect the most, and writes them as the
+waypoints of the paths tagged `sweep-solo`, `sweep-right`, and `sweep-left`. Lanes lead with the intake, except along
+a wall, where the robot faces the wall and strafes.
 
 To move an AUTO pose, follow these steps:
 
@@ -116,7 +124,7 @@ To move an AUTO pose, follow these steps:
    changes to **Overhead**, and the tree view shows the robot's AUTO tree. You edit in red's frame, and blue robots run
    the same tree rotated 180°, so the button is disabled for a blue robot.
 2. Drag an orange disc to move a drive step's pose, or drag the knob at the end of its line to turn its heading. A cyan
-   disc is a sweep's lane point. Click a step in the tree view to find its handles: they turn white.
+   disc is a waypoint of a path, such as a sweep. Click a step in the tree view to find its handles: they turn white.
 3. Click **Done**.
 
 The first edit makes an edited copy of the tree, named "(edited)" in the **AUTO plan** list, and the robot runs the
