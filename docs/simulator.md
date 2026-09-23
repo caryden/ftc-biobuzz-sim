@@ -50,8 +50,8 @@ default TELEOP tree in TELEOP. For how the trees work, see [Behavior-tree polici
 
 | Period | Decision maker | Setting |
 | --- | --- | --- |
-| AUTO | A behavior tree in `src/auto/trees/`, for every robot | **AUTO plan** in the robot config |
-| TELEOP | The default TELEOP tree, `src/auto/trees/teleop-default.json`: TIPS, and FLOWERS from the time that **TELEOP plan** sets | **Driver**: Planner |
+| AUTO | A behavior tree in `src/auto/trees/auto/`, for every robot | **AUTO plan** in the robot config |
+| TELEOP | The default TELEOP tree, `src/auto/trees/teleop/teleop-default.json`: TIPS, and FLOWERS from the time that **TELEOP plan** sets | **Driver**: Planner |
 | TELEOP | A person with controller 1 or controller 2. Only the red robots can have a human driver. | **Driver**: Controller 1 or Controller 2 |
 
 ### Robot config
@@ -80,7 +80,7 @@ the same motor, so the stall torque scales inversely, and the size scales the wh
 
 ### AUTO trees
 
-Each AUTO plan is a behavior tree in `src/auto/trees/`. It runs in the onboard environment of `src/auto/onboard.ts`,
+Each AUTO plan is a behavior tree in `src/auto/trees/auto/`. It runs in the onboard environment of `src/auto/onboard.ts`,
 which has what an OpMode can know: the robot's own pose, its carried count, its size, the clock, and the camera. It
 has no ball, FLOWER, or robot positions. For how trees work, see [Behavior-tree policies](behavior-trees.md).
 

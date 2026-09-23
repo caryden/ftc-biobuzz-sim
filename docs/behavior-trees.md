@@ -1,9 +1,9 @@
 # Behavior-tree policies
 
-**Status: increments 1 to 4 are built; the rest is proposed.** The first four increments of the [plan](#plan) are
-done: the runtime in `src/bt/`, both periods as trees in `src/auto/trees/`, and every TELEOP decision in the TELEOP
-tree, including the endgame, the bump, the yield, and full defense. For how the simulator works, see
-[How the simulator works](simulator.md).
+**Status: increments 1 to 4 are built; the rest is proposed.** The first four increments of the [plan](#plan) are done:
+the runtime in `src/bt/`, both periods as trees in `src/auto/trees/auto/` and `src/auto/trees/teleop/`, and every TELEOP
+decision in the TELEOP tree, including the endgame, the bump, the yield, and full defense. For how the simulator works,
+see [How the simulator works](simulator.md).
 
 This document proposes replacing the robot's decision code with behavior trees. A behavior tree is a tree of small
 nodes. The inner nodes decide what runs, and the leaves read the field and drive the robot. The same tree format
@@ -150,14 +150,14 @@ inside it, not in the tree.
 ## Execution model
 
 Trees run on simulated time. Each node is a TypeScript generator. A `yield` waits for the next physics step, so a leaf
-reads as straight-line code:
+reads as straight-line code. The following leaf, `teleop.tactic` in `src/auto/driver.ts`, runs one executor tactic
+until the executor reports it done or blocked:
 
 ```ts
-function* collectAndLaunch(env: DriverEnv) {
-  const need = env.field.hives.own.raised.need;
-  yield* env.bots.me.drive.navigate(pickupRoute(env, need), { intake: 'all', untilFull: true });
-  yield* env.bots.me.drive.navigate([launchSpot(env)]);
-  return yield* env.bots.me.shooter.fireAll();
+*run(ctx) {
+  const e = ctx.env, ex = e.executor;
+  ex.setTactic(ctx.params.tactic, ctx.params.flower); e.runExecutor();
+  for (;;) { yield; if (ex.status !== 'in_progress') return ex.status; e.runExecutor(); }
 }
 ```
 
@@ -176,6 +176,38 @@ The rules are as follows:
 - **Node memory is the generator's local variables.** Halting a node discards its memory.
 - **No endless loop within one step.** If a loop finishes an iteration without using a physics step, the runtime makes
   it wait for the next step.
+
+### How a step runs
+
+The runtime is a hybrid: nodes are written like asynchronous code, and they run on a conventional behavior tree's fixed
+tick. Each tree is a coroutine that advances in lockstep with the physics.
+
+- **Written like asynchronous code.** A node is a coroutine with its own local state. It returns a value or throws a
+  typed failure, and there's no running status. Halting a node runs its cleanup through the whole subtree, as
+  interrupting a fiber does.
+- **Driven like a ticked tree.** `TreeRunner.step()` in `src/bt/runner.ts` runs once per physics step, 240 times per
+  second, for each robot. Every timer counts steps, and nothing waits on real time or on a promise.
+- **Resumed, not re-traversed.** A conventional tree walks from the root on every tick and checks conditions along the
+  way. Here a step resumes only the paused chain from the root to the running leaf. The rest of the tree isn't visited,
+  so a step costs about 0.3 µs per robot.
+- **Reactive only where a tree says so.** A higher-priority branch interrupts a running one only inside a reactive
+  fallback, and only every `recheckSec` seconds. The default TELEOP tree checks its endgame, bump, and yield every step,
+  and its tactic choice once per second.
+- **No real concurrency.** A `parallel` node advances each running child once per step, in child order.
+
+The following table compares the runtime with the behavior trees in the [prior work](#prior-work):
+
+| Question | A conventional ticked tree | electric-mayhem | The private runtime | This runtime |
+| --- | --- | --- | --- | --- |
+| What drives it | A tick from the host | A change of any condition | The Effect scheduler | A tick per physics step |
+| What a step visits | The tree from the root | The tree from the root, after a restart | The fibers that are ready | The paused chain to the running leaf |
+| When a branch is interrupted | Whenever a reactive condition fails on a tick | On every condition change, by a restart | When a watched condition changes | Only in a reactive fallback, every `recheckSec` |
+| Time | Tick count or wall clock | Wall clock, and a virtual clock in tests | Wall clock | Simulated time only |
+| Concurrency | None | Coroutines | Fibers | Children advanced in order |
+| The same inputs give the same run | Depends on the host | No | No | Yes |
+
+Being deterministic and synchronous is what made the exact checks of increments 2 and 3 possible. Each conversion ran
+alongside the old code on the same state and gave the same inputs on every physics step.
 
 ## Node types
 
@@ -278,13 +310,13 @@ level also has these fields:
 - **`meta`:** optional data for the host, which the loader doesn't check. AUTO trees give their start position and,
   for a pair, the partner's id.
 
-A leaf is a `ref` to a registered leaf type, with `params`. Each parameter's schema says whether it takes an expression. An
-enum parameter, such as an intake mode, takes a plain value. Any node can carry a `note`, which keeps the reason for a
-step next to the step.
+A leaf is a `ref` to a registered leaf type, with `params`. Each parameter's schema says whether it takes an expression.
+An enum parameter, such as an intake mode, takes a plain value. Any node can carry a `note`, which keeps the reason for
+a step next to the step.
 
-The following file is `src/auto/trees/wall-sweep-pair-right.json`, the right robot's AUTO, shortened to its first three steps
-and its last. Its last step, the PARK, starts when all the other steps end, or when the clock shows 2.5 s, whichever
-comes first:
+The following file is `src/auto/trees/auto/wall-sweep-pair-right.json`, the right robot's AUTO, shortened to its first
+three steps and its last. Its last step, the PARK, starts when all the other steps end, or when the clock shows 2.5 s,
+whichever comes first:
 
 ```json
 {
@@ -427,8 +459,8 @@ exact match is the test for increments 2 and 3.
    trace recorder. `test/bt.test.ts` and `test/bt-expr.test.ts` cover each node type. QuickJS's cost per call is
    measured. No match behavior changes.
 2. **Convert AUTO. Done.** `src/auto/onboard.ts` holds the onboard environment, the AUTO leaves, and `AutoProgram`,
-   which runs a tree for one robot. The eight scripts are tree files in `src/auto/trees/`, and `src/auto/script.ts` is
-   gone. `scripts/plan-sweeps.ts` writes the sweep lanes into the trees. Results:
+   which runs a tree for one robot. The eight scripts are tree files in `src/auto/trees/auto/`, and `src/auto/script.ts`
+   is gone. `scripts/plan-sweeps.ts` writes the sweep lanes into the trees. Results:
    - **The inputs match on every step.** With the script runner driving and a tree running alongside, the two gave
      identical inputs on every physics step of 45 AUTO periods: 324,045 steps, four robots each, for three robot
      sizes, both shooter directions, partners and solo, and three seeds. A pose moved by 1 mm showed up at the drive's
@@ -447,10 +479,10 @@ exact match is the test for increments 2 and 3.
    - **The clock race is a parallel node.** An `auto.clockAtMost` leaf races the steps with the `any` policy, and the
      PARK follows the race.
    - **Both alliances use red's HIVE pivot,** as the mirrored scripts did. Blue's own pivot is 0.4 mm farther out.
-3. **Convert TELEOP. Done.** `src/auto/driver.ts` holds the driver environment, the TELEOP leaves, and
-   `TeleopProgram`. The coach's decision and `scriptedTeleop` are the tree `src/auto/trees/teleop-default.json`: a
-   full-time defender first, and otherwise a reactive fallback, rechecked once per second, over FLOWER work, a TIP, a
-   launch of what the robot carries, and PARK. Results:
+3. **Convert TELEOP. Done.** `src/auto/driver.ts` holds the driver environment, the TELEOP leaves, and `TeleopProgram`.
+   The coach's decision and `scriptedTeleop` are the tree `src/auto/trees/teleop/teleop-default.json`: a full-time
+   defender first, and otherwise a reactive fallback, rechecked once per second, over FLOWER work, a TIP, a launch of
+   what the robot carries, and PARK. Results:
    - **The inputs match on every step.** With the coach's old code driving and the tree running alongside, the two
      gave identical inputs on every physics step of 12 full matches: 455,076 steps, four robots each, over three
      seeds. The matches cover the baseline and the meta build, TIPS only and FLOWER work, and both kinds of defense.
@@ -525,8 +557,8 @@ exact match is the test for increments 2 and 3.
 ## The tree catalog
 
 Every tree has a row in the `trees` table of the site's D1 database, with its id, name, description, and file. The
-system trees, which ship with the site, are the files in `src/auto/trees/`. The deployment that is live writes their
-rows itself:
+system trees, which ship with the site, are the files in `src/auto/trees/auto/` and `src/auto/trees/teleop/`. The
+deployment that is live writes their rows itself:
 
 1. The build writes the tree files, a SHA-256 of each, and one hash over the set into `trees/catalog.json`, in the same
    deployment as the code that runs them.

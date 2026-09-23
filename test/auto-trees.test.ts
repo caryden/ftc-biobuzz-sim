@@ -44,9 +44,13 @@ describe('TELEOP tree', () => {
 });
 
 describe('tree files', () => {
-  it('names each file after its tree id, which the catalog and the saved setups use', () => {
-    const files = import.meta.glob<{ id: string }>('../src/auto/trees/*.json', { eager: true, import: 'default' });
+  it('names each file after its tree id, and keeps AUTO and TELEOP trees in their own folders', () => {
+    const files = import.meta.glob<{ id: string; env: string }>('../src/auto/trees/*/*.json', { eager: true, import: 'default' });
     expect(Object.keys(files)).toHaveLength(9);
-    for (const [path, tree] of Object.entries(files)) expect(tree.id).toBe(path.split('/').pop()!.replace(/\.json$/, ''));
+    for (const [path, tree] of Object.entries(files)) {
+      const [folder, file] = path.split('/').slice(-2);
+      expect(tree.id).toBe(file.replace(/\.json$/, ''));
+      expect(tree.env).toBe(folder === 'auto' ? 'onboard' : 'driver');
+    }
   });
 });

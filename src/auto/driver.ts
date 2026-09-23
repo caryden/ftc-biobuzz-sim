@@ -17,7 +17,7 @@ import { Defender } from './defend';
 import { POINTS } from '../sim/config';
 import { TACTICS, linedUpOpponent, parkLeadSec, type Executor, type FlowerId, type Tactic, type TeamChannel } from './executor';
 import { available, flowerStep } from './policy';
-import teleopDefault from './trees/teleop-default.json';
+import teleopDefault from './trees/teleop/teleop-default.json';
 
 /** The fields that expressions in a TELEOP tree can read. */
 export const DRIVER_SCHEMA = t.object({

@@ -17,7 +17,7 @@ blocked.
 
 ## Expected-value planner
 
-Replace the fixed priority rule of the default TELEOP tree, `src/auto/trees/teleop-default.json`, with a planner that estimates points and seconds for every
+Replace the fixed priority rule of the default TELEOP tree, `src/auto/trees/teleop/teleop-default.json`, with a planner that estimates points and seconds for every
 available tactic and picks the best points per second, with a bonus for staying on the current tactic. The endgame
 branch of that tree is a first piece of it.
 
