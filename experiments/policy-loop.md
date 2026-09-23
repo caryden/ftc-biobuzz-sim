@@ -99,6 +99,11 @@ Transit is about 73% of TELEOP. The changes that paid were the ones that removed
 | `e56-trees-on-random-nectar` | Both trees, merged with `main` at `3ca1eb9` | 809 ± 7.5 | Kept. Identical to e55 on every seed and in every field. |
 | `e57-renamed-trees` | The trees get new ids and display names, for example `wall-sweep-pair-right` for `right_harvest`. See experiments/README.md. | 809 ± 7.5 | Kept. Identical to e56 on every seed and in every field. |
 | `e58-endgame-branch` | The endgame check moves out of the executor into the TELEOP tree: a branch above the normal choice, checked every step, that picks a last launch or PARK by value | 809 ± 7.5 | Kept. Identical to e57 on every seed and in every field. Nine matches with FLOWER work, both kinds of defense, and the meta build scored the same as before, too. |
+| `e59-opportunistic-base` | The reference for e61: all four robots on opportunistic defense, `BOTS` with `defense` set to `opportunistic`, before the bump moved | 805 ± 7.2 | The reference. |
+| `e60-bump-branch` | The opportunistic bump moves out of the executor into the TELEOP tree's `bump` branch: a 0.8 s timeout and a 6 s cooldown from the start of each shove | 809 ± 7.5 | Kept. Identical to e58 on every seed: no robot bumps in the standard setup. |
+| `e61-bump-branch-opportunistic` | e60 with all four robots on opportunistic defense | 791 ± 7.9 | -14.5 ± 8.7 against e59, 15 seeds down and 9 up. A bump now ends for good when the opponent leaves its spot, and more of them run the full 0.8 s. |
+| `e62-red-bumps-main` | `main` before the bump moved, with red on opportunistic defense and blue on none | 814 ± 7 | The reference for e63. Red's margin is 7.3 ± 6.4. |
+| `e63-red-bumps-branch` | e60 with red on opportunistic defense and blue on none | 807 ± 7.7 | Kept. Red's margin is 3.3 ± 8.7, a paired change of -4.0 ± 7.5 against e62, which is noise. |
 
 Net for the planner: 736 to 800 combined on the default robots, or about +32 per alliance. The standard error of that difference is about 11.
 

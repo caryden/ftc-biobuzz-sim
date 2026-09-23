@@ -239,6 +239,22 @@ describe('supervisors', () => {
     // The failing child runs at 0 s, then cools down until 1 s, runs at 1 s, and cools down until 2 s.
     expect(events.filter(e => e === 'fail:Stalled')).toHaveLength(3);
   });
+  it('cools down from the start of its child, and a reactive fallback skips a branch that is cooling down', () => {
+    // A bump-like branch: when `flag` is true, run `b` for at most 1 s, then not again until 3 s after it started.
+    const h = harness(tree({ fallback: { recheckSec: 0, children: [
+      { guard: { when: 'flag', child: { cooldown: { sec: 3, from: 'start', child: { timeout: { sec: 1, child: W('b', 100) } } } } } },
+      { repeat: { stopOn: 'never', child: W('main', 1) } },
+    ] } }));
+    h.env.flag = true;
+    h.run(24);
+    // b starts at 0 s and runs until it times out after 1 s: its own cooldown doesn't stop it. With flag still true, it
+    // starts again at 3 s, not on every step between.
+    expect(events.filter(e => e === 'b:start')).toHaveLength(2);
+    expect(h.rec.spans.filter(s => s.label === 'test.wait' && s.path.startsWith('root/0.guard')).map(s => s.end)).toEqual([1.25, 4.25]);
+    const starts = h.rec.spans.filter(s => s.label === 'test.wait' && s.path.startsWith('root/0.guard')).map(s => s.start);
+    expect(starts).toEqual([0, 3]);
+    expect(issues(tree({ cooldown: { sec: 1, from: 'end', child: W('a') } }))[0]).toMatch(/'from' must be/);
+  });
   it('holds a decision even when the environment changes', () => {
     const h = harness(tree({ repeat: { stopOn: 'never', child: { fallback: { children: [{ hold: { sec: 1, child: { condition: 'flag' } } }, W('no', 0)] } } } }));
     const seen: number[] = [];

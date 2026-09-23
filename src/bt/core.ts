@@ -61,8 +61,13 @@ export interface CNode {
   /** The type of the node's success value. */
   readonly out: Type;
   run(rt: Rt, input: unknown, b: Bindings): Behavior;
-  /** Guards only: checks the guard's condition now, without starting its child. A reactive fallback uses it. */
+  /**
+   * Checks whether the node could start now: a guard's condition, and whether its child is ready, for example not
+   * cooling down. A reactive fallback starts a higher-priority child only if this is true.
+   */
   test?(s: Scope): boolean;
+  /** Guards only: checks the guard's own condition. A reactive fallback keeps a running guard only while this is true. */
+  holds?(s: Scope): boolean;
   /** Leaves only: the leaf type and its compiled parameters. Tools read them, for example to preview an AUTO path. */
   readonly leaf?: { readonly type: LeafType; readonly params: Readonly<Record<string, (s: Scope) => unknown>> };
 }

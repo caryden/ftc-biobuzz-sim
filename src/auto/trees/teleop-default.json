@@ -51,6 +51,27 @@
         }
        },
        {
+        "id": "bump",
+        "note": "Opportunistic defense. An opponent that stands on its launch spot next to this robot with a load is about to launch, and a short shove knocks it off its aim. The robot shoves for at most 0.8 s, and then not again until 6 s after the shove began, which also keeps it clear of a PIN (G421). Checked every step.",
+        "guard": {
+         "when": "config.defense == 'opportunistic' and bots.me.launching and not bots.me.lastLaunchStarted and exists(opponents.linedUpNear)",
+         "child": {
+          "cooldown": {
+           "sec": 6,
+           "from": "start",
+           "child": {
+            "timeout": {
+             "sec": 0.8,
+             "child": {
+              "ref": "teleop.bump"
+             }
+            }
+           }
+          }
+         }
+        }
+       },
+       {
         "id": "play",
         "note": "The robot decides again whenever a tactic ends: the repeat runs the choice again from the top.",
         "repeat": {

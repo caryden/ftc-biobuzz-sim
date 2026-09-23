@@ -47,7 +47,9 @@ export function fallback(base: Base, recheckSec: number | null): CNode {
       throw allFailed(failures);
     });
   }
-  const passes = (c: CNode, s: Scope) => c.test ? c.test(s) : true;
+  // A higher-priority child must be able to start. The running child must only still meet its own guard: a cooldown that
+  // began when it started doesn't stop it.
+  const passes = (c: CNode, s: Scope) => c.test ? c.test(s) : true, stillHolds = (c: CNode, s: Scope) => c.holds ? c.holds(s) : passes(c, s);
   return node(base, function* (rt, input, b) {
     const failures: Failure[] = [], s = sc(rt, input, b);
     let i = 0;
@@ -61,7 +63,7 @@ export function fallback(base: Base, recheckSec: number | null): CNode {
             lastCheck = rt.now();
             let j = 0; while (j < i && !passes(kids[j], s)) j++;
             if (j < i) { halt(g); i = j; continue next; }
-            if (!passes(kids[i], s)) { halt(g); failures.push(new Failure('ConditionFalse', 'the running guard became false')); i++; continue next; }
+            if (!stillHolds(kids[i], s)) { halt(g); failures.push(new Failure('ConditionFalse', 'the running guard became false')); i++; continue next; }
           }
           r = g.next();
         }
@@ -119,12 +121,16 @@ export function chain(base: Base): CNode {
   });
 }
 
+/**
+ * Runs its child only if a condition passes. Its `test`, which a reactive fallback checks, also asks the child when
+ * the child can say whether it's ready, for example a cooldown, so that a fallback doesn't start a branch that can't run.
+ */
 export function guard(base: Base, when: Ex, source: string): CNode {
-  const [child] = base.children, test = (s: Scope) => when(s) === true;
+  const [child] = base.children, holds = (s: Scope) => when(s) === true, test = (s: Scope) => holds(s) && (child.test ? child.test(s) : true);
   return node(base, function* (rt, input, b) {
     if (!test(sc(rt, input, b))) throw new Failure('ConditionFalse', `the guard is false: ${source}`);
     return yield* exec(child, rt, input, b);
-  }, { test });
+  }, { test, holds });
 }
 
 /**
@@ -181,15 +187,22 @@ export function repeat(base: Base, times: Ex | null, stopOn: 'failure' | 'succes
   });
 }
 
-/** After its child fails, fails at once with `CoolingDown` for `sec` seconds. The time holds across activations. */
-export function cooldown(base: Base, sec: Ex): CNode {
+/**
+ * Fails at once with `CoolingDown` for `sec` seconds after its child fails, or, with `from` set to `start`, after its
+ * child starts. The time holds across activations. Its `test` is false while it cools down, so a reactive fallback
+ * doesn't start it then.
+ */
+export function cooldown(base: Base, sec: Ex, from: 'failure' | 'start' = 'failure'): CNode {
   const [child] = base.children;
+  const mem = (rt: Rt) => rt.mem(base.idx) as { until?: number };
+  const ready = (rt: Rt) => { const m = mem(rt); return m.until === undefined || rt.now() >= m.until - 1e-9; };
   return node(base, function* (rt, input, b) {
-    const m = rt.mem(base.idx) as { until?: number };
-    if (m.until !== undefined && rt.now() < m.until) throw new Failure('CoolingDown', `cooling down until ${m.until.toFixed(2)} s`);
+    const m = mem(rt);
+    if (!ready(rt)) throw new Failure('CoolingDown', `cooling down until ${m.until!.toFixed(2)} s`);
+    if (from === 'start') m.until = rt.now() + numberOf(sec, sc(rt, input, b), 'cooldown sec');
     try { return yield* exec(child, rt, input, b); }
-    catch (e) { if (isFailure(e)) m.until = rt.now() + numberOf(sec, sc(rt, input, b), 'cooldown sec'); throw e; }
-  });
+    catch (e) { if (from === 'failure' && isFailure(e)) m.until = rt.now() + numberOf(sec, sc(rt, input, b), 'cooldown sec'); throw e; }
+  }, { test: s => ready(s.rt) && (child.test ? child.test(s) : true) });
 }
 
 /**

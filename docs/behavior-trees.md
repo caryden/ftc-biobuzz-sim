@@ -192,7 +192,7 @@ and chain operators, which transform a value.
 | Supervisor | `timeout` | Halts its child and fails with `TimedOut` after a set time. |
 | Supervisor | `retry` | Runs its child again after a failure with a listed tag, up to a set count. |
 | Supervisor | `repeat` | Runs its child again each time it finishes. The TELEOP root uses it. |
-| Supervisor | `cooldown` | After its child fails, fails at once for a set time. |
+| Supervisor | `cooldown` | After its child fails, or with `from: "start"` after its child starts, fails at once for a set time. |
 | Supervisor | `hold` | Reuses its child's last result for a set time, so a decision can't flip every step. |
 | Supervisor | `ensure` | Runs a cleanup child after its child succeeds, fails, or halts. |
 | Supervisor | `recover` | Turns failures with listed tags into a success value, or into another child. |
@@ -207,11 +207,19 @@ The following sections describe the parts that need more than one line.
 
 ### Reactive fallback
 
-A `fallback` can be reactive. While a child runs, the fallback checks the guards of its higher-priority children
-every `recheckSec` seconds. If one passes, the fallback halts the running child and starts the higher-priority one.
-If the running child is a guard and its own condition fails, the fallback halts it and starts the next child. Only
-guard children take part in these checks, so a reactive fallback needs at least one. The interval starts again
-whenever a child starts.
+A `fallback` can be reactive. While a child runs, the fallback checks its higher-priority children every `recheckSec`
+seconds. If one can start, the fallback halts the running child and starts that one. If the running child is a guard
+and its own condition fails, the fallback halts it and starts the next child. The interval starts again whenever a
+child starts. The rules for "can start" are as follows:
+
+- **A guard can start** when its condition is true and its child is ready. A `cooldown` child isn't ready while it
+  cools down, so a fallback doesn't start a branch that would fail at once.
+- **A running guard keeps running** while its own condition is true. A cooldown that began when the branch started
+  doesn't stop it.
+- **A child without a guard can always start.** Such a child ranks above the running one only if it ran earlier and
+  failed, and then the fallback tries it again at the next check.
+
+A reactive fallback needs at least one guard child.
 A `recheckSec` of 0 checks every step. The endgame branch needs 0. The tactic choice uses 1 s, which matches the
 coach's review that it replaced.
 
@@ -470,7 +478,20 @@ exact match is the test for increments 2 and 3.
      fields hold the values, and `Executor.update` takes the decision as a mode. `e58-endgame-branch` equals
      `e57-renamed-trees` on every seed, and nine more matches with FLOWER work, both kinds of defense, and the meta
      build scored the same as before, in every score component.
-   - **The opportunistic bump, the partner yield, the partner channel, and the defender** are still to do.
+   - **The opportunistic bump. Done.** The tree's `bump` branch sits between the endgame and the normal choice, in the
+     fallback that checks every step. When the robot is in a TIP's launch phase and an opponent that is lined up to
+     launch stands within 1 m, it runs `teleop.bump` under a 0.8 s timeout, with a 6 s cooldown from the start of each
+     shove. This needed two runtime changes: `cooldown` can count from its child's start, and a reactive fallback
+     checks whether a branch is ready before it starts it. Results:
+     - **Standard setup:** `e60-bump-branch` equals `e58-endgame-branch` on every seed, because no robot bumps there.
+     - **All four robots bumping:** `e61-bump-branch-opportunistic` is -14.5 ± 8.7 combined points against
+       `e59-opportunistic-base`.
+     - **Red bumping, blue not:** red's margin is 3.3 ± 8.7 in `e63-red-bumps-branch`, where it was 7.3 ± 6.4 in
+       `e62-red-bumps-main`. The paired change is -4.0 ± 7.5, which is noise.
+
+     A bump now ends for good when the opponent leaves its spot. The old code could pause and resume a shove within
+     its 0.8 s. On three matches, the bumps ended for the same reasons in similar proportions on both versions.
+   - **The partner yield, the partner channel, and the defender** are still to do.
 5. **Show the tree running,** live and in review mode, from the spans.
 6. **Edit AUTO poses on the field.** Each navigate node shows its poses as handles that you drag, with a heading
    handle. Selecting a node highlights its poses, and clicking a pose selects its node. The path preview redraws after
