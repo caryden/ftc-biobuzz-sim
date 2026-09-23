@@ -1,4 +1,5 @@
 import { FIELD, HIVE, POINTS, RP, TIP_LOAD } from '../sim/config';
+import type { RobotState } from '../sim/world';
 import type { Alliance } from '../sim/hive';
 import { NO_INPUT, retrievable, stackTop, type BallKind, type Flower, type Inputs, type IntakeFilter, type Sim } from '../sim/world';
 import { pursue } from './follow';
@@ -130,6 +131,9 @@ export function parkEnd(sim: Sim): -1 | 1 {
   const mate = sim.partner(); if (!mate) return 1; const dz = sim.robot.translation().z - mate.z;
   return dz < -0.15 ? -1 : dz > 0.15 ? 1 : sim.slot === 0 ? -1 : 1;
 }
+/** What a robot's drive team tells its partner: its intent, for example `tip_hive`, and its plan. See `RobotState`. */
+export type TeamChannel = Pick<RobotState, 'intent' | 'plan'>;
+
 /**
  * Gets the first opponent that stands on its launch spot within 1 m of this robot with a load: about to launch. An
  * opportunistic bump targets it. Null if there is none.
@@ -445,10 +449,12 @@ export class Executor {
    *   the robot is in a TIP's launch phase. `yield` holds still in a TIP's launch phase, so that the partner lines up
    *   first. Default: `normal`, which runs the tactic.
    * @param bumpSlot The opponent's slot for `bump`.
+   * @param team What this robot's drive team tells its partner: its intent and its plan. Partners and opponents read
+   *   them from the robot's record. Default: that record. The TELEOP tree passes its partner channel.
    */
-  update(sim: Sim, dt: number, mode: 'normal' | 'park' | 'lastLaunch' | 'bump' | 'yield' = 'normal', bumpSlot = -1): Inputs {
-    this.t += dt; sim.robots[sim.me].intent = this.tactic === 'work_flower' ? `work_flower:${this.flowerId}` : this.tactic;
-    const shared = sim.robots[sim.me].plan; shared.claims = this.tactic === 'tip_hive' || this.tactic.startsWith('collect') ? this.pickup.slice(0, 2).map(q => q.key) : []; shared.phase = 'other'; shared.side = null; shared.load = 0; shared.goal = null; shared.zone = this.own(sim);
+  update(sim: Sim, dt: number, mode: 'normal' | 'park' | 'lastLaunch' | 'bump' | 'yield' = 'normal', bumpSlot = -1, team: TeamChannel = sim.robots[sim.me]): Inputs {
+    this.t += dt; team.intent = this.tactic === 'work_flower' ? `work_flower:${this.flowerId}` : this.tactic;
+    const shared = team.plan; shared.claims = this.tactic === 'tip_hive' || this.tactic.startsWith('collect') ? this.pickup.slice(0, 2).map(q => q.key) : []; shared.phase = 'other'; shared.side = null; shared.load = 0; shared.goal = null; shared.zone = this.own(sim);
     const me = sim.alliance, free = sim.cfg.capacity - sim.carried.length, carriedPollen = sim.carried.filter(k => k === 'pollen').length;
     let goal: Goal | null = null, status: Status = 'in_progress', intake: IntakeFilter = 'none', tactic = this.tactic; this.note = '';
     const buttons = { shootNectar: false, shootPollen: false, placeNectar: false, placePollen: false };

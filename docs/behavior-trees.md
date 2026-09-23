@@ -497,7 +497,10 @@ exact match is the test for increments 2 and 3.
      it again, because judging it starts a 2 s hold. `e64-yield-branch` is +4.6 ± 5.2 combined points against
      `e60-bump-branch`, which is noise. A robot that bumps doesn't yield in the same step any more, because the bump
      ranks higher.
-   - **The partner channel and the defender** are still to do.
+   - **The partner channel. Done.** The executor writes its intent and plan through a `TeamChannel` that the TELEOP
+     program passes it, and the driver environment's `partner` fields show the partner's intent, phase, CELL, and
+     load to the tree. `e65-partner-channel` equals `e64-yield-branch` on every seed.
+   - **The defender** is still to do.
 5. **Show the tree running,** live and in review mode, from the spans.
 6. **Edit AUTO poses on the field.** Each navigate node shows its poses as handles that you drag, with a heading
    handle. Selecting a node highlights its poses, and clicking a pose selects its node. The path preview redraws after

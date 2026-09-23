@@ -15,7 +15,7 @@ import { defineLeaf, loadTree, t, TreeRunner, type Registry, type TreeDef } from
 import { NO_INPUT, type Inputs, type Sim } from '../sim/world';
 import { Defender } from './defend';
 import { POINTS } from '../sim/config';
-import { TACTICS, linedUpOpponent, parkLeadSec, type Executor, type FlowerId, type Tactic } from './executor';
+import { TACTICS, linedUpOpponent, parkLeadSec, type Executor, type FlowerId, type Tactic, type TeamChannel } from './executor';
 import { available, flowerStep } from './policy';
 import teleopDefault from './trees/teleop-default.json';
 
@@ -36,7 +36,16 @@ export const DRIVER_SCHEMA = t.object({
     /** True once the endgame chose a last launch. */
     lastLaunchStarted: t.boolean(),
   }) }),
+  /** What the partner's drive team says, and what the drivers can see of the partner. With no partner, `present` is false. */
   partner: t.object({
+    present: t.boolean(),
+    /** The partner's tactic, for example `tip_hive` or `work_flower:rear`. Empty with no partner. */
+    intent: t.string(),
+    phase: t.enum('collect', 'launch', 'park', 'other'),
+    /** The CELL that the partner aims for, or null. */
+    side: t.nullable(t.enum('rear', 'audience')),
+    /** The load in the partner's hand, in POLLEN equivalents. */
+    load: t.number(),
     /** True when this robot should hold still so that its partner lines up first. See `Executor.partnerLinesUpFirst`. */
     linesUpFirst: t.boolean(),
   }),
@@ -68,7 +77,9 @@ export interface DriverEnv {
   clock: { remaining: number };
   config: { flowerStartSec: number; defense: 'none' | 'full' | 'opportunistic' };
   bots: { me: { hopper: { count: number; capacity: number }; tactic: Tactic; readonly launching: boolean; lastLaunchStarted: boolean } };
-  partner: { readonly linesUpFirst: boolean };
+  partner: { present: boolean; intent: string; phase: 'collect' | 'launch' | 'park' | 'other'; side: 'rear' | 'audience' | null; load: number; readonly linesUpFirst: boolean };
+  /** What this robot's drive team tells its partner. The executor writes it on each step. */
+  team: TeamChannel;
   opponents: { readonly linedUpNear: { slot: number; distance: number } | null };
   available: { readonly flowerWork: boolean; readonly tipHive: boolean };
   endgame: { readonly parkLeadSec: number; readonly launchValue: number; readonly parkPoints: number; readonly parkNeededForSwarm: boolean };
@@ -87,7 +98,7 @@ export interface DriverHost { executor: Executor; defender: Defender; flowerStar
 class DriverAdapter implements DriverEnv {
   sim!: Sim; inputs: Inputs = NO_INPUT; private dt = 0;
   clock!: DriverEnv['clock']; config!: DriverEnv['config']; bots!: DriverEnv['bots']; available!: DriverEnv['available']; endgame!: DriverEnv['endgame'];
-  opponents!: DriverEnv['opponents']; partner!: DriverEnv['partner'];
+  opponents!: DriverEnv['opponents']; partner!: DriverEnv['partner']; team!: TeamChannel;
   constructor(private readonly host: DriverHost) {}
   get executor() { return this.host.executor; }
 
@@ -97,7 +108,9 @@ class DriverAdapter implements DriverEnv {
     this.clock = { remaining: sim.timer };
     this.config = { flowerStartSec: host.flowerStartSec, defense: host.defense };
     this.bots = { me: { hopper: { count: sim.carried.length, capacity: sim.cfg.capacity }, tactic: ex.tactic, get launching() { return ex.launchingNow(sim); }, lastLaunchStarted: ex.lastLaunchStarted } };
-    this.partner = { get linesUpFirst() { return ex.partnerLinesUpFirst(sim); } };
+    const mate = sim.partner();
+    this.partner = { present: !!mate, intent: mate?.intent ?? '', phase: mate?.plan.phase ?? 'other', side: mate?.plan.side ?? null, load: mate?.plan.load ?? 0, get linesUpFirst() { return ex.partnerLinesUpFirst(sim); } };
+    this.team = sim.robots[sim.me];
     this.opponents = {
       get linedUpNear() {
         const o = linedUpOpponent(sim); if (!o) return null;
@@ -119,7 +132,7 @@ class DriverAdapter implements DriverEnv {
   runExecutor(mode: 'normal' | 'park' | 'lastLaunch' | 'bump' | 'yield' = 'normal', bumpSlot = -1) {
     const ex = this.host.executor;
     ex.nectarReserve = this.sim.timer < 75 ? 1 : 0; // Near the endgame, always keep a NECTAR for a FLOWER cap.
-    this.inputs = ex.update(this.sim, this.dt, mode, bumpSlot);
+    this.inputs = ex.update(this.sim, this.dt, mode, bumpSlot, this.team);
   }
 
   runDefender() { this.inputs = this.host.defender.update(this.sim, this.dt); }

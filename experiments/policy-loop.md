@@ -105,6 +105,7 @@ Transit is about 73% of TELEOP. The changes that paid were the ones that removed
 | `e62-red-bumps-main` | `main` before the bump moved, with red on opportunistic defense and blue on none | 814 ± 7 | The reference for e63. Red's margin is 7.3 ± 6.4. |
 | `e63-red-bumps-branch` | e60 with red on opportunistic defense and blue on none | 807 ± 7.7 | Kept. Red's margin is 3.3 ± 8.7, a paired change of -4.0 ± 7.5 against e62, which is noise. |
 | `e64-yield-branch` | The partner yield moves out of the executor into the TELEOP tree's `yield` branch, checked every step. The tree's check reads the partner's load as the executor last judged it, without judging it again. | 814 ± 7.7 | Kept. +4.6 ± 5.2 against e60, which is noise: 17 seeds changed, 10 up and 7 down. Yielding takes 0.7 s per robot, where it took 0.6 s. |
+| `e65-partner-channel` | The executor writes its intent and plan through the partner channel that the TELEOP tree passes it, and the tree can read the partner's intent, phase, CELL, and load | 814 ± 7.7 | Kept. Identical to e64 on every seed, as a change of plumbing should be. |
 
 Net for the planner: 736 to 800 combined on the default robots, or about +32 per alliance. The standard error of that difference is about 11.
 
