@@ -1,9 +1,11 @@
 /**
- * The field editor: edits a robot's AUTO poses by dragging handles on the FIELD before a MATCH. The first edit of a
- * built-in tree makes an edited copy, which the robot then runs and this browser keeps. See `auto/auto-edit.ts`.
+ * The field editor: edits a red robot's AUTO poses by dragging handles on the FIELD before a MATCH. Trees are written
+ * in red's frame, and a blue robot runs them rotated 180° about the FIELD center, so the editor opens for red robots
+ * only. The first edit of a built-in tree makes an edited copy, which the robot then runs and this browser keeps. See
+ * `auto/auto-edit.ts`.
  */
 import type { TreeDef } from './bt';
-import { editHandles, editedCopy, isEdited, moveHandle, resetHandle, turnHandle, type Handle } from './auto/auto-edit';
+import { editHandles, editedCopy, isEdited, moveHandle, poseText, resetHandle, sharedWith, toAlliance, turnHandle, type Handle } from './auto/auto-edit';
 import { AUTO_SOURCES, AUTO_TREES, SOLO_AUTO, addAutoTree, autoFor } from './auto/onboard';
 import type { View, CameraMode } from './render/view';
 import type { TreeEdit } from './render/tree-view';
@@ -13,6 +15,7 @@ import { deleteUserTree, saveUserTree } from './user-trees';
 import { FIELD } from './sim/config';
 
 type Json = Record<string, unknown>;
+const wrap = (d: number) => ((((d + 180) % 360) + 360) % 360) - 180;
 
 export interface EditorHost {
   view: View; canvas: HTMLCanvasElement; bots: BotSetup[];
@@ -30,22 +33,22 @@ export class FieldEditor {
   rev = 0;
   selected: string | null = null;
   handles: Handle[] = [];
-  private tree: Json = {}; private original: Json = {}; private drag: { index: number; part: 'pose' | 'heading'; moved: boolean; dx: number; dz: number } | null = null;
+  private tree: Json = {}; private original: Json = {}; private drag: { index: number; part: 'pose' | 'heading'; moved: boolean; dx: number; dy: number } | null = null;
   private camera: CameraMode = 'driver'; private swallowClick = false;
 
   constructor(private readonly host: EditorHost) {
     const c = host.canvas;
     c.addEventListener('pointerdown', e => {
       if (this.robot < 0 || e.button !== 0) return;
-      const hit = host.view.handleAt(e.clientX, e.clientY, this.handles); if (!hit) return;
+      const hit = host.view.handleAt(e.clientX, e.clientY, this.handles.map(h => h.sim)); if (!hit) return;
       e.preventDefault(); c.setPointerCapture(e.pointerId);
       // The drag keeps the offset between the pointer and the handle, so that the handle doesn't jump to the pointer.
-      const h = this.handles[hit.index], q = host.view.pickFloor(e.clientX, e.clientY);
-      this.drag = { ...hit, moved: false, dx: q ? h.x - q.x : 0, dz: q ? h.z + q.y : 0 }; this.select(h.path);
+      const h = this.handles[hit.index], q = this.pointer(e);
+      this.drag = { ...hit, moved: false, dx: q ? h.pose.x - q.x : 0, dy: q ? h.pose.y - q.y : 0 }; this.select(h.path);
     });
     c.addEventListener('pointermove', e => {
       if (this.robot < 0) return;
-      if (!this.drag) { c.style.cursor = host.view.handleAt(e.clientX, e.clientY, this.handles) ? 'grab' : ''; return; }
+      if (!this.drag) { c.style.cursor = host.view.handleAt(e.clientX, e.clientY, this.handles.map(h => h.sim)) ? 'grab' : ''; return; }
       c.style.cursor = 'grabbing'; this.dragTo(e);
     });
     const end = (e: PointerEvent) => {
@@ -59,14 +62,19 @@ export class FieldEditor {
     c.addEventListener('pointerup', end); c.addEventListener('pointercancel', end);
   }
 
+  /** Gets the FIELD point under the pointer in the edited robot's alliance frame, or null off the FIELD. */
+  private pointer(e: PointerEvent) {
+    const q = this.host.view.pickFloor(e.clientX, e.clientY);
+    return q ? toAlliance(q, this.host.sim().view(this.robot).alliance) : null;
+  }
+
   /** Moves the dragged handle, or turns its heading, to the pointer's position on the FIELD floor. */
   private dragTo(e: PointerEvent) {
-    const q = this.drag && this.host.view.pickFloor(e.clientX, e.clientY); if (!this.drag || !q) return;
-    const d = this.drag, h = this.handles[d.index], grab = d.part === 'pose' ? 1 : 0;
-    const x = Math.max(-FIELD.half, Math.min(FIELD.half, q.x + grab * d.dx)), z = Math.max(-FIELD.half, Math.min(FIELD.half, -q.y + grab * d.dz));
-    const alliance = this.host.sim().view(this.robot).alliance;
-    const next = this.drag.part === 'pose' ? moveHandle(this.tree, h, x, z, alliance) : turnHandle(this.tree, h, Math.atan2(-(z - h.z), x - h.x), alliance);
-    if (JSON.stringify(next) !== JSON.stringify(this.tree)) { this.drag.moved = true; this.apply(next, false); }
+    const q = this.drag && this.pointer(e); if (!this.drag || !q) return;
+    const d = this.drag, h = this.handles[d.index], clamp = (v: number) => Math.max(-FIELD.half, Math.min(FIELD.half, v));
+    const next = d.part === 'pose' ? moveHandle(this.tree, h, { x: clamp(q.x + d.dx), y: clamp(q.y + d.dy) })
+      : turnHandle(this.tree, h, (Math.atan2(q.y - h.pose.y, q.x - h.pose.x) * 180) / Math.PI);
+    if (JSON.stringify(next) !== JSON.stringify(this.tree)) { d.moved = true; this.apply(next, false); }
   }
 
   get active() { return this.robot >= 0; }
@@ -81,12 +89,16 @@ export class FieldEditor {
     return AUTO_TREES[id] ? id : null;
   }
 
-  /** Opens the editor for robot `i`, with the overhead camera. Returns false if the robot runs no AUTO tree. */
-  open(i: number): boolean {
-    const id = this.treeOf(i); if (!id) return false;
+  /**
+   * Opens the editor for robot `i`, with the overhead camera. Returns why it can't: `blue` for a blue robot, which runs
+   * a red tree rotated, or `none` for a robot with no AUTO tree. Returns null when it opens.
+   */
+  open(i: number): 'blue' | 'none' | null {
+    if (this.host.sim().view(i).alliance !== 'red') return 'blue';
+    const id = this.treeOf(i); if (!id) return 'none';
     this.robot = i; this.tree = AUTO_SOURCES[id] as Json; this.original = this.originalOf(this.tree); this.selected = null;
     this.camera = this.host.view.mode; this.host.view.mode = 'overhead';
-    this.refresh(); this.host.changed(); return true;
+    this.refresh(); this.host.changed(); return null;
   }
 
   close() {
@@ -116,20 +128,24 @@ export class FieldEditor {
     if (t !== this.tree) { this.apply(t, true); }
   }
 
-  /** Deletes the edited copy, and every robot that ran it runs the original tree again. */
+  /**
+   * Deletes the edited copy, and every robot that ran it runs the original tree again. A robot whose default is the
+   * original goes back to the **Default** setting.
+   */
   revert() {
     if (!this.isCopy) return; const id = String(this.tree.id), from = String((this.tree.meta as Json).editedFrom);
-    this.host.bots.forEach((b, k) => { if (b.auto === id) this.host.setAuto(k, from); });
+    this.host.bots.forEach((b, k) => { if (b.auto === id) this.host.setAuto(k, autoFor(this.host.sim().view(k), SOLO_AUTO) === from ? 'default' : from); });
     deleteUserTree(id); this.tree = AUTO_SOURCES[from] as Json; this.rev++; this.refresh(); this.host.changed();
   }
 
-  /** Describes the selected node's handles in field coordinates, where y is the negative of the simulator's z. */
+  /** Describes the selected step: its pose in red's FIELD coordinates, its pose as written, and the steps that share its definition. */
   describe(fmtPos: (x: number, y: number) => string): string {
     const hs = this.handles.filter(h => h.path === this.selected);
     if (!hs.length) return this.selected ? 'This step has no pose on the FIELD.' : 'Drag a pose or its heading knob, or click a step in the tree.';
     if (hs[0].kind === 'lane') return `${hs.length} lane points · drag one to move it`;
-    const h = hs[0], deg = (((h.heading! * 180) / Math.PI + 540) % 360) - 180;
-    return `${fmtPos(h.x, -h.z)}, heading ${deg.toFixed(1)}°${h.nudge && (h.nudge.x || h.nudge.z || h.nudge.headingDeg) ? ` · nudged ${Math.hypot(h.nudge.x, h.nudge.z).toFixed(3)} m, ${h.nudge.headingDeg}°` : ''}`;
+    const h = hs[0], deg = wrap(h.pose.headingDeg), def = this.def, shared = def ? sharedWith(this.tree, def, h) : [];
+    return `${fmtPos(h.pose.x, h.pose.y)}, heading ${deg.toFixed(1)}° · pose ${poseText(this.tree, h)}`
+      + (shared.length ? ` · also used by ${shared.join(', ')}: a drag moves this step only` : '');
   }
 
   /** The tree that an edited copy was made from, or the tree itself. */
@@ -152,6 +168,6 @@ export class FieldEditor {
   private refresh() { const def = this.def; this.handles = def ? editHandles(def, this.host.sim().view(this.robot)) : []; this.paint(); }
 
   private paint() {
-    this.host.view.showHandles(this.handles.map(h => ({ ...h, selected: h.path === this.selected, edited: isEdited(this.tree, h, this.original) })));
+    this.host.view.showHandles(this.handles.map(h => ({ ...h.sim, kind: h.kind, selected: h.path === this.selected, edited: isEdited(this.tree, h, this.original) })));
   }
 }

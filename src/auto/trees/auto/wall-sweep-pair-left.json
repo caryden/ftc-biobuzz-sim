@@ -13,13 +13,13 @@
   "flip": "if(bots.me.shooter.facing == 'front', 180, 0)",
   "hiveX": "-0.3237",
   "stand": "len / 2 + field.flowerHalfSize + 0.02",
-  "rearFlower": "pose(-0.5942, -1.7282 + stand, 90)",
-  "park": "pose(-(field.half - len / 2 - 0.09), -0.8954, 180)",
-  "angledRear": "pose(hiveX - 0.62, -1.17, 129.4 + flip)",
-  "parkLeft": "pose(park.x, -0.8954 - 0.33, park.headingDeg)",
+  "rearFlower": "pose(-0.5942, 1.7282 - stand, 90)",
+  "park": "pose(-(field.half - len / 2 - 0.09), 0.8954, 180)",
+  "angledRear": "pose(hiveX - 0.62, 1.17, 129.4 + flip)",
+  "parkLeft": "pose(park.x, 0.8954 + 0.33, park.headingDeg)",
   "wallStand": "field.half - len / 2 - 0.035",
   "yaw": "rad(30)",
-  "wallZ": "field.half - (len / 2) * sin(yaw) - (len / 2) * cos(yaw) - 0.015",
+  "wallReach": "field.half - (len / 2) * sin(yaw) - (len / 2) * cos(yaw) - 0.015",
   "leftSweepFrom": "-(field.flowerHalfSize + 0.5942 + (len / 2) * cos(yaw) + (len / 2) * sin(yaw) + 0.03)"
  },
  "root": {
@@ -71,7 +71,7 @@
            "id": "s4",
            "ref": "auto.drive",
            "params": {
-            "pose": "offset(rearFlower, 0, 0.2)",
+            "pose": "offset(rearFlower, 0, -0.2)",
             "timeoutSec": 3
            }
           },
@@ -138,11 +138,7 @@
            "id": "s12",
            "ref": "auto.drive",
            "params": {
-            "pose": {
-             "x": "hiveX + 0.03",
-             "z": "-1 * 1.28",
-             "headingDeg": "90 + flip"
-            },
+            "pose": "pose(hiveX + 0.03, 1.28, 90 + flip)",
             "intake": "all",
             "untilFull": true,
             "timeoutSec": 2.5
@@ -152,11 +148,7 @@
            "id": "s13",
            "ref": "auto.drive",
            "params": {
-            "pose": {
-             "x": "hiveX + 0.03",
-             "z": "-1 * wallStand",
-             "headingDeg": "90 + flip"
-            },
+            "pose": "pose(hiveX + 0.03, wallStand, 90 + flip)",
             "intake": "all",
             "untilFull": true,
             "timeoutSec": 2
@@ -193,11 +185,7 @@
            "note": "An angled wall sweep: the robot yaws 30 degrees toward the wall, puts its wall-side front corner 1.5 cm from the wall, and drives toward the drivers' corner. The intake is 4.5 cm narrower than the chassis on each side, so a robot that is square to its path never reaches a ball on the wall. At 30 degrees the wall line crosses the front of the intake. The sweep starts as near the center line as G402 allows. This one sweeps the rear wall from the FLOWER to the corner.",
            "ref": "auto.drive",
            "params": {
-            "pose": {
-             "x": "leftSweepFrom",
-             "z": "-1 * wallZ",
-             "headingDeg": 150
-            },
+            "pose": "pose(leftSweepFrom, wallReach, 150)",
             "intake": "all",
             "untilFull": true,
             "timeoutSec": 2.5
@@ -207,11 +195,7 @@
            "id": "s18",
            "ref": "auto.drive",
            "params": {
-            "pose": {
-             "x": "-(field.half - 0.31)",
-             "z": "-1 * wallZ",
-             "headingDeg": 150
-            },
+            "pose": "pose(-(field.half - 0.31), wallReach, 150)",
             "intake": "all",
             "untilFull": true,
             "timeoutSec": 3
@@ -222,11 +206,7 @@
            "note": "The same sweep along the alliance wall, from near the rear corner toward the LOADING ZONE, where NECTAR collects. It starts 0.39 m from the rear wall, so that the robot can turn there.",
            "ref": "auto.drive",
            "params": {
-            "pose": {
-             "x": "-wallZ",
-             "z": "-(field.half - 0.39)",
-             "headingDeg": -120
-            },
+            "pose": "pose(-wallReach, field.half - 0.39, -120)",
             "intake": "all",
             "untilFull": true,
             "timeoutSec": 2
@@ -236,11 +216,7 @@
            "id": "s20",
            "ref": "auto.drive",
            "params": {
-            "pose": {
-             "x": "-wallZ",
-             "z": -0.45,
-             "headingDeg": -120
-            },
+            "pose": "pose(-wallReach, 0.45, -120)",
             "intake": "all",
             "untilFull": true,
             "timeoutSec": 3
@@ -269,11 +245,7 @@
            "note": "The same sweep along the alliance wall, from near the rear corner toward the LOADING ZONE, where NECTAR collects. It starts 0.39 m from the rear wall, so that the robot can turn there. It fills the hopper for TELEOP with the time that is left, and the race against the clock starts the PARK in time.",
            "ref": "auto.drive",
            "params": {
-            "pose": {
-             "x": "-wallZ",
-             "z": "-(field.half - 0.39)",
-             "headingDeg": -120
-            },
+            "pose": "pose(-wallReach, field.half - 0.39, -120)",
             "intake": "all",
             "untilFull": true,
             "timeoutSec": 2
@@ -283,11 +255,7 @@
            "id": "s24",
            "ref": "auto.drive",
            "params": {
-            "pose": {
-             "x": "-wallZ",
-             "z": -0.45,
-             "headingDeg": -120
-            },
+            "pose": "pose(-wallReach, 0.45, -120)",
             "intake": "all",
             "untilFull": true,
             "timeoutSec": 3

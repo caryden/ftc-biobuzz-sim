@@ -1,11 +1,12 @@
 /**
- * The AUTO trees that the field editor saves, kept in this browser's local storage under `biobuzz.trees.v1` as a map
+ * The AUTO trees that the field editor saves, kept in this browser's local storage under `biobuzz.trees.v2` as a map
  * from tree id to tree file. Storage is a convenience: in a private window, or with site data blocked, an edited tree
- * lasts until the page reloads. Sharing a tree needs the catalog and accounts. See docs/behavior-trees.md.
+ * lasts until the page reloads. Sharing a tree needs the catalog and accounts. See docs/behavior-trees.md. The key
+ * changed to v2 when trees moved from the simulator's x and z to FIELD x and y, so trees saved before then are ignored.
  */
 import { addAutoTree, BUILT_IN_AUTO, removeAutoTree } from './auto/onboard';
 
-const KEY = 'biobuzz.trees.v1';
+const KEY = 'biobuzz.trees.v2';
 
 function read(): Record<string, unknown> {
   try { const v = JSON.parse(localStorage.getItem(KEY) ?? '{}'); return v && typeof v === 'object' && !Array.isArray(v) ? v : {}; } catch { return {}; }

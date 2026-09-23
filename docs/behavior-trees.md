@@ -1,9 +1,10 @@
 # Behavior-tree policies
 
-**Status: increments 1 to 6 are built, except increment 6's timeline; the rest is proposed.** The first six increments
-of the [plan](#plan) are done: the runtime in `src/bt/`, both periods as trees in `src/auto/trees/auto/` and
-`src/auto/trees/teleop/`, every TELEOP decision in the TELEOP tree, a tree view on the simulator page, live and in
-review, and a field editor for AUTO poses. For how the simulator works, see [How the simulator works](simulator.md).
+**Status: increments 1 to 6 are built; the rest is proposed.** The [plan](#plan) has two parts. Increments 1 to 5
+are done: the runtime in `src/bt/`, both periods as trees in `src/auto/trees/auto/` and `src/auto/trees/teleop/`, every
+TELEOP decision in the TELEOP tree, and a tree view on the simulator page, live and in review. The AUTO editor is the
+second part. Its first increment, increment 6, is done: trees in FIELD x and y, and a field editor that drags AUTO
+poses. For how the simulator works, see [How the simulator works](simulator.md).
 
 This document proposes replacing the robot's decision code with behavior trees. A behavior tree is a tree of small
 nodes. The inner nodes decide what runs, and the leaves read the field and drive the robot. The same tree format
@@ -118,14 +119,34 @@ The following rules keep the environment from becoming a blackboard:
   leaf needs this rule, because only plain data can cross into a sandbox.
 - **One schema.** A single schema defines the environment. It produces the TypeScript types, the expression checker,
   and the editor's autocomplete. A tree that names a field that its environment doesn't have fails to load.
-- **The alliance's own view.** Every position is given from the robot's own alliance. FLOWERS and HIVES are named
-  `own` and `opponent`, and the rear and audience sides are named as that alliance's drivers see them. One tree then
-  plays both colors, and nothing mirrors poses for blue.
+- **The alliance's own view.** Every position is in the alliance frame, red's FIELD coordinates, and a blue robot runs
+  the tree rotated 180° about the FIELD center. FLOWERS and HIVES are named `own` and `opponent`. One tree then plays
+  both colors. See [Coordinates and alliances](#coordinates-and-alliances).
 
 **Driver assists** are the robot's own help to its drivers in TELEOP. The shot interlock is one: the robot fires only
 when a physics preview of the shot says that the ball enters the CELL. A driver can't make that prediction, but a
 robot with auto-aim can. To measure a drive team without assists, remove the assist from the environment. The tree
 doesn't change.
+
+### Coordinates and alliances
+
+Tree files use FIELD coordinates, the ones that the floor labels on the simulator page show:
+
+- The origin is the FIELD center, and the unit is the meter.
+- +x points to the blue wall, and -x to the red wall.
+- +y points to the rear wall, and -y to the audience wall.
+- A heading is in degrees, counterclockwise from +x, seen from above. A robot with heading 90 faces the rear wall.
+
+Every tree is written for the red alliance. A blue robot runs the same tree rotated 180° about the FIELD center: x
+becomes -x, y becomes -y, and the heading gets 180° added. A rotation, not a mirror, is the transform, because it keeps
+each drive team's view: the right start position is on the drivers' right for both alliances. The simulator assumes
+that the FIELD has this rotational symmetry, which isn't checked against the Competition Manual. So a tree's `rear`
+means red's rear, and a blue robot's rear CELL is where red's audience CELL is. The field editor edits in red's frame
+only.
+
+The simulator's code uses three.js axes, where y points up, so the floor is x and z, and z is the negative of FIELD
+y. Only the onboard environment converts: `simPoint` and `simHeading` in `src/auto/onboard.ts`. Before increment 6,
+tree files used the code's x and z. `e72-field-xy` checks that the change of axes moved no pose.
 
 ### Navigation
 
@@ -380,22 +401,32 @@ Chain values aren't recorded yet: the page's recorders don't store node inputs a
 
 ## Editing AUTO poses
 
-The field editor in `src/field-editor.ts` edits one robot's AUTO poses before a MATCH. To open it, click **Edit the
-AUTO poses on the FIELD** in the robot config. The camera changes to **Overhead**, and the tree view shows the robot's
-AUTO tree, whatever the **Tree view** setting is. A step with handles has a dot after its leaf name.
+The field editor in `src/field-editor.ts` edits a red robot's AUTO poses before a MATCH. To open it, click **Edit the
+AUTO poses on the FIELD** in a red robot's config. For a blue robot, the button is disabled, because a blue robot runs a
+red tree rotated. The camera changes to **Overhead**, the tree view shows the robot's AUTO tree, and the bar at the
+bottom names the frame. A step with handles has a dot after its leaf name.
 
 A drive step's `pose` is an expression, such as `launchAudience`, which is computed from the robot's size and shooter
-direction. A drag doesn't replace the expression with numbers. It sets the step's `nudge` parameter, an offset in
-meters and degrees that `auto.drive` adds to the pose, so the step still fits a robot of another size. A sweep's lanes
-are numbers, which `scripts/plan-sweeps.ts` wrote, so a drag changes a lane point itself. Positions in a tree are in
-red's frame, and a blue robot mirrors them through the FIELD center, so an edit on a blue robot is mirrored back into
-red's frame. `src/auto/auto-edit.ts` holds these edits, and it has no DOM, so `test/auto-edit.test.ts` runs it.
+direction. A drag changes the expression by one rule, in `shiftPose` in `src/auto/auto-edit.ts`:
+
+- **The values that move are literals.** The drag edits them: `pose(-1.2, 0.6, 180)` becomes `pose(-1.1, 0.4, 180)`.
+- **The expression is already an offset.** The drag edits the offsets: `offset(ownFlower, 0.2, 0)` becomes
+  `offset(ownFlower, 0.25, 0.1)`.
+- **Otherwise,** the drag wraps the expression in `offset()`: `launchAudience` becomes `offset(launchAudience, 0.2,
+  -0.1)`. A turn adds a fourth value, in degrees.
+
+So a step keeps following the robot's size, and the other steps that use the same definition don't move. The bar names
+them, for example "also used by s6, s11". An offset that comes back to zero goes away, so a drag back to the start
+restores the step as it was written. Positions round to 1 mm and headings to 0.5°. A sweep's lanes are numbers, which
+`scripts/plan-sweeps.ts` writes, so a drag changes a lane point itself. `src/auto/auto-edit.ts` has no DOM, so
+`test/auto-edit.test.ts` runs it.
 
 The first edit of a built-in tree makes an edited copy: the id gets `-edited`, the name gets "(edited)", and
 `meta.editedFrom` names the original. A second copy of one tree gets `-edited-2`. The robot switches to the copy. The
-browser keeps the copies in local storage under `biobuzz.trees.v1`, and the page loads them before the robot setups.
-**Reset this step** moves a step's handles back to the original, and **Revert to the original** deletes the copy. A
-copy lives in one browser only: sharing a tree is increment 8.
+browser keeps the copies in local storage under `biobuzz.trees.v2`, and the page loads them before the robot setups.
+**Reset this step** moves a step's handles back to the original. **Revert to the original** deletes the copy, and a
+robot whose default is the original goes back to **Default**. A copy lives in one browser only: sharing is increment
+12. Increment 8 replaces the edited copies with plans that you create and name.
 
 ## Code leaves in a sandbox
 
@@ -506,7 +537,7 @@ exact match is the test for increments 2 and 3.
      change.
    - **The clock race is a parallel node.** An `auto.clockAtMost` leaf races the steps with the `any` policy, and the
      PARK follows the race.
-   - **Both alliances use red's HIVE pivot,** as the mirrored scripts did. Blue's own pivot is 0.4 mm farther out.
+   - **Both alliances use red's HIVE pivot,** as the rotated scripts did. Blue's own pivot is 0.4 mm farther out.
 3. **Convert TELEOP. Done.** `src/auto/driver.ts` holds the driver environment, the TELEOP leaves, and `TeleopProgram`.
    The coach's decision and `scriptedTeleop` are the tree `src/auto/trees/teleop/teleop-default.json`: a full-time
    defender first, and otherwise a reactive fallback, rechecked once per second, over FLOWER work, a TIP, a launch of
@@ -570,22 +601,68 @@ exact match is the test for increments 2 and 3.
    tree gives it.
 5. **Show the tree running. Done.** The simulator page's tree view shows a robot's tree live and at the review cursor,
    and match notes name the running leaf. See [Tracing and the tree view](#tracing-and-the-tree-view).
-6. **Edit AUTO poses on the field. Done, except the timeline.** Each drive step shows its pose as a handle that you
-   drag, with a heading knob, and each sweep shows its lane points. Selecting a step in the tree view highlights its
-   handles, and grabbing a handle selects its step. The path preview redraws after each edit. The first edit of a
-   built-in tree makes an edited copy, which the robot runs and the browser keeps. See
-   [Editing AUTO poses](#editing-auto-poses). `e70-drive-nudge` and `e71-auto-editor` equal `e69-tree-view` on every
-   seed.
+The AUTO editor is the second part of the plan: from dragging poses to building, running, and testing a whole AUTO
+tree in the page. Each increment is one pull request.
 
-   Still to build: both robots' AUTO trees on one timeline, because partners coordinate by the clock and the camera.
-7. **Edit parameters.** Parameter schemas drive a form. Some robot config settings, such as the FLOWER start time and
-   the defense policy, become tree parameters.
-8. **Edit structure and share.** Add, remove, and reorder nodes from a palette of leaf types that fit the tree's
-   environment. Import and export tree files. Share first with a link that carries the tree in the URL fragment, which
-   needs no server, and then through a gallery in the D1 database, keyed by a hash of the tree. The gallery is the
-   first feature that needs accounts. See [Accounts](#accounts).
-9. **Score a tree in the browser.** Web Workers play a tree against the default tree on fixed seeds.
-10. **Add code leaves** in the QuickJS sandbox.
+6. **Coordinates and pose dragging. Done.** Tree files use FIELD x and y in red's frame, and a blue robot runs a tree
+   rotated 180°. See [Coordinates and alliances](#coordinates-and-alliances). The field editor drags a drive step's
+   pose and its heading, and a sweep's lane points, by the rule in [Editing AUTO poses](#editing-auto-poses).
+   `e72-field-xy` equals `e69-tree-view` on every seed, and the leaves' parameters match the old files' on every
+   value, for three robot sizes and both shooter directions.
+7. **Motion and intake leaves.** Driving, the intake, and waiting become separate leaves, as in FTC's command-based
+   style:
+   - `auto.driveTo(pose)`: the path planner picks a path around the FIELD elements, as `auto.drive` does now.
+   - `auto.followPath(waypoints)`: the robot follows the author's path through the waypoints, with a heading per
+     waypoint or along the path, and no planner. The robot config picks the follower: pure pursuit now, and Road
+     Runner or Pedro Pathing later.
+   - `auto.intake(filter)` sets the intake and ends. The onboard environment keeps the intake's state between steps,
+     where it now clears the robot's inputs on every step.
+   - `auto.waitHopperFull` ends when the hopper is full.
+
+   A sweep becomes a composite, which the palette offers as a template. The `ensure` cleanup turns the intake off
+   however the race ends, including when AUTO's clock race stops the steps:
+
+   ```
+   ensure(
+     child:   sequence(intake(all), parallel(any: followPath(waypoints), waitHopperFull)),
+     cleanup: intake(none))
+   ```
+
+   `auto.drive` loses its `intake` and `untilFull` parameters, and `auto.sweep` goes away. The step timing can change,
+   so this increment is measured.
+8. **The editor flow.** An **Edit AUTO paths** button in the right-hand panel opens the editor, in red's frame, with
+   buttons for the two red robots above the tree. Both robots' paths show on the FIELD, and the other robot's is dimmed.
+   For the selected robot:
+   - **Edit** opens its plan. A system plan is read-only, so the button is disabled for it.
+   - **Create new** asks for a name, a description, and a plan to clone, which defaults to the robot's plan. The new
+     plan becomes the robot's plan.
+
+   A plan has no partner field: you pick each red robot's plan, and you can edit one or both. `meta.partner` goes
+   away, and **Default** keeps its pairing in `autoFor`. `meta.start` stays, and the editor warns about a plan for the
+   other start position.
+9. **Forms, definitions, validation, and undo.** A leaf's parameter schema drives a form: types, units, limits, enums,
+   and doc strings. An expression field uses CodeMirror 6, which loads only with the editor: highlighting, completion
+   from the environment schema and the tree's definitions, and errors from `src/bt/expr.ts`. A panel edits the
+   definitions, and the definitions that are poses get handles on the FIELD, so a drag can move a shared spot.
+   Every edit loads the draft again, and each problem that the loader reports shows on its row and field. A draft with
+   problems can be saved but can't run. Undo and redo keep a history of the tree's JSON, because every edit is a pure
+   function of it.
+10. **Structure editing.** Insert a node from a palette of the node types and the AUTO leaves, with templates such as
+    the sweep. Delete a node and its subtree, reorder by drag-and-drop, and wrap a node in a sequence, a parallel, or a
+    fallback.
+11. **Run and scrub in the editor.** A quick run plays AUTO only, with all four robots, in a Web Worker, and records a
+    trace. The editor reuses the review scrubber and the tree view at the cursor. A timeline shows both red robots'
+    steps on one clock, because partners coordinate by the clock and the camera.
+
+The rest of the plan follows the editor:
+
+12. **Share.** Import and export tree files. Share first with a link that carries the tree in the URL fragment, which
+    needs no server, and then through a gallery in the D1 database, keyed by a hash of the tree. The gallery is the
+    first feature that needs accounts. See [Accounts](#accounts).
+13. **Edit TELEOP trees.** The same forms and structure editing, in the driver environment. Some robot config
+    settings, such as the FLOWER start time and the defense policy, become tree parameters.
+14. **Score a tree in the browser.** Web Workers play a tree against the default tree on fixed seeds.
+15. **Add code leaves** in the QuickJS sandbox.
 
 ## The tree catalog
 

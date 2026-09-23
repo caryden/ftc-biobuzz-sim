@@ -1,17 +1,23 @@
 /**
- * Editing an AUTO tree's poses on the FIELD. A drive step's pose is an expression, so a drag doesn't rewrite it: it
- * changes the step's `nudge`, an offset that the leaf adds to the pose, so the expression still follows the robot's size.
- * A sweep's lanes are numbers, so a drag moves a lane point itself. Positions in a tree are in red's frame, and a blue
- * robot mirrors them through the FIELD center, so an edit on a blue robot is mirrored back.
+ * Editing an AUTO tree's poses on the FIELD. Everything here works on the tree file's JSON and has no DOM, so tests can
+ * run it.
  *
- * Everything here works on the tree file's JSON and has no DOM, so tests can run it.
+ * A tree is written in the alliance frame, which is red's FIELD coordinates: x and y in meters, and headings in degrees
+ * counterclockwise from +x. A blue robot runs the same tree rotated 180° about the FIELD center, so the editor edits
+ * in red's frame only.
+ *
+ * A drive step's pose is an expression. A drag changes the expression by one rule: it edits the number literals of a
+ * `pose(x, y, heading)` or `offset(p, dx, dy, dHeading)` call, and if the values that move aren't literals, it wraps
+ * the expression in `offset()`. So `launchAudience` becomes `offset(launchAudience, 0.2, -0.1)`: the step still
+ * follows the robot's size, and the steps that share the definition don't move. A sweep's lanes are numbers, so a
+ * drag changes a lane point itself.
  */
-import type { TreeDef } from '../bt';
+import { literalNumber, splitCall, type TreeDef } from '../bt';
 import type { Sim } from '../sim/world';
-import { leafParams, nudged, type Pose } from './onboard';
+import { leafParams, simHeading, simPoint, type Pose } from './onboard';
 
 type Json = Record<string, unknown>;
-type Lane = { x: number; z: number; wall: string | null };
+type Lane = { x: number; y: number; wall: string | null };
 
 /** One draggable point: a drive step's pose, or one lane point of a sweep. */
 export interface Handle {
@@ -20,32 +26,33 @@ export interface Handle {
   kind: 'drive' | 'lane';
   /** The lane's index, for a lane point. */
   lane?: number;
-  /** The FIELD position, in the simulator's x and z. */
-  x: number; z: number;
-  /** The FIELD heading in radians, for a drive step. A lane takes its heading from its direction or its wall. */
-  heading?: number;
-  /** A drive step's pose without its nudge, in red's frame. */
-  base?: Pose;
-  /** A drive step's nudge, in red's frame. */
-  nudge?: Pose;
+  /** Where the tree puts the point, in the alliance frame. A lane point's heading is 0: a lane takes its heading from its direction or its wall. */
+  pose: Pose;
+  /** The same point on the simulator's floor axes, for drawing: three.js x and z, and the heading in radians. */
+  sim: { x: number; z: number; heading?: number };
 }
 
 const mm = (v: number) => Math.round(v * 1000) / 1000;
+const halfDeg = (v: number) => Math.round(v * 2) / 2;
 const wrapDeg = (d: number) => ((((d + 180) % 360) + 360) % 360) - 180;
-const ZERO: Pose = { x: 0, z: 0, headingDeg: 0 };
+/** Writes a number for an expression: at most three decimals, and no `-0`. */
+const num = (v: number) => String(Object.is(v, -0) ? 0 : v);
 
 /** Gets the editable points of a tree for the robot that `sim` views, in step order. */
 export function editHandles(def: TreeDef, sim: Sim): Handle[] {
-  const s = sim.alliance === 'blue' ? -1 : 1, out: Handle[] = [];
+  const rotate = sim.alliance === 'blue', out: Handle[] = [];
   for (const { node, params: p } of leafParams(def, sim)) {
     if (node.label === 'auto.drive') {
-      const base = p.pose as Pose, nudge = p.nudge as Pose, at = nudged(base, nudge);
-      out.push({ path: node.path, kind: 'drive', x: s * at.x, z: s * at.z, heading: ((at.headingDeg + (s < 0 ? 180 : 0)) * Math.PI) / 180, base, nudge });
+      const pose = p.pose as Pose;
+      out.push({ path: node.path, kind: 'drive', pose, sim: { ...simPoint(pose, rotate), heading: simHeading(pose.headingDeg, rotate) } });
     }
-    if (node.label === 'auto.sweep') (p.lanes as Lane[]).forEach((l, i) => out.push({ path: node.path, kind: 'lane', lane: i, x: s * l.x, z: s * l.z }));
+    if (node.label === 'auto.sweep') (p.lanes as Lane[]).forEach((l, i) => out.push({ path: node.path, kind: 'lane', lane: i, pose: { x: l.x, y: l.y, headingDeg: 0 }, sim: simPoint(l, rotate) }));
   }
   return out;
 }
+
+/** Converts a FIELD point to the alliance frame of an alliance. Blue's frame is the FIELD rotated 180°. */
+export const toAlliance = (p: { x: number; y: number }, alliance: 'red' | 'blue') => (alliance === 'blue' ? { x: -p.x, y: -p.y } : { x: p.x, y: p.y });
 
 /**
  * Finds the JSON of the node at `path` in a tree file. A path segment is a child's id, `INDEX.LABEL` for a child
@@ -67,45 +74,93 @@ export function findNode(tree: Json, path: string): Json | null {
   return node ?? null;
 }
 
-/** Copies a tree, applies `edit` to the params of the node at `path`, and returns the copy, or the tree itself if no node has that path. */
+/** Copies a tree, applies `edit` to the params of the node at `path`, and returns the copy, or the tree itself if no leaf has that path. */
 function editParams(tree: Json, path: string, edit: (params: Json) => void): Json {
   const out = structuredClone(tree), node = findNode(out, path); if (!node || node.ref === undefined) return tree;
   edit((node.params ??= {}) as Json); return out;
 }
 
+/** Writes a pose parameter as an expression. A tree file can also give a pose as an object of three values. */
+function poseSource(v: unknown): string {
+  if (typeof v === 'string') return v;
+  const o = v as { x: unknown; y: unknown; headingDeg: unknown };
+  return `pose(${o.x}, ${o.y}, ${o.headingDeg})`;
+}
+
 /**
- * Moves a handle to a FIELD position and returns the edited tree. A drive step's nudge becomes the distance from the
- * step's pose, and a lane point takes the position. Both round to 1 mm.
+ * Moves and turns a pose expression by `dx` and `dy` meters and `dh` degrees, in the alliance frame. It edits the
+ * number literals of a `pose()` or `offset()` call when every value that moves is a literal, and otherwise wraps the
+ * expression in `offset()`. An offset that comes back to zero is removed, so a drag back to the start restores the
+ * expression as it was.
  */
-export function moveHandle(tree: Json, h: Handle, x: number, z: number, alliance: 'red' | 'blue'): Json {
-  const s = alliance === 'blue' ? -1 : 1, rx = s * x, rz = s * z;
+export function shiftPose(source: string, dx: number, dy: number, dh: number): string {
+  const call = splitCall(source);
+  if (call?.name === 'pose' && call.args.length === 3) {
+    const [x, y, h] = call.args.map(literalNumber), d = [dx, dy, dh];
+    if ([x, y, h].every((v, i) => d[i] === 0 || v !== null)) {
+      const out = call.args.map((a, i) => (d[i] === 0 ? a : num((i === 2 ? halfDeg : mm)([x, y, h][i]! + d[i]))));
+      return `pose(${out.join(', ')})`;
+    }
+  }
+  if (call?.name === 'offset' && (call.args.length === 3 || call.args.length === 4)) {
+    const [ox, oy] = [call.args[1], call.args[2]].map(literalNumber), oh = call.args.length === 4 ? literalNumber(call.args[3]) : 0;
+    if (ox !== null && oy !== null && oh !== null) return offsetOf(call.args[0], mm(ox + dx), mm(oy + dy), halfDeg(wrapDeg(oh + dh)));
+  }
+  return offsetOf(source, mm(dx), mm(dy), halfDeg(wrapDeg(dh)));
+}
+
+const offsetOf = (base: string, dx: number, dy: number, dh: number) =>
+  dx === 0 && dy === 0 && dh === 0 ? base : `offset(${base}, ${num(dx)}, ${num(dy)}${dh ? `, ${num(dh)}` : ''})`;
+
+/** Moves a handle to a point in the alliance frame, and returns the edited tree. Values round to 1 mm. */
+export function moveHandle(tree: Json, h: Handle, to: { x: number; y: number }): Json {
   return editParams(tree, h.path, p => {
-    if (h.kind === 'drive' && h.base) p.nudge = { x: mm(rx - h.base.x), z: mm(rz - h.base.z), headingDeg: (h.nudge ?? ZERO).headingDeg };
-    if (h.kind === 'lane' && h.lane !== undefined && Array.isArray(p.lanes)) { const l = p.lanes[h.lane] as Lane; p.lanes[h.lane] = { ...l, x: mm(rx), z: mm(rz) }; }
+    if (h.kind === 'drive') p.pose = shiftPose(poseSource(p.pose), to.x - h.pose.x, to.y - h.pose.y, 0);
+    if (h.kind === 'lane' && h.lane !== undefined && Array.isArray(p.lanes)) { const l = p.lanes[h.lane] as Lane; p.lanes[h.lane] = { ...l, x: mm(to.x), y: mm(to.y) }; }
   });
 }
 
-/** Turns a drive step to a FIELD heading in radians and returns the edited tree. The nudge's heading rounds to 0.5°. */
-export function turnHandle(tree: Json, h: Handle, heading: number, alliance: 'red' | 'blue'): Json {
-  if (h.kind !== 'drive' || !h.base) return tree;
-  const deg = (heading * 180) / Math.PI - (alliance === 'blue' ? 180 : 0), n = h.nudge ?? ZERO;
-  return editParams(tree, h.path, p => { p.nudge = { x: n.x, z: n.z, headingDeg: Math.round(wrapDeg(deg - h.base!.headingDeg) * 2) / 2 }; });
+/** Turns a drive step to a heading in degrees in the alliance frame, and returns the edited tree. The heading rounds to 0.5°. */
+export function turnHandle(tree: Json, h: Handle, headingDeg: number): Json {
+  if (h.kind !== 'drive') return tree;
+  return editParams(tree, h.path, p => { p.pose = shiftPose(poseSource(p.pose), 0, 0, wrapDeg(headingDeg - h.pose.headingDeg)); });
 }
 
-/** Undoes the edits of one handle: a drive step loses its nudge, and a lane point goes back to where `original` has it. */
+/** The value that a handle edits: a drive step's `pose`, or one lane point. */
+function edited(tree: Json, h: Handle): unknown {
+  const p = findNode(tree, h.path)?.params as Json | undefined;
+  return h.kind === 'drive' ? p?.pose : (p?.lanes as unknown[] | undefined)?.[h.lane ?? -1];
+}
+
+/** Undoes the edits of one handle: its value goes back to what `original` has. */
 export function resetHandle(tree: Json, h: Handle, original: Json): Json {
-  const was = findNode(original, h.path)?.params as Json | undefined;
+  const was = edited(original, h); if (was === undefined) return tree;
   return editParams(tree, h.path, p => {
-    if (h.kind === 'drive') delete p.nudge;
-    if (h.kind === 'lane' && h.lane !== undefined && Array.isArray(p.lanes) && Array.isArray(was?.lanes)) p.lanes[h.lane] = structuredClone(was.lanes[h.lane]);
+    if (h.kind === 'drive') p.pose = structuredClone(was);
+    if (h.kind === 'lane' && h.lane !== undefined && Array.isArray(p.lanes)) p.lanes[h.lane] = structuredClone(was);
   });
 }
 
 /** Checks whether a handle differs from the same handle in the original tree. */
 export function isEdited(tree: Json, h: Handle, original: Json): boolean {
-  const now = findNode(tree, h.path)?.params as Json | undefined, was = findNode(original, h.path)?.params as Json | undefined;
-  if (h.kind === 'drive') { const n = now?.nudge as Pose | undefined; return !!n && (n.x !== 0 || n.z !== 0 || n.headingDeg !== 0); }
-  return h.lane !== undefined && JSON.stringify((now?.lanes as unknown[])?.[h.lane]) !== JSON.stringify((was?.lanes as unknown[])?.[h.lane]);
+  return JSON.stringify(edited(tree, h)) !== JSON.stringify(edited(original, h));
+}
+
+/** Gets a drive step's pose parameter as it is written, such as `offset(launchAudience, 0.2, -0.1)`. */
+export function poseText(tree: Json, h: Handle): string | null {
+  const v = h.kind === 'drive' ? edited(tree, h) : undefined; return v === undefined ? null : poseSource(v);
+}
+
+/** Gets the ids of the other drive steps whose pose is the same bare definition as this step's, such as `launchAudience`. */
+export function sharedWith(tree: Json, def: TreeDef, h: Handle): string[] {
+  const mine = poseText(tree, h); if (!mine || !/^[A-Za-z_]\w*$/.test(mine)) return [];
+  const out: string[] = [];
+  const walk = (n: TreeDef['root']) => {
+    if (n.label === 'auto.drive' && n.path !== h.path && poseText(tree, { ...h, path: n.path }) === mine) out.push(n.path.split('/').pop()!);
+    n.children.forEach(walk);
+  };
+  walk(def.root);
+  return out;
 }
 
 /**

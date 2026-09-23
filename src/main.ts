@@ -47,7 +47,7 @@ let sim: Sim; let seed = 1; let startAt = 0; let recorder: TraceRecorder; let tr
 const review = new Review(view, () => sim, canvas); let finalClosed = false;
 // The field editor edits one robot's AUTO poses before the MATCH. An edit switches the robot to the edited copy.
 const editor = new FieldEditor({ view, canvas, bots, sim: () => sim,
-  setAuto: (k, id) => { bots[k].auto = id; saveBots(bots); if (coaches[k]) coaches[k].autoOverride = id; paintBots(); },
+  setAuto: (k, id) => { bots[k].auto = id; saveBots(bots); if (coaches[k]) coaches[k].autoOverride = id === 'default' ? null : id; paintBots(); },
   changed: () => { camSel.value = view.mode; paintEditor(); paintTree(); } });
 /** The robot that the HUD, the chase camera, and the shot preview follow: the first robot with a human driver, or R0. */
 const focus = () => Math.max(0, bots.findIndex(b => b.driver !== 'planner'));
@@ -71,7 +71,7 @@ function reset() {
 }
 
 // ---------- robot config ----------
-let editing = -1;
+let editing = -1; const EDIT_TIP = $('bcedit').title;
 const bc = { plate: $<HTMLInputElement>('bcplate'), driver: $<HTMLSelectElement>('bcdriver'), drive: $<HTMLSelectElement>('bcdrive'), shooter: $<HTMLSelectElement>('bcshooter'), auto: $<HTMLSelectElement>('bcauto'), plan: $<HTMLSelectElement>('bcplan'), rpm: $<HTMLInputElement>('bcrpm'), size: $<HTMLInputElement>('bcsize'), mass: $<HTMLInputElement>('bcmass'), intake: $<HTMLSelectElement>('bcintake'), ends: $<HTMLSelectElement>('bcends'), defense: $<HTMLSelectElement>('bcdefense'), elev: $<HTMLInputElement>('bcelev'), azim: $<HTMLInputElement>('bcazim'), speed: $<HTMLInputElement>('bcspeed'), intakeP: $<HTMLInputElement>('bcintakep') };
 /** Lists the AUTO plans for one start position. A plan named for the other position starts from the wrong wall, so the list leaves it out. */
 const autoOptions = (i: number) => { const side = startSide(i);
@@ -88,6 +88,8 @@ function openConfig(i: number) {
   if (review.active || (sim.phase !== 'pre' && sim.phase !== 'post') || startAt) return; editing = i; const b = bots[i];
   $('bchead').textContent = `Robot config: ${b.plate} (${BOT_IDS[i]}), ${i < 2 ? 'red' : 'blue'} alliance, ${startSide(i)} start`; bc.auto.innerHTML = autoOptions(i);
   bc.plate.value = b.plate; bc.driver.value = b.driver; bc.drive.value = b.stickFrame; bc.shooter.value = b.shooter; bc.auto.value = b.auto; bc.plan.value = String(b.flowerStartSec); bc.rpm.value = String(b.driveRpm); bc.size.value = String(sizeToInput(b.sizeIn, units)); bc.mass.value = String(massToInput(b.massLb, units)); $('bcsizelabel').textContent = `Chassis, square, ${units === 'us' ? 'in.' : 'cm'}`; $('bcmasslabel').textContent = `Mass, ${units === 'us' ? 'lb' : 'kg'}`; bc.intake.value = b.dualIntake ? 'dual' : 'front'; bc.ends.value = b.dualShooter ? 'both' : 'one'; bc.defense.value = b.defense; bc.elev.value = String(b.errElevDeg); bc.azim.value = String(b.errAzimDeg); bc.speed.value = String(speedToInput(b.errSpeed, units)); bc.intakeP.value = String(Math.round(100 * b.intakeP)); $('bcspeedlabel').textContent = `Launch speed, ${units === 'us' ? 'ft/s' : 'm/s'}`;
+  // Trees are written in red's frame, so AUTO poses are edited from a red robot. Blue robots run them rotated 180°.
+  const edit = $<HTMLButtonElement>('bcedit'); edit.disabled = i >= 2; edit.title = i >= 2 ? 'Edit AUTO trees from a red robot. Blue robots run the same trees rotated 180° about the FIELD center.' : EDIT_TIP;
   bc.driver.disabled = i >= 2; $('bcdriverow').classList.toggle('hidden', b.driver === 'planner');
   $('bcnote').textContent = i >= 2 ? 'The planner drives the blue robots.' : 'A controller drives one robot. If another robot has the controller that you pick, that robot goes back to the planner.';
   $('botcfg').classList.remove('hidden');
@@ -103,7 +105,9 @@ for (const el of Object.values(bc)) { el.onchange = applyConfig; for (const ev o
 // The 1x, 3x, and 5x chips fill in the reference launcher's errors times that factor.
 document.querySelectorAll<HTMLButtonElement>('[data-err]').forEach(el => { el.onclick = () => { const k = Number(el.dataset.err); bc.elev.value = String(+(REF_ERR.errElevDeg * k).toFixed(2)); bc.azim.value = String(+(REF_ERR.errAzimDeg * k).toFixed(2)); bc.speed.value = String(speedToInput(+(REF_ERR.errSpeed * k).toFixed(3), units)); applyConfig(); }; });
 // After a MATCH, the editor resets the FIELD first, because the plan preview draws from the start positions.
-$('bcedit').onclick = () => { if (editing < 0) return; const i = editing; closeConfig(); if (sim.phase !== 'pre') reset(); if (!editor.open(i)) sim.say(`${bots[i].plate} runs no AUTO tree, so it has no poses to edit.`); };
+$('bcedit').onclick = () => { if (editing < 0) return; const i = editing; closeConfig(); if (sim.phase !== 'pre') reset(); const why = editor.open(i);
+  if (why === 'blue') sim.say(`Edit AUTO trees from a red robot. ${bots[i].plate} runs its tree rotated 180° about the FIELD center.`);
+  if (why === 'none') sim.say(`${bots[i].plate} runs no AUTO tree, so it has no poses to edit.`); };
 $('bcdone').onclick = closeConfig; const applyPreset = (make: (i: number) => BotSetup) => { if (editing < 0) return; const i = editing, keep = { plate: bots[i].plate, driver: bots[i].driver, stickFrame: bots[i].stickFrame }; bots[i] = { ...make(i), ...keep }; saveBots(bots); reset(); openConfig(i); };
 $('bcdefault').onclick = () => applyPreset(metaBot); $('bcbaseline').onclick = () => applyPreset(defaultBot);
 // A click on the FIELD floor reports the position in the log, in the coordinate system that the floor labels show.
@@ -156,7 +160,9 @@ function paintEditor() {
   document.body.classList.toggle('editing', editor.active); $('autoedit').classList.toggle('hidden', !editor.active); if (!editor.active) return;
   const def = editor.def, plate = bots[editor.robot].plate;
   $('aehead').textContent = `${plate} · ${def?.name ?? 'AUTO'}`;
-  $('aesel').textContent = editor.describe((x, y) => fmtPos(x, y, units));
+  $('aeframe').textContent = 'Red alliance frame: +x toward the blue wall, +y toward the rear wall. Blue robots run this tree rotated 180°.';
+  // The bar cuts long lines short, so each line's tooltip holds the whole text.
+  for (const [id, text] of [['aeframe', $('aeframe').textContent ?? ''], ['aesel', editor.describe((x, y) => fmtPos(x, y, units))]] as const) { $(id).textContent = text; $(id).title = text; }
   $<HTMLButtonElement>('aereset').disabled = !editor.selectedEdited();
   $<HTMLButtonElement>('aerevert').disabled = !editor.isCopy;
 }

@@ -32,11 +32,11 @@ About half of each rear spill lands at or across the FIELD center line. The path
 circle on its own side, so a robot can't stand in the pocket between the rear FLOWER and the center line, although a
 robot that is square to the wall fits legally.
 
-## AUTO timeline and step settings
+## The AUTO editor
 
-The field editor moves AUTO poses. Two parts are missing: a timeline that shows both partners' AUTO steps on one clock,
-because partners coordinate by the clock and the camera, and a form for a step's other settings, such as its intake
-filter and its timeout. See increments 6 and 7 in [Behavior-tree policies](behavior-trees.md#plan).
+The field editor drags AUTO poses. Increments 7 to 11 of the [behavior-tree plan](behavior-trees.md#plan) make it an
+editor for whole AUTO trees: motion and intake leaves, plans that you create and name, parameter forms and an
+expression editor, structure editing, and a quick AUTO run with a timeline of both red robots.
 
 ## Measured bounce and roll
 

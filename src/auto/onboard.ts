@@ -4,7 +4,8 @@
  *
  * The onboard environment is what an FTC OpMode can know: the robot's own odometry, its hopper count, its size, the
  * clock, and the camera's AprilTag sightings of the CELLS. It has no balls and no other robots. Positions are in the
- * alliance's own frame, which is red's frame: a blue robot's poses are mirrored through the FIELD center.
+ * alliance frame, which is red's FIELD coordinates in x and y: a blue robot runs the same poses rotated 180° about the
+ * FIELD center. `simPoint` converts a pose to the simulator's axes.
  *
  * Each AUTO leaf is one step of the kind that `ScriptRunner` ran, with the same timing: it ends on its condition or
  * on its `timeoutSec`, whichever comes first, and then the robot does nothing for one physics step before the next
@@ -25,10 +26,15 @@ import soloSweepNoPark from './trees/auto/solo-two-tip-sweep-no-park.json';
 import leaveAndPark from './trees/auto/leave-and-park.json';
 import { fieldObstacles, planPath, type Capsule, type Pt } from './planner';
 
-const POSE = t.object({ x: t.number('m'), z: t.number('m'), headingDeg: t.number('deg') });
+/**
+ * A pose in the alliance frame: red's FIELD coordinates. x runs from the red wall (negative) to the blue wall, y from the
+ * audience wall (negative) to the rear wall, in meters, and the heading is in degrees counterclockwise from +x. A blue
+ * robot runs the same tree rotated 180° about the FIELD center, so every tree is written for red.
+ */
+const POSE = t.object({ x: t.number('m'), y: t.number('m'), headingDeg: t.number('deg') });
 const CELL = t.enum('rear', 'audience');
 const INTAKE = t.enum('all', 'pollen', 'own_nectar', 'none');
-export interface Pose { x: number; z: number; headingDeg: number }
+export interface Pose { x: number; y: number; headingDeg: number }
 
 /** The fields that expressions in an AUTO tree can read. */
 export const ONBOARD_SCHEMA = t.object({
@@ -84,8 +90,16 @@ interface DriveSubsystem {
   readonly speed: number;
 }
 
+/**
+ * Converts a point in the alliance frame to the simulator's floor axes, which are three.js's x and z, where z is the
+ * negative of FIELD y. `rotate` turns it 180° about the FIELD center, for a blue robot.
+ */
+export const simPoint = (p: { x: number; y: number }, rotate: boolean): Pt => (rotate ? { x: -p.x, z: p.y } : { x: p.x, z: -p.y });
+/** Converts a heading in the alliance frame to the simulator's heading in radians. A blue robot's turns by 180°. */
+export const simHeading = (headingDeg: number, rotate: boolean) => ((headingDeg + (rotate ? 180 : 0)) * Math.PI) / 180;
+
 /** The virtual wall on the FIELD center line. It keeps the robot's circumscribed circle on its own side (G402). */
-export const centerWall = (mirror: boolean): Capsule => { const xw = (mirror ? -1 : 1) * 0.08; return { a: { x: xw, z: -2 }, b: { x: xw, z: 2 }, r: 0 }; };
+export const centerWall = (rotate: boolean): Capsule => { const xw = (rotate ? -1 : 1) * 0.08; return { a: { x: xw, z: -2 }, b: { x: xw, z: 2 }, r: 0 }; };
 
 /**
  * Builds the onboard environment over a robot's view of the simulator. `use` builds it for each step: nothing moves
@@ -97,17 +111,17 @@ class OnboardAdapter implements OnboardEnv {
   readonly field = { half: FIELD.half, flowerHalfSize: FIELD.flowerHalfSize };
 
   use(s: Sim, n: number, dt: number) {
-    const out = this.out, mirror = s.alliance === 'blue';
+    const out = this.out, rotate = s.alliance === 'blue';
     out.inputs = { ...NO_INPUT };
     this.clock = { remaining: s.timer, step: n, dt };
-    // Blue mirrors the FIELD, so its rear is red's audience side.
-    this.sensors = { camera: { seesRaised: cell => seesRaisedCell(s, mirror ? (cell === 'rear' ? 'audience' : 'rear') : cell) } };
+    // Rotated 180°, blue's rear CELL is where red's audience CELL is, so a tree's `rear` means red's rear.
+    this.sensors = { camera: { seesRaised: cell => seesRaisedCell(s, rotate ? (cell === 'rear' ? 'audience' : 'rear') : cell) } };
     const drive: DriveSubsystem = {
       plan: goal => {
         const p = s.robot.translation(), R = Math.hypot(s.cfg.length, s.cfg.width) / 2;
-        out.path = planPath({ x: p.x, z: p.z }, { x: mirror ? -goal.x : goal.x, z: mirror ? -goal.z : goal.z }, R, [...fieldObstacles(), centerWall(mirror)]);
+        out.path = planPath({ x: p.x, z: p.z }, simPoint(goal, rotate), R, [...fieldObstacles(), centerWall(rotate)]);
       },
-      follow: headingDeg => pursue(s, out.path, ((headingDeg + (mirror ? 180 : 0)) * Math.PI) / 180),
+      follow: headingDeg => pursue(s, out.path, simHeading(headingDeg, rotate)),
       send: cmd => { out.inputs.forward = cmd.forward; out.inputs.strafeRight = cmd.strafeRight; out.inputs.turnRight = cmd.turnRight; },
       push: power => { out.inputs.forward = power; },
       speed: s.telemetry.speed,
@@ -170,8 +184,6 @@ function* waitStep(e: OnboardEnv, timeoutSec: number, unlessFull: boolean): Beha
 }
 
 const leaf = defineLeaf<OnboardEnv>();
-/** Adds a drive step's `nudge` to its pose. A zero nudge leaves every number as it was: x + 0 is x. */
-export const nudged = (p: Pose, n: Pose): Pose => ({ x: p.x + n.x, z: p.z + n.z, headingDeg: p.headingDeg + n.headingDeg });
 const NEEDS_CAMERA = ['sensors.camera'];
 
 const drive = leaf({
@@ -183,9 +195,8 @@ const drive = leaf({
     untilFull: { type: t.boolean(), default: false, doc: 'If true, ends the step as soon as the hopper is full.' },
     timeoutSec: { type: t.number('s'), min: 0, unit: 's' },
     tag: { type: t.string(), default: '', doc: 'A label for tools.' },
-    nudge: { type: POSE, default: { x: 0, z: 0, headingDeg: 0 }, doc: 'An offset that the field editor adds to `pose`, so that the pose expression stays as it was written.' },
   },
-  *run(ctx) { const p = ctx.params; begin(ctx.env, ctx.path, 'drive', p.tag || undefined); return yield* driveStep(ctx.env, nudged(p.pose, p.nudge), p.intake, p.untilFull, p.timeoutSec); },
+  *run(ctx) { const p = ctx.params; begin(ctx.env, ctx.path, 'drive', p.tag || undefined); return yield* driveStep(ctx.env, p.pose, p.intake, p.untilFull, p.timeoutSec); },
 });
 
 const sweep = leaf({
@@ -194,7 +205,7 @@ const sweep = leaf({
   params: {
     from: { type: POSE, doc: 'Where the sweep starts. It sets the first lane\'s heading and timeout.' },
     role: { type: t.enum('solo', 'right', 'left'), doc: 'Which of the planned lane sets `scripts/plan-sweeps.ts` writes into `lanes`.' },
-    lanes: { type: t.array(t.object({ x: t.number('m'), z: t.number('m'), wall: t.nullable(t.enum('rear', 'audience', 'red')) })) },
+    lanes: { type: t.array(t.object({ x: t.number('m'), y: t.number('m'), wall: t.nullable(t.enum('rear', 'audience', 'red')) })), doc: 'The lane ends, in the alliance frame.' },
   },
   *run(ctx) {
     const e = ctx.env;
@@ -203,12 +214,12 @@ const sweep = leaf({
       begin(e, ctx.path, 'wait', 'sweep'); return yield* waitStep(e, 30, false);
     }
     const facing = { rear: 90, audience: -90, red: 180 } as const;
-    let at = { x: ctx.params.from.x, z: ctx.params.from.z };
+    let at = { x: ctx.params.from.x, y: ctx.params.from.y };
     for (const [i, lane] of ctx.params.lanes.entries()) {
-      const { x, z, wall } = lane, dist = Math.hypot(x - at.x, z - at.z);
-      const headingDeg = wall ? facing[wall] : (Math.atan2(-(z - at.z), x - at.x) * 180) / Math.PI; at = { x, z };
+      const { x, y, wall } = lane, dist = Math.hypot(x - at.x, y - at.y);
+      const headingDeg = wall ? facing[wall] : (Math.atan2(y - at.y, x - at.x) * 180) / Math.PI; at = { x, y };
       begin(e, ctx.path, 'drive', i === 0 ? 'sweep' : undefined);
-      yield* driveStep(e, { x, z, headingDeg }, 'all', true, dist / 1.1 + 1.2);
+      yield* driveStep(e, { x, y, headingDeg }, 'all', true, dist / 1.1 + 1.2);
     }
     return null;
   },
@@ -293,8 +304,9 @@ const clockAtMost = leaf({
 });
 
 const FNS: Record<string, FnSpec> = {
-  pose: { args: [t.number(), t.number(), t.number()], returns: POSE, impl: (x: number, z: number, headingDeg: number) => ({ x, z, headingDeg }) },
-  offset: { args: [POSE, t.number(), t.number()], returns: POSE, impl: (p: Pose, dx: number, dz: number) => ({ x: p.x + dx, z: p.z + dz, headingDeg: p.headingDeg }) },
+  pose: { args: [t.number(), t.number(), t.number()], returns: POSE, impl: (x: number, y: number, headingDeg: number) => ({ x, y, headingDeg }) },
+  // offset(p, dx, dy) moves a pose, and a fourth value turns it by that many degrees. The field editor writes it.
+  offset: { args: [POSE, t.number(), t.number(), t.number()], required: 3, returns: POSE, impl: (p: Pose, dx: number, dy: number, dh?: number) => ({ x: p.x + dx, y: p.y + dy, headingDeg: dh === undefined ? p.headingDeg : p.headingDeg + dh }) },
 };
 
 export const AUTO_REGISTRY: Registry = {
@@ -392,23 +404,23 @@ export function leafParams(def: TreeDef, sim: Sim): { node: CNode; params: Recor
  * The plan uses only fixed FIELD geometry, so it is known before the MATCH, like a real AUTO path.
  */
 export function previewAuto(def: TreeDef, sim: Sim, start: Pt): { path: Pt[]; poses: (Pt & { heading: number; shoots: boolean })[] } {
-  const mirror = sim.alliance === 'blue', R = Math.hypot(sim.cfg.length, sim.cfg.width) / 2;
+  const rotate = sim.alliance === 'blue', R = Math.hypot(sim.cfg.length, sim.cfg.width) / 2;
   const leaves = leafParams(def, sim);
   const goals: { pose: Pose; next: CNode | undefined }[] = [];
   leaves.forEach(({ node: n, params: p }, i) => {
-    if (n.label === 'auto.drive') goals.push({ pose: nudged(p.pose as Pose, p.nudge as Pose), next: leaves[i + 1]?.node });
+    if (n.label === 'auto.drive') goals.push({ pose: p.pose as Pose, next: leaves[i + 1]?.node });
     if (n.label === 'auto.sweep') {
-      const facing = { rear: 90, audience: -90, red: 180 } as const, from = p.from as Pose; let at = { x: from.x, z: from.z };
-      for (const l of p.lanes as { x: number; z: number; wall: keyof typeof facing | null }[]) {
-        goals.push({ pose: { x: l.x, z: l.z, headingDeg: l.wall ? facing[l.wall] : (Math.atan2(-(l.z - at.z), l.x - at.x) * 180) / Math.PI }, next: undefined }); at = { x: l.x, z: l.z };
+      const facing = { rear: 90, audience: -90, red: 180 } as const, from = p.from as Pose; let at = { x: from.x, y: from.y };
+      for (const l of p.lanes as { x: number; y: number; wall: keyof typeof facing | null }[]) {
+        goals.push({ pose: { x: l.x, y: l.y, headingDeg: l.wall ? facing[l.wall] : (Math.atan2(l.y - at.y, l.x - at.x) * 180) / Math.PI }, next: undefined }); at = { x: l.x, y: l.y };
       }
     }
   });
   const path: Pt[] = [start], poses: (Pt & { heading: number; shoots: boolean })[] = []; let at = start;
   for (const { pose, next } of goals) {
-    const goal = { x: mirror ? -pose.x : pose.x, z: mirror ? -pose.z : pose.z };
-    path.push(...planPath(at, goal, R, [...fieldObstacles(), centerWall(mirror)]).slice(1)); at = goal;
-    poses.push({ ...goal, heading: ((pose.headingDeg + (mirror ? 180 : 0)) * Math.PI) / 180, shoots: next?.label === 'auto.shoot' });
+    const goal = simPoint(pose, rotate);
+    path.push(...planPath(at, goal, R, [...fieldObstacles(), centerWall(rotate)]).slice(1)); at = goal;
+    poses.push({ ...goal, heading: simHeading(pose.headingDeg, rotate), shoots: next?.label === 'auto.shoot' });
   }
   return { path, poses };
 }

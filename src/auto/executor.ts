@@ -300,7 +300,7 @@ export class Executor {
     // Under the sides convention the partners launch from opposite sides of the HIVE, so both use the straight spot.
     const angled = this.useAngled(sim, cell), x = HIVE.pivotX[me] + (angled ? (me === 'red' ? -0.62 : 0.62) : 0), mouthZ = side * 0.415, key = `${angled}`;
     const headingAt = (z: number) => { const aim = Math.atan2(-(mouthZ - z), HIVE.pivotX[me] - x); return rear ? wrap(aim + Math.PI) : aim; };
-    // The standoff is measured from the shot preview, which needs this CELL raised and at rest. Both sides mirror each other.
+    // The standoff is measured from the shot preview, which needs this CELL raised and at rest. The two alliances' sides are the same, rotated 180°.
     if (this.spot[key] === undefined && hive.upCell === cell && Math.abs(Math.abs(hive.phi) - HIVE.tiltLimit) < 0.02) {
       const ok: number[] = [];
       for (let z = 0.75; z <= 1.58; z += 0.02) if (sim.previewShot('pollen', { x, z: side * z, heading: headingAt(side * z) }).scores) ok.push(z);

@@ -241,7 +241,7 @@ export class Sim {
   private buildRobot(alliance: Alliance, c: RobotConfig, slot: 0 | 1): RobotState {
     // G304: touching a perimeter wall on the own side, clear of the FLOWERS and of the LOADING ZONE. The first robot
     // starts on the alliance wall and faces the field. Its partner starts on the rear wall (red) or the audience
-    // wall (blue), next to the FLOWER that its AUTO script uses. Blue mirrors red through the FIELD center.
+    // wall (blue), next to the FLOWER that its AUTO script uses. Blue is red rotated 180° about the FIELD center.
     const sx = alliance === 'red' ? -1 : 1, edge = FIELD.half - c.length / 2 - 0.002;
     const pose = slot === 0 ? { x: sx * edge, z: sx * -0.1, th: sx < 0 ? 0 : Math.PI } : { x: sx * 1.05, z: sx * edge, th: sx < 0 ? Math.PI / 2 : -Math.PI / 2 };
     const body = this.world.createRigidBody(this.rapier.RigidBodyDesc.dynamic()

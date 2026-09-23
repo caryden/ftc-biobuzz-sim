@@ -12,10 +12,10 @@
   "flip": "if(bots.me.shooter.facing == 'front', 180, 0)",
   "hiveX": "-0.3237",
   "stand": "len / 2 + field.flowerHalfSize + 0.02",
-  "launchAudience": "pose(hiveX, 1.32, -90 + flip)",
-  "launchRear": "pose(hiveX, -1.32, 90 + flip)",
-  "ownFlower": "pose(-1.7282 + stand, 0.5942, 180)",
-  "rearFlower": "pose(-0.5942, -1.7282 + stand, 90)"
+  "launchAudience": "pose(hiveX, -1.32, -90 + flip)",
+  "launchRear": "pose(hiveX, 1.32, 90 + flip)",
+  "ownFlower": "pose(-1.7282 + stand, -0.5942, 180)",
+  "rearFlower": "pose(-0.5942, 1.7282 - stand, 90)"
  },
  "root": {
   "sequence": {
@@ -84,7 +84,7 @@
      "id": "s8",
      "ref": "auto.drive",
      "params": {
-      "pose": "offset(rearFlower, 0, 0.2)",
+      "pose": "offset(rearFlower, 0, -0.2)",
       "timeoutSec": 3
      }
     },
@@ -140,12 +140,12 @@
       "lanes": [
        {
         "x": -0.515,
-        "z": -0.965,
+        "y": 0.965,
         "wall": null
        },
        {
         "x": -1.565,
-        "z": -0.965,
+        "y": 0.965,
         "wall": null
        }
       ]

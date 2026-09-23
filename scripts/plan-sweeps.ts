@@ -35,7 +35,7 @@ function snapshots(partners: boolean): Record<string, Snap[]> {
       coaches.forEach((c, i) => {
         const step = c.auto?.step; if (taken.has(i) || !step || step.do !== 'wait' || step.tag !== 'sweep') return; taken.add(i);
         const r = sim.robots[i], m = r.alliance === 'blue' ? -1 : 1, own = r.alliance === 'red' ? 'nectar_red' : 'nectar_blue', g = FIELD.garden.red, p = r.body.translation();
-        // Blue robots are mirrored into the red frame, which doubles the data.
+        // Blue robots are rotated 180° into the red frame, which doubles the data.
         const balls = [...sim.balls.values()].filter(b => (b.kind === 'pollen' || b.kind === own) && b.body.translation().y < 0.13).map(b => ({ x: m * b.body.translation().x, z: m * b.body.translation().z }))
           .filter(q => q.x < -0.05 && !(q.x > g[0] - 0.05 && q.x < g[1] + 0.05 && q.z > g[2] - 0.05));
         const role = !partners ? 'solo' : r.slot === 0 ? 'right' : 'left';
@@ -97,13 +97,14 @@ for (const role of ['solo', 'right', 'left']) {
   heatmap(snaps); const p = plan(snaps, park, q => (role === 'right' ? q.z > 0.3 : role === 'left' ? q.z < -0.3 : true)); out[role] = p.lanes as (number | string)[][];
   console.log(`planned lanes ${JSON.stringify(p.lanes)} collect ${p.mean.toFixed(2)} balls per sweep in the snapshots`);
 }
-// Write each role's lanes into the sweeps of that role, in every tree. A role with no snapshots keeps its lanes.
+// Write each role's lanes into the sweeps of that role, in every tree. A role with no snapshots keeps its lanes. The
+// planning above works in the simulator's x and z, and a tree file is in FIELD x and y, where y is the negative of z.
 for (const file of fs.readdirSync('src/auto/trees/auto').filter(f => f.endsWith('.json'))) {
   const path = `src/auto/trees/auto/${file}`, tree = JSON.parse(fs.readFileSync(path, 'utf8')); let changed = 0;
   const visit = (n: unknown) => {
     if (typeof n !== 'object' || n === null) return;
     const node = n as { ref?: string; params?: { role?: string; lanes?: unknown } };
-    if (node.ref === 'auto.sweep' && node.params?.role && out[node.params.role]) { node.params.lanes = out[node.params.role].map(([x, z, wall]) => ({ x, z, wall: wall ?? null })); changed++; }
+    if (node.ref === 'auto.sweep' && node.params?.role && out[node.params.role]) { node.params.lanes = out[node.params.role].map(([x, z, wall]) => ({ x, y: -z, wall: wall ?? null })); changed++; }
     Object.values(n).forEach(visit);
   };
   visit(tree.root);
