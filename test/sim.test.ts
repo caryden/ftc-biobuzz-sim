@@ -4,6 +4,7 @@ import { DEFAULT_ROBOT, HIVE } from '../src/sim/config';
 import { mecanumForces } from '../src/sim/drivetrain';
 import { cameraSightings, seesRaisedCell } from '../src/sim/camera';
 import { DT, NO_INPUT, Sim } from '../src/sim/world';
+import { Shooter } from '../src/auto/shooter';
 
 beforeAll(async () => { await RAPIER.init(); });
 const run = (s: Sim, sec: number, inp = NO_INPUT) => { for (let i = 0; i < sec / DT; i++) s.step(inp); };
@@ -73,6 +74,15 @@ describe('shooting and HIVE TIP', () => {
     face(t, Math.PI / 2); face(f, Math.PI / 2); expect(f.previewShot('pollen').scores).toBe(false); let shots = 0;
     while (t.hives.red.tips === 0 && shots < 16) { t.carried = ['pollen']; run(t, 0.05, { ...NO_INPUT, shootPollen: true }); run(t, 1.2); shots++; }
     expect(t.hives.red.tips).toBe(1); expect(shots).toBeLessThanOrEqual(6);
+  });
+  it("gives the moving fire check a margin: the shots one standard deviation off must score too", () => {
+    const turret = () => { const c = structuredClone(DEFAULT_ROBOT); c.shooter.turret = true; return c; };
+    const s = new Sim(RAPIER, undefined, 'practice', 7, { configFor: turret }), y = s.robot.translation().y, side = s.hives.red.upCell === 'audience' ? 1 : -1;
+    const at = (d: number) => s.robot.setTranslation({ x: HIVE.pivotX.red, y, z: side * d }, true);
+    let mean = 0, robust = 0;
+    for (let d = 0.6; d <= 2; d += 0.01) { at(d); if (s.previewShot('pollen').scores) mean++; if (new Shooter().canShoot(s, 'pollen', false, 'moving')) robust++; }
+    // The robust window lies inside the mean window, and it's narrower.
+    expect(robust).toBeGreaterThan(20); expect(robust).toBeLessThan(mean);
   });
 });
 

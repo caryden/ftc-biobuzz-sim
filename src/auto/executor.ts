@@ -19,8 +19,13 @@ const ownNectar = (a: Alliance): BallKind => (a === 'red' ? 'nectar_red' : 'nect
 export const FILL_TARGET = 4;
 /** Executor tuning. `standoff` picks the launch distance within the scoring range: 0 is the closest spot, 1 the farthest. */
 /** `tipByMotion`: if true, a TIP counts as under way only when the HIVE is past level or turning away from its stop. See `tipTarget`. */
-/** `turretIntakeHeading`: if true, a robot with a turret turns its intakes toward the most balls on its way to launch. See `intakeHeading`. */
-export const EXEC = { standoff: 0.4, tipByMotion: true, turretIntakeHeading: true };
+/**
+ * `turretFireEnRoute`: if true, a robot with a turret fires as soon as `Shooter.canShoot` passes in its `moving` mode, on
+ * the way to its launch spot. If false, it fires from the spot, still, like a fixed shooter. It lost 58.1 ± 9.3 combined
+ * points in e82. `turretIntakeHeading`: if true, a robot with a turret turns its intakes toward the most balls on its
+ * way to launch. See `intakeHeading`. It lost 13.0 ± 7.8 more in e83. Default: both false.
+ */
+export const EXEC = { standoff: 0.4, tipByMotion: true, turretFireEnRoute: false, turretIntakeHeading: false };
 
 /**
  * How alliance partners divide the FIELD. With `sides`, the robot that starts on the left of its drivers (the second
@@ -507,11 +512,11 @@ export class Executor {
       // 10 cm off its spot still launches if the predicted path enters the CELL.
       const at = Math.hypot(goal.x - p.x, goal.z - p.z) < 0.22 && (goal.heading === null || Math.abs(wrap(goal.heading - sim.heading)) < 0.08);
       const dual = sim.cfg.shooter.type === 'dual', next = dual ? (carriedPollen > 0 ? 'pollen' : 'nectar') : sim.carried[0] === 'pollen' ? 'pollen' : 'nectar';
-      // Fire control is the shooter's: see `Shooter.canShoot`. A fixed shooter launches from its spot. A turret aims
-      // itself, so it launches as soon as the shot works, on the way to the spot, and it turns its intakes toward balls.
-      const turret = !!sim.cfg.shooter.turret;
+      // Fire control is the shooter's: see `Shooter.canShoot`. The robot launches from its spot, still. A turret aims
+      // itself, so its spot has no heading, and two experiments can change it: see `EXEC`.
+      const turret = !!sim.cfg.shooter.turret, enRoute = turret && EXEC.turretFireEnRoute;
       if (turret && EXEC.turretIntakeHeading) goal = { ...goal, heading: this.intakeHeading(sim) };
-      if ((turret || at) && this.shooter.canShoot(sim, next, EXEC.tipByMotion)) {
+      if ((enRoute || at) && this.shooter.canShoot(sim, next, EXEC.tipByMotion, enRoute ? 'moving' : 'still')) {
         buttons.shootNectar = !dual || carriedNectar > keepNectar; buttons.shootPollen = true;
         if (onlyWhatTips && dual) {
           // The dual shooter can fire both types at once. Fire only what the TIP still needs, counting balls in
