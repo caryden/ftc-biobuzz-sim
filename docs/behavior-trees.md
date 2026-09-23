@@ -491,7 +491,13 @@ exact match is the test for increments 2 and 3.
 
      A bump now ends for good when the opponent leaves its spot. The old code could pause and resume a shove within
      its 0.8 s. On three matches, the bumps ended for the same reasons in similar proportions on both versions.
-   - **The partner yield, the partner channel, and the defender** are still to do.
+   - **The partner yield. Done.** The tree's `yield` branch sits below the bump, in the fallback that checks every
+     step. It runs `teleop.yield`, which holds still, while the robot is in a TIP's launch phase and
+     `partner.linesUpFirst` is true. The check reads the partner's load as the executor last judged it, without judging
+     it again, because judging it starts a 2 s hold. `e64-yield-branch` is +4.6 ± 5.2 combined points against
+     `e60-bump-branch`, which is noise. A robot that bumps doesn't yield in the same step any more, because the bump
+     ranks higher.
+   - **The partner channel and the defender** are still to do.
 5. **Show the tree running,** live and in review mode, from the spans.
 6. **Edit AUTO poses on the field.** Each navigate node shows its poses as handles that you drag, with a heading
    handle. Selecting a node highlights its poses, and clicking a pose selects its node. The path preview redraws after

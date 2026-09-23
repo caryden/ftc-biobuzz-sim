@@ -37,7 +37,7 @@ describe('TELEOP tree', () => {
     const def = TELEOP_TREES['teleop-default'];
     expect(def.env).toBe('driver');
     const nodes: { kind: string; path: string }[] = [], walk = (n: typeof def.root) => { nodes.push(n); n.children.forEach(walk); }; walk(def.root);
-    expect(nodes.filter(n => n.kind === 'guard').map(n => n.path)).toEqual(['root/defend', 'root/match/endgame', 'root/match/endgame/child/last-launch', 'root/match/bump', 'root/match/play/child/flowers', 'root/match/play/child/tip', 'root/match/play/child/launch']);
+    expect(nodes.filter(n => n.kind === 'guard').map(n => n.path)).toEqual(['root/defend', 'root/match/endgame', 'root/match/endgame/child/last-launch', 'root/match/bump', 'root/match/yield', 'root/match/play/child/flowers', 'root/match/play/child/tip', 'root/match/play/child/launch']);
     expect(nodes.some(n => n.path === 'root/match/endgame/child/park-now')).toBe(true);
     expect(nodes.some(n => n.path === 'root/match/play/child/park')).toBe(true);
   });

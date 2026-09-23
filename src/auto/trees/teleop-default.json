@@ -72,6 +72,16 @@
         }
        },
        {
+        "id": "yield",
+        "note": "When both partners head for the same CELL, the one with the smaller load holds still until the other is lined up, and the second robot holds on a tie. Checked every step.",
+        "guard": {
+         "when": "bots.me.launching and partner.linesUpFirst",
+         "child": {
+          "ref": "teleop.yield"
+         }
+        }
+       },
+       {
         "id": "play",
         "note": "The robot decides again whenever a tactic ends: the repeat runs the choice again from the top.",
         "repeat": {

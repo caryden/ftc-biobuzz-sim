@@ -189,6 +189,27 @@ export class Executor {
   /** If true, the robot bumps an opponent that is lined up to launch within 1 m of it, and then launches. See `Coach.defense`. */
   /** True once the endgame branch chose a last launch. See `update`. */
   get lastLaunchStarted() { return this.endgame; }
+  /**
+   * Checks whether this robot should hold still so that its partner lines up first. Both head for the same CELL, and
+   * the partner carries the bigger load, or the same load and this robot is the second robot. The partner hasn't lined
+   * up yet, this robot is 0.3 m to 1.2 m from its launch spot and within 1.1 m of the partner, and the partner's spot
+   * is more than 0.5 m away. A still robot is an obstacle that the planner routes around. Two robots that converge on
+   * spots 0.62 m apart block each other: 23 of 65 stalls in eight headless matches before the yield existed.
+   * It reads the partner's load as this robot last judged it, without judging it again, so it has no side effects.
+   */
+  partnerLinesUpFirst(sim: Sim): boolean {
+    if (!this.launchingNow(sim)) return false;
+    const mate = sim.partner();
+    if (!mate || mate.intent !== 'tip_hive' || mate.plan.phase !== 'launch' || !mate.plan.goal) return false;
+    if (mate.plan.side !== tipTarget(sim, this.mateLoad, this.own(sim)).side) return false;
+    const own = ownNectar(sim.alliance), pollen = sim.carried.filter(k => k === 'pollen').length, nectar = sim.carried.filter(k => k === own).length;
+    const keep = sim.cfg.shooter.type === 'dual' ? Math.min(this.nectarReserve, nectar) : 0, load = pollen * TIP_LOAD.pollen + (nectar - keep) * TIP_LOAD.nectar;
+    const mateFirst = mate.plan.load > load + 0.01 || (Math.abs(mate.plan.load - load) <= 0.01 && sim.slot === 1);
+    const p = sim.robot.translation(), g = this.launchSpot(sim);
+    const mateArrived = Math.hypot(mate.plan.goal.x - mate.x, mate.plan.goal.z - mate.z) < 0.2, mine = Math.hypot(g.x - p.x, g.z - p.z), apart = Math.hypot(mate.x - p.x, mate.z - p.z);
+    return mateFirst && !mateArrived && mine > 0.3 && mine < 1.2 && apart < 1.1 && Math.hypot(mate.plan.goal.x - p.x, mate.plan.goal.z - p.z) > 0.5;
+  }
+
   /** Checks whether the robot is in a TIP's launch phase with something to launch, where a bump can replace launching. */
   launchingNow(sim: Sim): boolean {
     if (this.tactic !== 'tip_hive' || this.tipPhase !== 'launch') return false;
@@ -421,10 +442,11 @@ export class Executor {
    * @param mode What the TELEOP tree decided for this step. `park` runs the PARK without changing the tactic, so that a
    *   later step can still choose a last launch. `lastLaunch` launches everything that the robot carries and stops
    *   collecting, for the rest of the MATCH. `bump` drives into the opponent in slot `bumpSlot` instead of launching, if
-   *   the robot is in a TIP's launch phase. Default: `normal`, which runs the tactic.
+   *   the robot is in a TIP's launch phase. `yield` holds still in a TIP's launch phase, so that the partner lines up
+   *   first. Default: `normal`, which runs the tactic.
    * @param bumpSlot The opponent's slot for `bump`.
    */
-  update(sim: Sim, dt: number, mode: 'normal' | 'park' | 'lastLaunch' | 'bump' = 'normal', bumpSlot = -1): Inputs {
+  update(sim: Sim, dt: number, mode: 'normal' | 'park' | 'lastLaunch' | 'bump' | 'yield' = 'normal', bumpSlot = -1): Inputs {
     this.t += dt; sim.robots[sim.me].intent = this.tactic === 'work_flower' ? `work_flower:${this.flowerId}` : this.tactic;
     const shared = sim.robots[sim.me].plan; shared.claims = this.tactic === 'tip_hive' || this.tactic.startsWith('collect') ? this.pickup.slice(0, 2).map(q => q.key) : []; shared.phase = 'other'; shared.side = null; shared.load = 0; shared.goal = null; shared.zone = this.own(sim);
     const me = sim.alliance, free = sim.cfg.capacity - sim.carried.length, carriedPollen = sim.carried.filter(k => k === 'pollen').length;
@@ -478,15 +500,8 @@ export class Executor {
             const foe = sim.otherRobots().find(o => o.alliance !== sim.alliance && o.slot === bumpSlot);
             if (foe) { goal = { x: foe.x, z: foe.z, heading: null, key: `bump:${foe.slot}`, direct: true }; buttons.shootNectar = buttons.shootPollen = false; this.note = 'bump the opponent that is lined up'; this.bestAt = this.t; }
           }
-          // Yield: when both partners head for the same CELL, the one with the smaller load holds still until the other
-          // is lined up, and the second robot yields on a tie. A still robot is an obstacle that the planner routes around.
-          // Two robots that converge on spots 0.62 m apart block each other: 23 of 65 stalls in eight headless matches.
-          const mate = sim.partner(), p = sim.robot.translation(), g = goal as Goal | null;
-          if (mate && g && mate.intent === 'tip_hive' && mate.plan.phase === 'launch' && mate.plan.side === tgt.side && mate.plan.goal) {
-            const mateFirst = mate.plan.load > load + 0.01 || (Math.abs(mate.plan.load - load) <= 0.01 && sim.slot === 1);
-            const mateArrived = Math.hypot(mate.plan.goal.x - mate.x, mate.plan.goal.z - mate.z) < 0.2, mine = Math.hypot(g.x - p.x, g.z - p.z), apart = Math.hypot(mate.x - p.x, mate.z - p.z);
-            if (mateFirst && !mateArrived && mine > 0.3 && mine < 1.2 && apart < 1.1 && Math.hypot(mate.plan.goal.x - p.x, mate.plan.goal.z - p.z) > 0.5) { goal = null; this.note = 'yield: partner lines up first'; this.bestAt = this.t; }
-          }
+          // Yield: the TELEOP tree's yield branch decides when to hold still for the partner. See `partnerLinesUpFirst`.
+          if (mode === 'yield') { goal = null; this.note = 'yield: partner lines up first'; this.bestAt = this.t; }
         }
       } else {
         // The intake stays open while the hopper has room, for every shooter type: a ball on the route is a free ball.
