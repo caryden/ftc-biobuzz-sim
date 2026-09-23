@@ -21,7 +21,7 @@
    "children": [
     {
      "id": "s1",
-     "ref": "auto.driveTo",
+     "ref": "drive.driveTo",
      "params": {
       "pose": "angledRear",
       "timeoutSec": 3
@@ -38,7 +38,7 @@
     },
     {
      "id": "s3",
-     "ref": "auto.shoot",
+     "ref": "shooter.shoot",
      "params": {
       "count": 4,
       "timeoutSec": 2.5,
@@ -47,7 +47,7 @@
     },
     {
      "id": "s4",
-     "ref": "auto.driveTo",
+     "ref": "drive.driveTo",
      "params": {
       "pose": "offset(rearFlower, 0, -0.2)",
       "timeoutSec": 3
@@ -55,57 +55,54 @@
     },
     {
      "id": "collect-s5",
-     "ensure": {
-      "child": {
-       "sequence": {
-        "children": [
-         {
-          "ref": "auto.intake",
-          "params": {
-           "filter": "pollen"
-          }
-         },
-         {
-          "id": "s5",
-          "ref": "auto.driveTo",
-          "params": {
-           "pose": "rearFlower",
-           "timeoutSec": 1.5
-          }
-         },
-         {
-          "id": "full-s6",
-          "parallel": {
-           "policy": "any",
-           "children": [
-            {
-             "ref": "auto.waitHopperFull"
-            },
-            {
-             "id": "s6",
-             "ref": "auto.push",
-             "params": {
-              "power": 0.35,
-              "timeoutSec": 2.2
+     "parallel": {
+      "policy": "any",
+      "children": [
+       {
+        "ref": "intake.run",
+        "params": {
+         "filter": "pollen"
+        }
+       },
+       {
+        "sequence": {
+         "children": [
+          {
+           "id": "s5",
+           "ref": "drive.driveTo",
+           "params": {
+            "pose": "rearFlower",
+            "timeoutSec": 1.5
+           }
+          },
+          {
+           "id": "full-s6",
+           "parallel": {
+            "policy": "any",
+            "children": [
+             {
+              "ref": "auto.waitHopperFull"
+             },
+             {
+              "id": "s6",
+              "ref": "drive.push",
+              "params": {
+               "power": 0.35,
+               "timeoutSec": 2.2
+              }
              }
-            }
-           ]
+            ]
+           }
           }
-         }
-        ]
+         ]
+        }
        }
-      },
-      "cleanup": {
-       "ref": "auto.intake",
-       "params": {
-        "filter": "none"
-       }
-      }
+      ]
      }
     },
     {
      "id": "s7",
-     "ref": "auto.driveTo",
+     "ref": "drive.driveTo",
      "params": {
       "pose": "angledRear",
       "timeoutSec": 3
@@ -113,7 +110,7 @@
     },
     {
      "id": "s8",
-     "ref": "auto.shoot",
+     "ref": "shooter.shoot",
      "params": {
       "count": 4,
       "timeoutSec": 2.5
@@ -137,68 +134,51 @@
     },
     {
      "id": "collect-s11",
-     "ensure": {
-      "child": {
-       "sequence": {
-        "children": [
-         {
-          "ref": "auto.intake",
-          "params": {
-           "filter": "all"
+     "parallel": {
+      "policy": "any",
+      "children": [
+       {
+        "ref": "auto.waitHopperFull"
+       },
+       {
+        "ref": "intake.run",
+        "params": {
+         "filter": "all"
+        }
+       },
+       {
+        "id": "s11",
+        "note": "A blind sweep: a TIP spills the CELL where the robot can't see. scripts/plan-sweeps.ts records where the spill comes to rest over many simulated matches and writes the lanes that collect the most. The path ends early once the hopper is full.",
+        "ref": "drive.followPath",
+        "params": {
+         "waypoints": [
+          {
+           "x": -1.565,
+           "y": 1.115,
+           "headingDeg": null
+          },
+          {
+           "x": -1.565,
+           "y": 0.515,
+           "headingDeg": null
+          },
+          {
+           "x": -0.365,
+           "y": 1.115,
+           "headingDeg": null
           }
-         },
-         {
-          "id": "full-s11",
-          "parallel": {
-           "policy": "any",
-           "children": [
-            {
-             "ref": "auto.waitHopperFull"
-            },
-            {
-             "id": "s11",
-             "note": "A blind sweep: a TIP spills the CELL where the robot can't see. scripts/plan-sweeps.ts records where the spill comes to rest over many simulated matches and writes the lanes that collect the most. The path ends early once the hopper is full.",
-             "ref": "auto.followPath",
-             "params": {
-              "waypoints": [
-               {
-                "x": -1.565,
-                "y": 1.115,
-                "headingDeg": null
-               },
-               {
-                "x": -1.565,
-                "y": 0.515,
-                "headingDeg": null
-               },
-               {
-                "x": -0.365,
-                "y": 1.115,
-                "headingDeg": null
-               }
-              ],
-              "timeoutSec": 6.0,
-              "tag": "sweep-left"
-             }
-            }
-           ]
-          }
-         }
-        ]
+         ],
+         "timeoutSec": 6.0,
+         "tag": "sweep-left"
+        }
        }
-      },
-      "cleanup": {
-       "ref": "auto.intake",
-       "params": {
-        "filter": "none"
-       }
-      }
+      ]
      }
     },
     {
      "id": "s12",
      "note": "The right robot's third TIP raises the rear CELL again: launch what the sweep found, then sweep once more so that TELEOP starts with a full hopper.",
-     "ref": "auto.driveTo",
+     "ref": "drive.driveTo",
      "params": {
       "pose": "angledRear",
       "timeoutSec": 3
@@ -206,7 +186,7 @@
     },
     {
      "id": "s13",
-     "ref": "auto.shoot",
+     "ref": "shooter.shoot",
      "params": {
       "count": 4,
       "timeoutSec": 4,
@@ -215,62 +195,45 @@
     },
     {
      "id": "collect-s14",
-     "ensure": {
-      "child": {
-       "sequence": {
-        "children": [
-         {
-          "ref": "auto.intake",
-          "params": {
-           "filter": "all"
+     "parallel": {
+      "policy": "any",
+      "children": [
+       {
+        "ref": "auto.waitHopperFull"
+       },
+       {
+        "ref": "intake.run",
+        "params": {
+         "filter": "all"
+        }
+       },
+       {
+        "id": "s14",
+        "note": "A blind sweep: a TIP spills the CELL where the robot can't see. scripts/plan-sweeps.ts records where the spill comes to rest over many simulated matches and writes the lanes that collect the most. The path ends early once the hopper is full.",
+        "ref": "drive.followPath",
+        "params": {
+         "waypoints": [
+          {
+           "x": -1.565,
+           "y": 1.115,
+           "headingDeg": null
+          },
+          {
+           "x": -1.565,
+           "y": 0.515,
+           "headingDeg": null
+          },
+          {
+           "x": -0.365,
+           "y": 1.115,
+           "headingDeg": null
           }
-         },
-         {
-          "id": "full-s14",
-          "parallel": {
-           "policy": "any",
-           "children": [
-            {
-             "ref": "auto.waitHopperFull"
-            },
-            {
-             "id": "s14",
-             "note": "A blind sweep: a TIP spills the CELL where the robot can't see. scripts/plan-sweeps.ts records where the spill comes to rest over many simulated matches and writes the lanes that collect the most. The path ends early once the hopper is full.",
-             "ref": "auto.followPath",
-             "params": {
-              "waypoints": [
-               {
-                "x": -1.565,
-                "y": 1.115,
-                "headingDeg": null
-               },
-               {
-                "x": -1.565,
-                "y": 0.515,
-                "headingDeg": null
-               },
-               {
-                "x": -0.365,
-                "y": 1.115,
-                "headingDeg": null
-               }
-              ],
-              "timeoutSec": 6.0,
-              "tag": "sweep-left"
-             }
-            }
-           ]
-          }
-         }
-        ]
+         ],
+         "timeoutSec": 6.0,
+         "tag": "sweep-left"
+        }
        }
-      },
-      "cleanup": {
-       "ref": "auto.intake",
-       "params": {
-        "filter": "none"
-       }
-      }
+      ]
      }
     }
    ]

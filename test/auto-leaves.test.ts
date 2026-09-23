@@ -17,21 +17,24 @@ function run(root: unknown, sec: number, each: (sim: Sim, inputs: Inputs) => voi
   }
   return sim.view(0);
 }
-const intake = (filter: string) => ({ ref: 'auto.intake', params: { filter } });
+const intakeRun = (filter: string) => ({ ref: 'intake.run', params: { filter } });
 
-describe('auto.intake', () => {
-  it('holds its filter across steps, and an ensure cleanup turns it off when a race stops the child', () => {
+describe('intake.run', () => {
+  it('runs the intake while it runs, and the default command stops it when a race halts it', () => {
     const seen: (string | undefined)[] = [];
-    // The clock race stops the scope after 0.5 s, in the middle of its 3 s wait.
+    // The outer race stops the scope after 0.5 s, in the middle of its 3 s wait.
     run({ sequence: { children: [
       { parallel: { policy: 'any', children: [
         { ref: 'auto.wait', params: { timeoutSec: 0.5 } },
-        { ensure: { child: { sequence: { children: [intake('pollen'), { ref: 'auto.wait', params: { timeoutSec: 3 } }] } }, cleanup: intake('none') } },
+        { parallel: { policy: 'any', children: [intakeRun('pollen'), { ref: 'auto.wait', params: { timeoutSec: 3 } }] } },
       ] } },
       { ref: 'auto.wait', params: { timeoutSec: 1 } },
     ] } }, 1.2, (_, inp) => seen.push(inp.intake));
     expect(seen.slice(0, 100).every(f => f === 'pollen')).toBe(true);
     expect(seen.slice(130).every(f => f === 'none')).toBe(true);
+  });
+  it("can't run beside another leaf that commands the intake", () => {
+    expect(() => tree({ parallel: { children: [intakeRun('all'), intakeRun('pollen')] } })).toThrow(/both command intake/);
   });
   it('starts AUTO with the intake off', () => {
     const seen: (string | undefined)[] = [];
@@ -40,14 +43,14 @@ describe('auto.intake', () => {
   });
 });
 
-describe('auto.followPath', () => {
+describe('drive.followPath', () => {
   it('drives through its waypoints without stopping and ends at the last one', () => {
     // Red robot 0 starts on the red alliance wall. Two waypoints on one line toward the audience side, clear of the
     // FLOWER on the wall and of the HIVE: with no planner, a path into the HIVE's foot bar stops there.
     const start = alliancePose(new Sim(RAPIER, undefined, 'full', 3, { opponent: true, partners: true }).view(0).robot.translation(), 0, false);
     const a = { x: start.x + 0.3, y: start.y - 0.4, headingDeg: null }, b = { x: start.x + 0.6, y: start.y - 0.8, headingDeg: null };
     let nearA = Infinity, speedAtA = 0;
-    const end = run({ ref: 'auto.followPath', params: { waypoints: [a, b], timeoutSec: 4 } }, 3, sim => {
+    const end = run({ ref: 'drive.followPath', params: { waypoints: [a, b], timeoutSec: 4 } }, 3, sim => {
       const p = alliancePose(sim.robot.translation(), sim.heading, false), d = Math.hypot(p.x - a.x, p.y - a.y);
       if (d < nearA) { nearA = d; speedAtA = sim.telemetry.speed; }
     });
@@ -63,7 +66,7 @@ describe('auto.waitHopperFull', () => {
     // A robot that starts with a full hopper: the race ends before the drive starts.
     let moved = 0;
     run({ sequence: { children: [
-      { parallel: { policy: 'any', children: [{ ref: 'auto.waitHopperFull' }, { ref: 'auto.driveTo', params: { pose: 'pose(0, 0, 0)', timeoutSec: 3 } }] } },
+      { parallel: { policy: 'any', children: [{ ref: 'auto.waitHopperFull' }, { ref: 'drive.driveTo', params: { pose: 'pose(0, 0, 0)', timeoutSec: 3 } }] } },
       { ref: 'auto.wait', params: { timeoutSec: 3 } },
     ] } }, 0.5, (_, inp) => { if (inp.forward || inp.strafeRight) moved++; });
     expect(moved).toBe(0);

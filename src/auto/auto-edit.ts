@@ -42,11 +42,11 @@ const num = (v: number) => String(Object.is(v, -0) ? 0 : v);
 export function editHandles(def: TreeDef, sim: Sim): Handle[] {
   const rotate = sim.alliance === 'blue', out: Handle[] = [];
   for (const { node, params: p } of leafParams(def, sim)) {
-    if (node.label === 'auto.driveTo') {
+    if (node.label === 'drive.driveTo') {
       const pose = p.pose as Pose;
       out.push({ path: node.path, kind: 'drive', pose, sim: { ...simPoint(pose, rotate), heading: simHeading(pose.headingDeg, rotate) } });
     }
-    if (node.label === 'auto.followPath') (p.waypoints as Waypoint[]).forEach((w, i) => out.push({ path: node.path, kind: 'waypoint', index: i, pose: { x: w.x, y: w.y, headingDeg: w.headingDeg ?? 0 }, sim: simPoint(w, rotate) }));
+    if (node.label === 'drive.followPath') (p.waypoints as Waypoint[]).forEach((w, i) => out.push({ path: node.path, kind: 'waypoint', index: i, pose: { x: w.x, y: w.y, headingDeg: w.headingDeg ?? 0 }, sim: simPoint(w, rotate) }));
   }
   return out;
 }
@@ -156,7 +156,7 @@ export function sharedWith(tree: Json, def: TreeDef, h: Handle): string[] {
   const mine = poseText(tree, h); if (!mine || !/^[A-Za-z_]\w*$/.test(mine)) return [];
   const out: string[] = [];
   const walk = (n: TreeDef['root']) => {
-    if (n.label === 'auto.driveTo' && n.path !== h.path && poseText(tree, { ...h, path: n.path }) === mine) out.push(n.path.split('/').pop()!);
+    if (n.label === 'drive.driveTo' && n.path !== h.path && poseText(tree, { ...h, path: n.path }) === mine) out.push(n.path.split('/').pop()!);
     n.children.forEach(walk);
   };
   walk(def.root);

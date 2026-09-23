@@ -43,7 +43,7 @@
          "children": [
           {
            "id": "s1",
-           "ref": "auto.driveTo",
+           "ref": "drive.driveTo",
            "params": {
             "pose": "angledRear",
             "timeoutSec": 3
@@ -60,7 +60,7 @@
           },
           {
            "id": "s3",
-           "ref": "auto.shoot",
+           "ref": "shooter.shoot",
            "params": {
             "count": 4,
             "timeoutSec": 2.5,
@@ -69,7 +69,7 @@
           },
           {
            "id": "s4",
-           "ref": "auto.driveTo",
+           "ref": "drive.driveTo",
            "params": {
             "pose": "offset(rearFlower, 0, -0.2)",
             "timeoutSec": 3
@@ -77,57 +77,54 @@
           },
           {
            "id": "collect-s5",
-           "ensure": {
-            "child": {
-             "sequence": {
-              "children": [
-               {
-                "ref": "auto.intake",
-                "params": {
-                 "filter": "pollen"
-                }
-               },
-               {
-                "id": "s5",
-                "ref": "auto.driveTo",
-                "params": {
-                 "pose": "rearFlower",
-                 "timeoutSec": 1.5
-                }
-               },
-               {
-                "id": "full-s6",
-                "parallel": {
-                 "policy": "any",
-                 "children": [
-                  {
-                   "ref": "auto.waitHopperFull"
-                  },
-                  {
-                   "id": "s6",
-                   "ref": "auto.push",
-                   "params": {
-                    "power": 0.35,
-                    "timeoutSec": 2.2
+           "parallel": {
+            "policy": "any",
+            "children": [
+             {
+              "ref": "intake.run",
+              "params": {
+               "filter": "pollen"
+              }
+             },
+             {
+              "sequence": {
+               "children": [
+                {
+                 "id": "s5",
+                 "ref": "drive.driveTo",
+                 "params": {
+                  "pose": "rearFlower",
+                  "timeoutSec": 1.5
+                 }
+                },
+                {
+                 "id": "full-s6",
+                 "parallel": {
+                  "policy": "any",
+                  "children": [
+                   {
+                    "ref": "auto.waitHopperFull"
+                   },
+                   {
+                    "id": "s6",
+                    "ref": "drive.push",
+                    "params": {
+                     "power": 0.35,
+                     "timeoutSec": 2.2
+                    }
                    }
-                  }
-                 ]
+                  ]
+                 }
                 }
-               }
-              ]
+               ]
+              }
              }
-            },
-            "cleanup": {
-             "ref": "auto.intake",
-             "params": {
-              "filter": "none"
-             }
-            }
+            ]
            }
           },
           {
            "id": "s7",
-           "ref": "auto.driveTo",
+           "ref": "drive.driveTo",
            "params": {
             "pose": "angledRear",
             "timeoutSec": 3
@@ -135,7 +132,7 @@
           },
           {
            "id": "s8",
-           "ref": "auto.shoot",
+           "ref": "shooter.shoot",
            "params": {
             "count": 4,
             "timeoutSec": 2.5
@@ -144,7 +141,7 @@
           {
            "id": "s9",
            "note": "That volley tips the rear CELL. The robot steps aside to the angled spot so that the spill passes, watches the TIP, and then drives straight into the wall pocket between the rear FLOWER and the center line.",
-           "ref": "auto.driveTo",
+           "ref": "drive.driveTo",
            "params": {
             "pose": "angledRear",
             "timeoutSec": 2.5
@@ -168,87 +165,84 @@
           },
           {
            "id": "collect-s12",
-           "ensure": {
-            "child": {
-             "sequence": {
-              "children": [
-               {
-                "ref": "auto.intake",
-                "params": {
-                 "filter": "all"
-                }
-               },
-               {
-                "id": "full-s12",
-                "parallel": {
-                 "policy": "any",
-                 "children": [
-                  {
-                   "ref": "auto.waitHopperFull"
-                  },
-                  {
-                   "id": "s12",
-                   "ref": "auto.driveTo",
-                   "params": {
-                    "pose": "pose(hiveX + 0.03, 1.28, 90 + flip)",
-                    "timeoutSec": 2.5
+           "parallel": {
+            "policy": "any",
+            "children": [
+             {
+              "ref": "intake.run",
+              "params": {
+               "filter": "all"
+              }
+             },
+             {
+              "sequence": {
+               "children": [
+                {
+                 "id": "full-s12",
+                 "parallel": {
+                  "policy": "any",
+                  "children": [
+                   {
+                    "ref": "auto.waitHopperFull"
+                   },
+                   {
+                    "id": "s12",
+                    "ref": "drive.driveTo",
+                    "params": {
+                     "pose": "pose(hiveX + 0.03, 1.28, 90 + flip)",
+                     "timeoutSec": 2.5
+                    }
                    }
-                  }
-                 ]
-                }
-               },
-               {
-                "id": "full-s13",
-                "parallel": {
-                 "policy": "any",
-                 "children": [
-                  {
-                   "ref": "auto.waitHopperFull"
-                  },
-                  {
-                   "id": "s13",
-                   "ref": "auto.driveTo",
-                   "params": {
-                    "pose": "pose(hiveX + 0.03, wallStand, 90 + flip)",
-                    "timeoutSec": 2
+                  ]
+                 }
+                },
+                {
+                 "id": "full-s13",
+                 "parallel": {
+                  "policy": "any",
+                  "children": [
+                   {
+                    "ref": "auto.waitHopperFull"
+                   },
+                   {
+                    "id": "s13",
+                    "ref": "drive.driveTo",
+                    "params": {
+                     "pose": "pose(hiveX + 0.03, wallStand, 90 + flip)",
+                     "timeoutSec": 2
+                    }
                    }
-                  }
-                 ]
-                }
-               },
-               {
-                "id": "full-s14",
-                "parallel": {
-                 "policy": "any",
-                 "children": [
-                  {
-                   "ref": "auto.waitHopperFull"
-                  },
-                  {
-                   "id": "s14",
-                   "ref": "auto.push",
-                   "params": {
-                    "power": 0.3,
-                    "timeoutSec": 0.8
+                  ]
+                 }
+                },
+                {
+                 "id": "full-s14",
+                 "parallel": {
+                  "policy": "any",
+                  "children": [
+                   {
+                    "ref": "auto.waitHopperFull"
+                   },
+                   {
+                    "id": "s14",
+                    "ref": "drive.push",
+                    "params": {
+                     "power": 0.3,
+                     "timeoutSec": 0.8
+                    }
                    }
-                  }
-                 ]
+                  ]
+                 }
                 }
-               }
-              ]
+               ]
+              }
              }
-            },
-            "cleanup": {
-             "ref": "auto.intake",
-             "params": {
-              "filter": "none"
-             }
-            }
+            ]
            }
           },
           {
            "id": "s15",
-           "ref": "auto.driveTo",
+           "ref": "drive.driveTo",
            "params": {
             "pose": "angledRear",
             "timeoutSec": 3
@@ -256,7 +250,7 @@
           },
           {
            "id": "s16",
-           "ref": "auto.shoot",
+           "ref": "shooter.shoot",
            "params": {
             "count": 4,
             "timeoutSec": 12,
@@ -265,108 +259,105 @@
           },
           {
            "id": "collect-s17",
-           "ensure": {
-            "child": {
-             "sequence": {
-              "children": [
-               {
-                "ref": "auto.intake",
-                "params": {
-                 "filter": "all"
-                }
-               },
-               {
-                "id": "full-s17",
-                "parallel": {
-                 "policy": "any",
-                 "children": [
-                  {
-                   "ref": "auto.waitHopperFull"
-                  },
-                  {
-                   "id": "s17",
-                   "note": "An angled wall sweep: the robot yaws 30 degrees toward the wall, puts its wall-side front corner 1.5 cm from the wall, and drives toward the drivers' corner. The intake is 4.5 cm narrower than the chassis on each side, so a robot that is square to its path never reaches a ball on the wall. At 30 degrees the wall line crosses the front of the intake. The sweep starts as near the center line as G402 allows. This one sweeps the rear wall from the FLOWER to the corner.",
-                   "ref": "auto.driveTo",
-                   "params": {
-                    "pose": "pose(leftSweepFrom, wallReach, 150)",
-                    "timeoutSec": 2.5
+           "parallel": {
+            "policy": "any",
+            "children": [
+             {
+              "ref": "intake.run",
+              "params": {
+               "filter": "all"
+              }
+             },
+             {
+              "sequence": {
+               "children": [
+                {
+                 "id": "full-s17",
+                 "parallel": {
+                  "policy": "any",
+                  "children": [
+                   {
+                    "ref": "auto.waitHopperFull"
+                   },
+                   {
+                    "id": "s17",
+                    "note": "An angled wall sweep: the robot yaws 30 degrees toward the wall, puts its wall-side front corner 1.5 cm from the wall, and drives toward the drivers' corner. The intake is 4.5 cm narrower than the chassis on each side, so a robot that is square to its path never reaches a ball on the wall. At 30 degrees the wall line crosses the front of the intake. The sweep starts as near the center line as G402 allows. This one sweeps the rear wall from the FLOWER to the corner.",
+                    "ref": "drive.driveTo",
+                    "params": {
+                     "pose": "pose(leftSweepFrom, wallReach, 150)",
+                     "timeoutSec": 2.5
+                    }
                    }
-                  }
-                 ]
-                }
-               },
-               {
-                "id": "full-s18",
-                "parallel": {
-                 "policy": "any",
-                 "children": [
-                  {
-                   "ref": "auto.waitHopperFull"
-                  },
-                  {
-                   "id": "s18",
-                   "ref": "auto.driveTo",
-                   "params": {
-                    "pose": "pose(-(field.half - 0.31), wallReach, 150)",
-                    "timeoutSec": 3
+                  ]
+                 }
+                },
+                {
+                 "id": "full-s18",
+                 "parallel": {
+                  "policy": "any",
+                  "children": [
+                   {
+                    "ref": "auto.waitHopperFull"
+                   },
+                   {
+                    "id": "s18",
+                    "ref": "drive.driveTo",
+                    "params": {
+                     "pose": "pose(-(field.half - 0.31), wallReach, 150)",
+                     "timeoutSec": 3
+                    }
                    }
-                  }
-                 ]
-                }
-               },
-               {
-                "id": "full-s19",
-                "parallel": {
-                 "policy": "any",
-                 "children": [
-                  {
-                   "ref": "auto.waitHopperFull"
-                  },
-                  {
-                   "id": "s19",
-                   "note": "The same sweep along the alliance wall, from near the rear corner toward the LOADING ZONE, where NECTAR collects. It starts 0.39 m from the rear wall, so that the robot can turn there.",
-                   "ref": "auto.driveTo",
-                   "params": {
-                    "pose": "pose(-wallReach, field.half - 0.39, -120)",
-                    "timeoutSec": 2
+                  ]
+                 }
+                },
+                {
+                 "id": "full-s19",
+                 "parallel": {
+                  "policy": "any",
+                  "children": [
+                   {
+                    "ref": "auto.waitHopperFull"
+                   },
+                   {
+                    "id": "s19",
+                    "note": "The same sweep along the alliance wall, from near the rear corner toward the LOADING ZONE, where NECTAR collects. It starts 0.39 m from the rear wall, so that the robot can turn there.",
+                    "ref": "drive.driveTo",
+                    "params": {
+                     "pose": "pose(-wallReach, field.half - 0.39, -120)",
+                     "timeoutSec": 2
+                    }
                    }
-                  }
-                 ]
-                }
-               },
-               {
-                "id": "full-s20",
-                "parallel": {
-                 "policy": "any",
-                 "children": [
-                  {
-                   "ref": "auto.waitHopperFull"
-                  },
-                  {
-                   "id": "s20",
-                   "ref": "auto.driveTo",
-                   "params": {
-                    "pose": "pose(-wallReach, 0.45, -120)",
-                    "timeoutSec": 3
+                  ]
+                 }
+                },
+                {
+                 "id": "full-s20",
+                 "parallel": {
+                  "policy": "any",
+                  "children": [
+                   {
+                    "ref": "auto.waitHopperFull"
+                   },
+                   {
+                    "id": "s20",
+                    "ref": "drive.driveTo",
+                    "params": {
+                     "pose": "pose(-wallReach, 0.45, -120)",
+                     "timeoutSec": 3
+                    }
                    }
-                  }
-                 ]
+                  ]
+                 }
                 }
-               }
-              ]
+               ]
+              }
              }
-            },
-            "cleanup": {
-             "ref": "auto.intake",
-             "params": {
-              "filter": "none"
-             }
-            }
+            ]
            }
           },
           {
            "id": "s21",
-           "ref": "auto.driveTo",
+           "ref": "drive.driveTo",
            "params": {
             "pose": "angledRear",
             "timeoutSec": 3
@@ -375,7 +366,7 @@
           {
            "id": "s22",
            "note": "The third TIP raised the rear CELL: launch what the sweeps found. With a full hopper and the rear CELL down, the robot waits here for the right robot's TIP to raise it. A 2 s wait sent it to PARK with 10 s left and a full hopper, in trace 20260920-170726.",
-           "ref": "auto.shoot",
+           "ref": "shooter.shoot",
            "params": {
             "count": 4,
             "timeoutSec": 8,
@@ -384,64 +375,61 @@
           },
           {
            "id": "collect-s23",
-           "ensure": {
-            "child": {
-             "sequence": {
-              "children": [
-               {
-                "ref": "auto.intake",
-                "params": {
-                 "filter": "all"
-                }
-               },
-               {
-                "id": "full-s23",
-                "parallel": {
-                 "policy": "any",
-                 "children": [
-                  {
-                   "ref": "auto.waitHopperFull"
-                  },
-                  {
-                   "id": "s23",
-                   "note": "The same sweep along the alliance wall, from near the rear corner toward the LOADING ZONE, where NECTAR collects. It starts 0.39 m from the rear wall, so that the robot can turn there. It fills the hopper for TELEOP with the time that is left, and the race against the clock starts the PARK in time.",
-                   "ref": "auto.driveTo",
-                   "params": {
-                    "pose": "pose(-wallReach, field.half - 0.39, -120)",
-                    "timeoutSec": 2
+           "parallel": {
+            "policy": "any",
+            "children": [
+             {
+              "ref": "intake.run",
+              "params": {
+               "filter": "all"
+              }
+             },
+             {
+              "sequence": {
+               "children": [
+                {
+                 "id": "full-s23",
+                 "parallel": {
+                  "policy": "any",
+                  "children": [
+                   {
+                    "ref": "auto.waitHopperFull"
+                   },
+                   {
+                    "id": "s23",
+                    "note": "The same sweep along the alliance wall, from near the rear corner toward the LOADING ZONE, where NECTAR collects. It starts 0.39 m from the rear wall, so that the robot can turn there. It fills the hopper for TELEOP with the time that is left, and the race against the clock starts the PARK in time.",
+                    "ref": "drive.driveTo",
+                    "params": {
+                     "pose": "pose(-wallReach, field.half - 0.39, -120)",
+                     "timeoutSec": 2
+                    }
                    }
-                  }
-                 ]
-                }
-               },
-               {
-                "id": "full-s24",
-                "parallel": {
-                 "policy": "any",
-                 "children": [
-                  {
-                   "ref": "auto.waitHopperFull"
-                  },
-                  {
-                   "id": "s24",
-                   "ref": "auto.driveTo",
-                   "params": {
-                    "pose": "pose(-wallReach, 0.45, -120)",
-                    "timeoutSec": 3
+                  ]
+                 }
+                },
+                {
+                 "id": "full-s24",
+                 "parallel": {
+                  "policy": "any",
+                  "children": [
+                   {
+                    "ref": "auto.waitHopperFull"
+                   },
+                   {
+                    "id": "s24",
+                    "ref": "drive.driveTo",
+                    "params": {
+                     "pose": "pose(-wallReach, 0.45, -120)",
+                     "timeoutSec": 3
+                    }
                    }
-                  }
-                 ]
+                  ]
+                 }
                 }
-               }
-              ]
+               ]
+              }
              }
-            },
-            "cleanup": {
-             "ref": "auto.intake",
-             "params": {
-              "filter": "none"
-             }
-            }
+            ]
            }
           }
          ]
@@ -452,34 +440,25 @@
     },
     {
      "id": "collect-s25",
-     "ensure": {
-      "child": {
-       "sequence": {
-        "children": [
-         {
-          "ref": "auto.intake",
-          "params": {
-           "filter": "all"
-          }
-         },
-         {
-          "id": "s25",
-          "note": "Every drive to PARK runs the intake: the robot faces the alliance wall, where NECTAR from the LOADING ZONE collects, and a full hopper at the end of AUTO is a head start in TELEOP. LEAVE needs the robot clear of the wall by half its size plus 2 cm. The pose is 9 cm off the wall, which leaves margin for a 5 cm drive tolerance.",
-          "ref": "auto.driveTo",
-          "params": {
-           "pose": "parkLeft",
-           "timeoutSec": 6
-          }
-         }
-        ]
+     "parallel": {
+      "policy": "any",
+      "children": [
+       {
+        "ref": "intake.run",
+        "params": {
+         "filter": "all"
+        }
+       },
+       {
+        "id": "s25",
+        "note": "Every drive to PARK runs the intake: the robot faces the alliance wall, where NECTAR from the LOADING ZONE collects, and a full hopper at the end of AUTO is a head start in TELEOP. LEAVE needs the robot clear of the wall by half its size plus 2 cm. The pose is 9 cm off the wall, which leaves margin for a 5 cm drive tolerance.",
+        "ref": "drive.driveTo",
+        "params": {
+         "pose": "parkLeft",
+         "timeoutSec": 6
+        }
        }
-      },
-      "cleanup": {
-       "ref": "auto.intake",
-       "params": {
-        "filter": "none"
-       }
-      }
+      ]
      }
     }
    ]

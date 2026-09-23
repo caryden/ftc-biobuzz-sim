@@ -1,6 +1,6 @@
 // Plans the blind AUTO sweeps from data. For each role it runs many simulated AUTO periods, records where the
 // collectable balls rest at the instant the sweep begins, prints a heatmap, and searches for the waypoints that
-// collect the most balls with the intake leading. It writes the lanes as the waypoints of every `auto.followPath`
+// collect the most balls with the intake leading. It writes the lanes as the waypoints of every `drive.followPath`
 // leaf tagged `sweep-ROLE` in the AUTO trees in src/auto/trees/auto/. It doesn't change a path's `timeoutSec`.
 // Run: npx tsx scripts/plan-sweeps.ts [seeds=30]
 import RAPIER from '@dimforge/rapier3d-compat';
@@ -106,7 +106,7 @@ for (const file of fs.readdirSync('src/auto/trees/auto').filter(f => f.endsWith(
   const visit = (n: unknown) => {
     if (typeof n !== 'object' || n === null) return;
     const node = n as { ref?: string; params?: { tag?: string; waypoints?: unknown } }, role = node.params?.tag?.replace(/^sweep-/, '');
-    if (node.ref === 'auto.followPath' && node.params?.tag?.startsWith('sweep-') && role && out[role]) {
+    if (node.ref === 'drive.followPath' && node.params?.tag?.startsWith('sweep-') && role && out[role]) {
       node.params.waypoints = out[role].map(([x, z, wall]) => ({ x, y: -(z as number), headingDeg: wall ? FACING[wall as keyof typeof FACING] : null })); changed++;
     }
     Object.values(n).forEach(visit);
