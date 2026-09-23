@@ -199,10 +199,22 @@ AprilTags that vision sees. A shooter that launches out of both ends is a turret
 slew: it launches out of the end that faces the robot's own HIVE (`src/sim/config.ts`). The simulator also has a
 turret with full range of motion and an instant slew, which aims each launch at the raised CELL whatever the robot's
 heading. It's an upper bound: a turret with a slew rate or a limited range would be one more implementation, and it
-can't do better. `canShoot` isn't built. `shooter.shoot` launches open loop from where the robot stands, and its
-`cell` parameter holds fire until the camera sees that CELL raised. The TELEOP planner's launch spot has no heading
-for a turret, so the robot doesn't turn to launch. The AUTO trees' launch poses keep their headings. With the turret
-on all four robots, `e79-turret-all` is +39.4 ± 13.6 combined points against `e77-wait-until`.
+can't do better. The TELEOP planner's launch spot has no heading for a turret, so the robot doesn't turn to launch.
+The AUTO trees' launch poses keep their headings. With the turret on all four robots, `e79-turret-all` is +39.4 ±
+13.6 combined points against `e77-wait-until`.
+
+`canShoot` is built for TELEOP, as `Shooter.canShoot` in `src/auto/shooter.ts`, and the planner asks it before each
+launch. By default, the robot must be at its launch spot and still, and the mean shot must enter the CELL. Two turret
+experiments are behind switches in `EXEC`, off by default, because both lost points:
+
+- **Fire on the way.** The turret fires as soon as the mean shot and the six shots one standard deviation off all
+  enter the CELL, on the move. `e82-turret-fire-en-route` is -58.1 ± 9.3 against e79: the robots launched 16% more
+  elements and made fewer TIPS.
+- **Point the intakes at balls.** A turret robot on its way to launch turns toward the most floor elements that it
+  collects. `e83-turret-intake-heading` is -13.0 ± 7.8 more.
+
+In AUTO, `shooter.shoot` still launches open loop from where the robot stands, and its `cell` parameter holds fire
+until the camera sees that CELL raised.
 
 One problem is open: the loader checks a tree against its environment's schema, not against a robot's config. A
 command that only one implementation has, such as a turret's, would fail when it runs, not when the tree loads.

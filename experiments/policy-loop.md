@@ -121,6 +121,10 @@ Transit is about 73% of TELEOP. The changes that paid were the ones that removed
 | `e78-turret-code-check` | The turret code, with no robot on a turret | 817 ± 9.3 | Identical to e77 on every seed. |
 | `e79-turret-all` | All four robots on a turret with full range of motion and an instant slew: each launch aims at the raised CELL's mouth, whatever the robot's heading, and the TELEOP launch spot has no heading | 857 ± 9.4 | +39.4 ± 13.6 against e77. AUTO points 177 to 190.3, TIPS 37.8 to 39.6. Time to the launch spot fell from 38.2 s to 34.4 s per robot, and collecting rose from 52.0 s to 57.1 s. An upper bound: a real turret can only do worse. |
 | `e80-turret-red` | Red's two robots on the turret of e79, blue's without | red 426.3, blue 409.2 | Red +15.1 ± 7.8, blue +3.1 ± 7.9, against e77. Red's margin rose by 12.0 ± 8.1. |
+| `e81-shooter-module-check` | The fire-control check moves from the planner into the shooter subsystem, `Shooter.canShoot` in `src/auto/shooter.ts`, with no robot on a turret | 817 ± 9.3 | Identical to e77 on every seed. |
+| `e82-turret-fire-en-route` | All four robots on the turret of e79, and a turret fires as soon as a robust check passes, on the way to its spot and on the move: the mean shot and the six shots one standard deviation off in elevation, speed, and azimuth, one at a time, must enter the CELL | 799 ± 6.9 | Not kept. -58.1 ± 9.3 against e79. The robots launched 68.3 elements each, where they launched 59, and made 36.8 TIPS, where they made 39.6: the extra shots missed. |
+| `e83-turret-intake-heading` | e82, and a turret robot on its way to launch points its intakes at the most floor elements that it collects | 785 ± 7.7 | Not kept. -13.0 ± 7.8 against e82. |
+| `e84-turret-default-check` | The code of e83 with both turret experiments off, the default | 857 ± 9.4 | Identical to e79 on every seed. |
 
 Net for the planner: 736 to 800 combined on the default robots, or about +32 per alliance. The standard error of that difference is about 11.
 

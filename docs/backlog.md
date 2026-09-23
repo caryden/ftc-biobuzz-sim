@@ -43,10 +43,14 @@ expression editor, structure editing, and a quick AUTO run with a timeline of bo
 The simulator's turret has full range of motion and an instant slew, as an upper bound, and it raised scores:
 `e79-turret-all` is +39.4 ± 13.6 combined points with a turret on all four robots, and in `e80-turret-red` red gains
 15.1 ± 7.8. A real turret has a slew rate and a limited range of motion, so the next step is those two limits, to find
-how much of the gain is left. It also needs the `canShoot` state that [Subsystems](behavior-trees.md#subsystems)
-describes, so that aiming stays in the shooter and the tree only checks `canShoot` and commands `shooter.shoot`.
-Part of the gain can be accuracy rather than time: an AUTO pose arrives within 0.05 rad of its heading, and the
+how much of the gain is left. Part of the gain can be accuracy rather than time: an AUTO pose arrives within 0.05 rad of its heading, and the
 turret removes that error from each open-loop shot. AUTO points rose from 177 to 190.3. That split isn't measured.
+
+Firing on the move lost 58.1 ± 9.3 points (`e82-turret-fire-en-route`): the robots launched more and tipped less.
+Before another try, find out why those shots miss: record, for each launch, whether the shot preview predicted a
+score and whether the element entered the CELL, for launches on the move and at the spot. If the preview is wrong on
+the move, for example because it leaves out the catapult's lateral spread, fix the preview. If it's right, the check
+needs a larger margin.
 
 ## Measured bounce and roll
 
