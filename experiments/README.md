@@ -30,3 +30,18 @@ Read `first-round/` for the record, not for advice.
 
 To reproduce a run, see the commands in the [README](../README.md#run-matches-without-a-browser) and the method in
 [CONTRIBUTING.md](../CONTRIBUTING.md#change-the-planner-or-a-robot-model).
+
+## Renamed AUTO trees
+
+On September 23, 2026, the AUTO trees got new ids. The logs and reports from before that date use the old names:
+
+| Old name | New id |
+| --- | --- |
+| `right_harvest` | `wall-sweep-pair-right` |
+| `left_harvest` | `wall-sweep-pair-left` |
+| `right_cycle` | `lane-sweep-pair-right` |
+| `left_cycle` | `lane-sweep-pair-left` |
+| `left_cycle_no_park` | `lane-sweep-pair-left-no-park` |
+| `cycle_and_park` | `solo-two-tip-sweep` |
+| `cycle_no_park` | `solo-two-tip-sweep-no-park` |
+| `leave_only` | `leave-and-park` |

@@ -75,7 +75,7 @@ The results are in [experiments/](experiments/README.md). Every number on the si
 | `scripts/` | Headless runners, the experiment tools, the model converters, and the site builder |
 | `experiments/` | Results and logs of every measured change |
 | `traces/` | Annotated matches that drove the planner fixes |
-| `functions/`, `db/`, `wrangler.toml` | The match counter on Cloudflare Pages and D1 |
+| `functions/`, `server/`, `migrations/`, `wrangler.toml` | The match counter and the tree catalog, on Cloudflare Pages and D1 |
 | `.github/workflows/ci.yml` | The checks that every pull request must pass |
 | `docs/` | The lessons, the simulator description, the HIVE calibration, the behavior-tree design, and the backlog |
 
@@ -90,6 +90,12 @@ The home page shows a live count of simulated matches and of the countries that 
 atomically. It stores a visitor's address only as a salted hash, for one day, and a country only as a count per
 two-letter code.
 
+The same database holds the tree catalog: every AUTO and TELEOP tree, with its id, name, and description.
+`functions/api/trees.js` answers `GET /api/trees` and `GET /api/trees/ID`. The system trees are the files in
+`src/auto/trees/`. The build writes them to `trees/catalog.json`, and the first request after a deployment goes live
+copies them into D1, so the catalog always matches the live code, including after a rollback. A preview reads the
+deployment's own files, because it has no database.
+
 ### Deployment
 
 Cloudflare Pages deploys the site by its Git integration: a merge to `main` deploys to production, and every pull
@@ -98,12 +104,20 @@ can't reach `main`. The Pages project uses the build command `npm run build` and
 `.node-version` pins Node.js 22, and `wrangler.toml` supplies the D1 binding. A preview gets no database binding, so a
 preview can't change the real count.
 
+The database schema is in `migrations/`. The last step of `npm run build`, `scripts/migrate-d1.mjs`, applies new
+migrations to the production database, but only in a Pages build of `main`, and only when the production environment
+has `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID`. A failed migration fails the build, so the new code doesn't go
+live. A migration must be additive, because the old deployment runs against the new schema until the new one is live.
+
 To deploy your own copy, follow these steps:
 
 1. To create the database, run `wrangler d1 create DB_NAME`, and put the ID that it prints in `wrangler.toml`.
-2. To create the tables, run `wrangler d1 execute DB_NAME --remote --file db/schema.sql`.
+2. To create the tables, run `wrangler d1 migrations apply DB --remote`.
 3. In the Cloudflare dashboard, go to **Workers & Pages**, create a Pages project from your fork, and set the build
    command and the output directory as described earlier.
+4. Optional: to have production builds apply later migrations, create a Cloudflare API token with **D1 Edit**
+   permission. In the Pages project's settings, add it as `CLOUDFLARE_API_TOKEN`, with your account ID as
+   `CLOUDFLARE_ACCOUNT_ID`, in the production environment variables only.
 
 ## Sources
 

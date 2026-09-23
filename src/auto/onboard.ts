@@ -15,14 +15,14 @@ import { seesRaisedCell } from '../sim/camera';
 import { FIELD } from '../sim/config';
 import { NO_INPUT, type Inputs, type IntakeFilter, type Sim } from '../sim/world';
 import { pursue } from './follow';
-import rightHarvest from './trees/right_harvest.json';
-import leftHarvest from './trees/left_harvest.json';
-import rightCycle from './trees/right_cycle.json';
-import leftCycleNoPark from './trees/left_cycle_no_park.json';
-import leftCycle from './trees/left_cycle.json';
-import cycleAndPark from './trees/cycle_and_park.json';
-import cycleNoPark from './trees/cycle_no_park.json';
-import leaveOnly from './trees/leave_only.json';
+import wallSweepRight from './trees/wall-sweep-pair-right.json';
+import wallSweepLeft from './trees/wall-sweep-pair-left.json';
+import laneSweepRight from './trees/lane-sweep-pair-right.json';
+import laneSweepLeftNoPark from './trees/lane-sweep-pair-left-no-park.json';
+import laneSweepLeft from './trees/lane-sweep-pair-left.json';
+import soloSweep from './trees/solo-two-tip-sweep.json';
+import soloSweepNoPark from './trees/solo-two-tip-sweep-no-park.json';
+import leaveAndPark from './trees/leave-and-park.json';
 import { fieldObstacles, planPath, type Capsule, type Pt } from './planner';
 
 const POSE = t.object({ x: t.number('m'), z: t.number('m'), headingDeg: t.number('deg') });
@@ -302,18 +302,26 @@ export const AUTO_REGISTRY: Registry = {
 
 // ---- Trees ----
 
-/** The AUTO trees in the order of the page's AUTO list. Each file's `name` is its key. */
-const FILES: unknown[] = [rightHarvest, leftHarvest, rightCycle, leftCycleNoPark, leftCycle, cycleAndPark, cycleNoPark, leaveOnly];
-/** The AUTO trees by name, loaded and checked once. A tree file that doesn't load throws with all of its problems. */
-export const AUTO_TREES: Readonly<Record<string, TreeDef>> = Object.fromEntries(FILES.map(src => { const def = loadTree(src, AUTO_REGISTRY); return [def.name, def]; }));
+/** The AUTO tree files in the order of the page's AUTO list. The catalog in D1 is seeded from them. */
+export const AUTO_FILES: readonly unknown[] = [wallSweepRight, wallSweepLeft, laneSweepRight, laneSweepLeftNoPark, laneSweepLeft, soloSweep, soloSweepNoPark, leaveAndPark];
+/** The AUTO trees by id, loaded and checked once. A tree file that doesn't load throws with all of its problems. */
+export const AUTO_TREES: Readonly<Record<string, TreeDef>> = Object.fromEntries(AUTO_FILES.map(src => { const def = loadTree(src, AUTO_REGISTRY); return [def.id, def]; }));
+
+/** The default AUTO for a robot with no partner, and for a name that no tree has. */
+export const SOLO_AUTO = 'solo-two-tip-sweep';
+
+/** Gets where an AUTO tree starts: `right`, `left`, or `any`. The page lists only the trees for a robot's start position. */
+export const autoStart = (def: TreeDef): 'right' | 'left' | 'any' => (def.meta.start === 'right' || def.meta.start === 'left' ? def.meta.start : 'any');
 
 /**
- * Gets the default AUTO for a robot: the right robot (slot 0) runs `right_harvest`, and the left robot (slot 1) runs
- * `left_harvest`. Over 24 seeds, `right_harvest` scores 177 combined AUTO points, where `right_cycle` scores 151.
+ * Gets the AUTO tree for a robot. With a partner, the default is the wall-sweep pair: the right robot (slot 0) runs its
+ * right half and the left robot (slot 1) its left half. Over 24 seeds, the right half scores 177 combined AUTO points
+ * with its partner, where the lane-sweep pair's right robot scores 151.
+ * @param selected The robot's AUTO setting. `SOLO_AUTO` means the default.
  */
 export function autoFor(sim: Sim, selected: string): string {
   if (!sim.partner()) return selected;
-  return sim.slot === 1 ? 'left_harvest' : selected === 'cycle_and_park' ? 'right_harvest' : selected;
+  return sim.slot === 1 ? 'wall-sweep-pair-left' : selected === SOLO_AUTO ? 'wall-sweep-pair-right' : selected;
 }
 
 /** Runs one robot's AUTO tree. Call `update` once per physics step in AUTO. */

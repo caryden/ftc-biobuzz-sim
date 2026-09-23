@@ -1,8 +1,12 @@
 {
  "kind": "bt.tree",
- "name": "cycle_and_park",
+ "id": "solo-two-tip-sweep",
+ "name": "Solo: two TIPS, sweep, and PARK",
  "env": "onboard",
- "note": "Two TIPS from the pre-loads and the two own-side FLOWERS, then blind sweeps of the spill to fill the hopper, and a PARK.",
+ "description": "Two TIPS from the pre-loads and the two own-side FLOWERS, then blind sweeps of the spill to fill the hopper, and a PARK.",
+ "meta": {
+  "start": "any"
+ },
  "defs": {
   "len": "bots.me.dimensions.length",
   "flip": "if(bots.me.shooter.facing == 'front', 180, 0)",

@@ -15,7 +15,7 @@ const reg = { envs: { bench: t.object({ tick: t.number(), want: t.number() }) },
 const branch = (k: number) => ({ guard: { when: `want == ${k}`, child: { timeout: { sec: 20, child: { sequence: { children: [
   { ref: 'bench.work', params: { steps: 300 + 50 * k } }, { ref: 'bench.work', params: { steps: 200 } }, { ref: 'bench.work', params: { steps: 'tick % 7 + 100' } },
 ] } } } } } });
-const src = { kind: 'bt.tree', name: 'bench', env: 'bench', root: { repeat: { stopOn: 'never', child: { fallback: { recheckSec: 1, children: [0, 1, 2, 3, 4].map(branch) } } } } };
+const src = { kind: 'bt.tree', id: 'bench', name: 'Benchmark', env: 'bench', root: { repeat: { stopOn: 'never', child: { fallback: { recheckSec: 1, children: [0, 1, 2, 3, 4].map(branch) } } } } };
 const def = loadTree(src, reg);
 
 function match(record: boolean) {

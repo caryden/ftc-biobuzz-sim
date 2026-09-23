@@ -1,8 +1,12 @@
 {
  "kind": "bt.tree",
- "name": "leave_only",
+ "id": "leave-and-park",
+ "name": "LEAVE and PARK only",
  "env": "onboard",
- "note": "Drive to the LOADING ZONE and stay: LEAVE plus AUTO PARK, with no launching.",
+ "description": "Drive to the LOADING ZONE and stay: LEAVE plus AUTO PARK, with no launching.",
+ "meta": {
+  "start": "any"
+ },
  "defs": {
   "len": "bots.me.dimensions.length",
   "park": "pose(-(field.half - len / 2 - 0.09), -0.8954, 180)"

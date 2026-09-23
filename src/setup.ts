@@ -8,7 +8,7 @@ export interface BotSetup {
   driver: DriverKind;
   /** For a human driver: whether the sticks move the robot in the driver's frame or in the robot's frame. Default: field. */ stickFrame: 'field' | 'robot';
   shooter: ShooterType;
-  /** An AUTO script name, `default` for the script that fits the robot's start position, or `none`. */ auto: string;
+  /** An AUTO tree id, `default` for the tree that fits the robot's start position, or `none`. */ auto: string;
   /** The TELEOP plan: FLOWER work starts when this many seconds remain. 0 means TIPS only. */ flowerStartSec: number;
   /** The drive motor's free speed at the wheel, in rpm. Default: 600. */ driveRpm: number;
   /** The side of the square chassis, in inches. Default: 15. R101 allows 18. */ sizeIn: number;
@@ -60,8 +60,13 @@ export function loadBots(): BotSetup[] {
 }
 export function saveBots(bots: BotSetup[]) { try { localStorage.setItem(KEY, JSON.stringify(bots)); } catch { /* Storage is a convenience. The setups still apply to this page. */ } }
 
-/** AUTO script names from before September 20, 2026, which a stored setup can still hold. */
-const RENAMED: Record<string, string> = { lead_with_partner: 'right_cycle', partner_rear: 'left_cycle', partner_rear_no_park: 'left_cycle_no_park', lead_harvest: 'right_harvest', partner_harvest: 'left_harvest' };
+/** Older AUTO names that a stored setup can still hold: script names from before September 20, 2026, and tree names from before September 23, 2026. */
+const RENAMED: Record<string, string> = {
+  lead_with_partner: 'lane-sweep-pair-right', partner_rear: 'lane-sweep-pair-left', partner_rear_no_park: 'lane-sweep-pair-left-no-park',
+  lead_harvest: 'wall-sweep-pair-right', partner_harvest: 'wall-sweep-pair-left',
+  right_harvest: 'wall-sweep-pair-right', left_harvest: 'wall-sweep-pair-left', right_cycle: 'lane-sweep-pair-right', left_cycle: 'lane-sweep-pair-left',
+  left_cycle_no_park: 'lane-sweep-pair-left-no-park', cycle_and_park: 'solo-two-tip-sweep', cycle_no_park: 'solo-two-tip-sweep-no-park', leave_only: 'leave-and-park',
+};
 /** Gets the start position of robot `i`, as its drivers see it: R0 and B0 start at the right, on the alliance wall, and R1 and B1 at the left, on the rear wall (red) or the audience wall (blue). */
 export const startSide = (i: number): 'right' | 'left' => (i % 2 === 0 ? 'right' : 'left');
 
@@ -92,5 +97,5 @@ export function robotConfig(b: BotSetup): RobotConfig {
 /** Describes a setup in one line, for the setup panel and the trace. The trace always uses metric units. */
 export function describe(b: BotSetup, units: Units = 'metric'): string {
   const driver = b.driver === 'planner' ? 'Planner' : `Controller ${b.driver === 'pad1' ? 1 : 2}, ${b.stickFrame}-centric`;
-  return `${driver} · ${b.shooter} · AUTO ${b.auto.replace(/_/g, ' ')} · ${b.flowerStartSec ? `FLOWERS from ${b.flowerStartSec} s` : 'tips only'} · ${b.driveRpm} rpm · ${fmtSize(b.sizeIn, units)} · ${fmtMass(b.massLb, units)}${b.dualIntake ? ' · dual intake' : ''}${b.dualShooter ? ' · launches from both ends' : ''}${b.defense !== 'none' ? ` · ${b.defense} defense` : ''}${b.errElevDeg !== REF_ERR.errElevDeg || b.errAzimDeg !== REF_ERR.errAzimDeg || b.errSpeed !== REF_ERR.errSpeed ? ` · launch error ${b.errElevDeg}°, ${b.errAzimDeg}°, ${fmtSpeed(b.errSpeed, units === 'us' ? 'usft' : units)}` : ''}${b.intakeP !== DEFAULT_ROBOT.intake.successP ? ` · intake ${Math.round(100 * b.intakeP)}%` : ''}`;
+  return `${driver} · ${b.shooter} · AUTO ${b.auto.replace(/[_-]/g, ' ')} · ${b.flowerStartSec ? `FLOWERS from ${b.flowerStartSec} s` : 'tips only'} · ${b.driveRpm} rpm · ${fmtSize(b.sizeIn, units)} · ${fmtMass(b.massLb, units)}${b.dualIntake ? ' · dual intake' : ''}${b.dualShooter ? ' · launches from both ends' : ''}${b.defense !== 'none' ? ` · ${b.defense} defense` : ''}${b.errElevDeg !== REF_ERR.errElevDeg || b.errAzimDeg !== REF_ERR.errAzimDeg || b.errSpeed !== REF_ERR.errSpeed ? ` · launch error ${b.errElevDeg}°, ${b.errAzimDeg}°, ${fmtSpeed(b.errSpeed, units === 'us' ? 'usft' : units)}` : ''}${b.intakeP !== DEFAULT_ROBOT.intake.successP ? ` · intake ${Math.round(100 * b.intakeP)}%` : ''}`;
 }

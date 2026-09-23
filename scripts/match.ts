@@ -9,7 +9,7 @@ import { Referee } from '../src/ref/referee';
 import { DT, NO_INPUT, Sim, code } from '../src/sim/world';
 import { defaultBot, robotConfig, sanitize, type BotSetup } from '../src/setup';
 
-const [mode = 'full', routine = 'cycle_and_park', seedArg = '11', oppArg = 'opponent', partnerArg = 'partners', blueStart = '0', partnerStart = '0', ownStart = '0'] = process.argv.slice(2);
+const [mode = 'full', routine = 'solo-two-tip-sweep', seedArg = '11', oppArg = 'opponent', partnerArg = 'partners', blueStart = '0', partnerStart = '0', ownStart = '0'] = process.argv.slice(2);
 await RAPIER.init();
 const given: Partial<BotSetup>[] = JSON.parse(process.env.BOTS ?? '[]'), bots = [0, 1, 2, 3].map(i => sanitize({ ...defaultBot(i), ...(given[i] ?? {}) }, i));
 const sim = new Sim(RAPIER, undefined, mode === 'teleop' ? 'teleop' : 'full', Number(seedArg), { opponent: oppArg !== 'none', partners: partnerArg !== 'solo', configFor: (a, slot) => robotConfig(bots[(a === 'red' ? 0 : 2) + slot]) }); sim.start();

@@ -51,7 +51,7 @@ default TELEOP tree in TELEOP. For how the trees work, see [Behavior-tree polici
 | Period | Decision maker | Setting |
 | --- | --- | --- |
 | AUTO | A behavior tree in `src/auto/trees/`, for every robot | **AUTO plan** in the robot config |
-| TELEOP | The default TELEOP tree, `src/auto/trees/teleop_default.json`: TIPS, and FLOWERS from the time that **TELEOP plan** sets | **Driver**: Planner |
+| TELEOP | The default TELEOP tree, `src/auto/trees/teleop-default.json`: TIPS, and FLOWERS from the time that **TELEOP plan** sets | **Driver**: Planner |
 | TELEOP | A person with controller 1 or controller 2. Only the red robots can have a human driver. | **Driver**: Controller 1 or Controller 2 |
 
 ### Robot config
@@ -131,9 +131,10 @@ shared `plan`, the way drive teams talk:
 - **Yield and swap.** When both partners head for the same CELL, the one with the smaller load waits until the other is
   lined up. If each arrives on the other's launch spot, they swap spots.
 - **FLOWERS.** A FLOWER that the partner works on is taken.
-- **AUTO.** `right_harvest` and `left_harvest` are the default pair, named by start position as the drivers see it.
-  They sweep walls at 30° toward the wall, wait for a spill to land, and take the pocket behind the launch spot.
-  `right_cycle` and `left_cycle` are the earlier pair, with lane sweeps.
+- **AUTO.** The wall-sweep pair is the default: `wall-sweep-pair-right` and `wall-sweep-pair-left`, one half per
+  start position as the drivers see it. They sweep walls at 30° toward the wall, wait for a spill to land, and take the
+  pocket behind the launch spot. The lane-sweep pair is the earlier pair, with lane sweeps. Each half waits for its
+  partner's TIP, so a half runs well only with its own partner.
   The right robot (R0 or B0) starts on the alliance wall and takes the first TIP. The left robot (R1 or B1) starts on
   the rear wall for red, which is the audience wall for blue, and fills the CELL that the first TIP raises. Both robots
   score LEAVE and AUTO PARK, which earns the SWARM ranking point.

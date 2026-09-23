@@ -52,7 +52,7 @@ const REG: Registry = {
   leaves: Object.fromEntries([wait, fail, flaky, emit, text, double, drive, intake, camera, logger, pose].map(l => [l.id, l])),
 };
 
-const tree = (root: unknown, extra: Record<string, unknown> = {}) => ({ kind: 'bt.tree', name: 'test', env: 'full', root, ...extra });
+const tree = (root: unknown, extra: Record<string, unknown> = {}) => ({ kind: 'bt.tree', id: 'test', name: 'Test', env: 'full', root, ...extra });
 const W = (name: string, steps = 1) => ({ ref: 'test.wait', params: { name, steps } });
 
 /** Loads a tree and runs it, one step per 0.25 s. `each` runs before each step, with the step number. */
@@ -332,7 +332,8 @@ describe('loading', () => {
     expect(() => loadTree(big, REG, { maxNodes: 10 })).toThrow(/^root\/9: a tree can have at most 10 nodes$/);
   });
   it('rejects a file that isn\'t a tree', () => {
-    expect(issues({ kind: 'bt.tree', name: 'x', env: 'nowhere', root: W('a') })[0]).toMatch(/'env' must be one of "full", "bare"/);
+    expect(issues({ kind: 'bt.tree', id: 'x', name: 'X', env: 'nowhere', root: W('a') })[0]).toMatch(/'env' must be one of "full", "bare"/);
+    expect(issues({ ...tree(W('a')), id: 'Bad_Id' })[0]).toMatch(/'id' must be/);
     expect(issues({ ...tree(W('a')), extra: 1 })[0]).toMatch(/unknown field 'extra'/);
   });
 });

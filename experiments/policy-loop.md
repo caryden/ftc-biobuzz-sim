@@ -97,6 +97,7 @@ Transit is about 73% of TELEOP. The changes that paid were the ones that removed
 | `e54-teleop-tree` | TELEOP runs as the behavior tree `src/auto/trees/teleop_default.json`, which replaces the coach's decision code and `scriptedTeleop`. See docs/behavior-trees.md. | 803 ± 7.9 | Kept. Identical to e53 on every seed. A separate check ran the tree alongside the coach's old code and found the same inputs on every physics step of full matches. |
 | `e55-old-planner-reference` | The reference for e56: `main` at `3ca1eb9`, with random CELL NECTAR, plus the two timing fixes of e51 and e53 on the old planner code | 809 ± 7.5 | The reference. -2.7 against e49-random-cell-nectar, so on the random layout the two timing fixes together cost nothing measurable. |
 | `e56-trees-on-random-nectar` | Both trees, merged with `main` at `3ca1eb9` | 809 ± 7.5 | Kept. Identical to e55 on every seed and in every field. |
+| `e57-renamed-trees` | The trees get new ids and display names, for example `wall-sweep-pair-right` for `right_harvest`. See experiments/README.md. | 809 ± 7.5 | Kept. Identical to e56 on every seed and in every field. |
 
 Net for the planner: 736 to 800 combined on the default robots, or about +32 per alliance. The standard error of that difference is about 11.
 

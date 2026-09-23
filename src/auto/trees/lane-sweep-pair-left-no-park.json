@@ -1,8 +1,13 @@
 {
  "kind": "bt.tree",
- "name": "left_cycle_no_park",
+ "id": "lane-sweep-pair-left-no-park",
+ "name": "Lane-sweep pair: left robot, no PARK",
  "env": "onboard",
- "note": "left_cycle without the PARK: the robot keeps sweeping the rear spill.",
+ "description": "The lane-sweep pair's left robot without the PARK: the robot keeps sweeping the rear spill.",
+ "meta": {
+  "start": "left",
+  "partner": "lane-sweep-pair-right"
+ },
  "defs": {
   "len": "bots.me.dimensions.length",
   "flip": "if(bots.me.shooter.facing == 'front', 180, 0)",

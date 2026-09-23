@@ -14,7 +14,7 @@ import { NO_INPUT, type Inputs, type Sim } from '../sim/world';
 import { Defender } from './defend';
 import { TACTICS, type Executor, type FlowerId } from './executor';
 import { available, flowerStep } from './policy';
-import teleopDefault from './trees/teleop_default.json';
+import teleopDefault from './trees/teleop-default.json';
 
 /** The fields that expressions in a TELEOP tree can read. */
 export const DRIVER_SCHEMA = t.object({
@@ -120,8 +120,10 @@ const flowerWork = leaf({
 
 export const DRIVER_REGISTRY: Registry = { envs: { driver: DRIVER_SCHEMA }, leaves: Object.fromEntries([defend, tactic, flowerWork].map(l => [l.id, l])) };
 
-/** The TELEOP trees by name, loaded and checked once. */
-export const TELEOP_TREES: Readonly<Record<string, TreeDef>> = Object.fromEntries([teleopDefault].map(src => { const def = loadTree(src, DRIVER_REGISTRY); return [def.name, def]; }));
+/** The TELEOP tree files. The catalog in D1 is seeded from them. */
+export const TELEOP_FILES: readonly unknown[] = [teleopDefault];
+/** The TELEOP trees by id, loaded and checked once. */
+export const TELEOP_TREES: Readonly<Record<string, TreeDef>> = Object.fromEntries(TELEOP_FILES.map(src => { const def = loadTree(src, DRIVER_REGISTRY); return [def.id, def]; }));
 
 /** Runs one robot's TELEOP tree. Call `update` once per physics step in TELEOP. */
 export class TeleopProgram {

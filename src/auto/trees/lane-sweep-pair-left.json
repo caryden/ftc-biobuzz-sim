@@ -1,8 +1,13 @@
 {
  "kind": "bt.tree",
- "name": "left_cycle",
+ "id": "lane-sweep-pair-left",
+ "name": "Lane-sweep pair: left robot",
  "env": "onboard",
- "note": "For the left start position, on the rear wall: fill the rear CELL for the second TIP, sweep the rear spill, and PARK.",
+ "description": "For the left start position, on the rear wall: fill the rear CELL for the second TIP, sweep the rear spill, and PARK.",
+ "meta": {
+  "start": "left",
+  "partner": "lane-sweep-pair-right"
+ },
  "defs": {
   "len": "bots.me.dimensions.length",
   "flip": "if(bots.me.shooter.facing == 'front', 180, 0)",

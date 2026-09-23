@@ -1,8 +1,12 @@
 {
  "kind": "bt.tree",
- "name": "cycle_no_park",
+ "id": "solo-two-tip-sweep-no-park",
+ "name": "Solo: two TIPS and sweep, no PARK",
  "env": "onboard",
- "note": "Two TIPS and the sweeps, without the PARK. It leaves the LOADING ZONE to a partner.",
+ "description": "Two TIPS and the sweeps, without the PARK. It leaves the LOADING ZONE to a partner.",
+ "meta": {
+  "start": "any"
+ },
  "defs": {
   "len": "bots.me.dimensions.length",
   "flip": "if(bots.me.shooter.facing == 'front', 180, 0)",

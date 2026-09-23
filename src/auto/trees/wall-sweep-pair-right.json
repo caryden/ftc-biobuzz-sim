@@ -1,8 +1,13 @@
 {
  "kind": "bt.tree",
- "name": "right_harvest",
+ "id": "wall-sweep-pair-right",
+ "name": "Wall-sweep pair: right robot",
  "env": "onboard",
- "note": "For the right start position, on the alliance wall: the first TIP from the pre-loads, the red FLOWER during the wait for the left robot's TIP, then an angled sweep of the audience wall from the center line to the corner, a third TIP, a second sweep after the spill lands, and a launch into the rear CELL for a fourth TIP.",
+ "description": "For the right start position, on the alliance wall: the first TIP from the pre-loads, the red FLOWER during the wait for the left robot's TIP, then an angled sweep of the audience wall from the center line to the corner, a third TIP, a second sweep after the spill lands, and a launch into the rear CELL for a fourth TIP.",
+ "meta": {
+  "start": "right",
+  "partner": "wall-sweep-pair-left"
+ },
  "defs": {
   "len": "bots.me.dimensions.length",
   "flip": "if(bots.me.shooter.facing == 'front', 180, 0)",

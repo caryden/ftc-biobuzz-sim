@@ -1,6 +1,6 @@
 import RAPIER from '@dimforge/rapier3d-compat';
 import { readInput, type Frame } from './input';
-import { AUTO_TREES, autoFor, previewAuto } from './auto/onboard';
+import { AUTO_TREES, SOLO_AUTO, autoFor, autoStart, previewAuto } from './auto/onboard';
 import { BOT_IDS, REF_ERR, startSide, assignDriver, defaultBot, metaBot, describe, loadBots, robotConfig, sanitize, saveBots, type BotSetup, type DriverKind } from './setup';
 import { MatchAudio } from './audio';
 import { Coach } from './auto/coach';
@@ -51,8 +51,8 @@ function reset() {
 let editing = -1;
 const bc = { plate: $<HTMLInputElement>('bcplate'), driver: $<HTMLSelectElement>('bcdriver'), drive: $<HTMLSelectElement>('bcdrive'), shooter: $<HTMLSelectElement>('bcshooter'), auto: $<HTMLSelectElement>('bcauto'), plan: $<HTMLSelectElement>('bcplan'), rpm: $<HTMLInputElement>('bcrpm'), size: $<HTMLInputElement>('bcsize'), mass: $<HTMLInputElement>('bcmass'), intake: $<HTMLSelectElement>('bcintake'), ends: $<HTMLSelectElement>('bcends'), defense: $<HTMLSelectElement>('bcdefense'), elev: $<HTMLInputElement>('bcelev'), azim: $<HTMLInputElement>('bcazim'), speed: $<HTMLInputElement>('bcspeed'), intakeP: $<HTMLInputElement>('bcintakep') };
 /** Lists the AUTO plans for one start position. A plan named for the other position starts from the wrong wall, so the list leaves it out. */
-const autoOptions = (i: number) => { const side = startSide(i), other = side === 'right' ? 'left_' : 'right_';
-  return `<option value="default">Default: ${side} harvest</option>` + Object.entries(AUTO_TREES).filter(([k]) => !k.startsWith(other)).map(([k, r]) => `<option value="${k}" title="${r.note ?? ''}">${k.replace(/_/g, ' ')}</option>`).join('') + `<option value="none">None</option>`; };
+const autoOptions = (i: number) => { const side = startSide(i);
+  return `<option value="default">Default: wall-sweep pair, ${side} robot</option>` + Object.entries(AUTO_TREES).filter(([, d]) => autoStart(d) !== (side === 'right' ? 'left' : 'right')).map(([k, d]) => `<option value="${k}" title="${d.description ?? ''}">${d.name}</option>`).join('') + `<option value="none">None</option>`; };
 const gear = (i: number) => `<button class="gear" data-bot="${i}" title="Robot config for ${bots[i].plate}">&#9881;</button>`;
 /** Draws the robot rows in the scoreboard and in the setup panel. Called when a setup changes, not on every frame, so that the gear buttons stay clickable. */
 function paintBots() {
@@ -186,7 +186,7 @@ function tick(now: number) {
   const kind = !next ? null : dual ? (me.carried.includes('pollen') ? 'pollen' : 'nectar') : next === 'pollen' ? 'pollen' : 'nectar';
   view.sync(me, kind, humanNow ? null : sim.phase === 'auto' ? coaches[fi].auto?.path ?? null : coaches[fi].executor.path);
   // Project the focus robot's AUTO trajectory onto the FIELD before and during AUTO.
-  const name = bots[fi].auto === 'default' ? autoFor(me, 'cycle_and_park') : bots[fi].auto, tree = AUTO_TREES[name], showPlan = !!tree && (sim.mode === 'full' || sim.mode === 'auto') && (sim.phase === 'pre' || sim.phase === 'auto');
+  const name = bots[fi].auto === 'default' ? autoFor(me, SOLO_AUTO) : bots[fi].auto, tree = AUTO_TREES[name], showPlan = !!tree && (sim.mode === 'full' || sim.mode === 'auto') && (sim.phase === 'pre' || sim.phase === 'auto');
   if (showPlan && sim.phase === 'pre') { const p = me.robot.translation(); autoPlan = previewAuto(tree, me, { x: p.x, z: p.z }); autoPlanKey = `${name}:${fi}:${seed}`; }
   view.showAutoPlan(showPlan ? autoPlan : null, autoPlanKey);
   if (frame++ % 6 === 0) hud(inF.pads);

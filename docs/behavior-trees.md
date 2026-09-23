@@ -261,21 +261,31 @@ expression, so the pose still moves when the robot's length changes.
 
 ## Tree files
 
-A tree file is JSON. It uses the shape `kind: "bt.tree"`, with a `root` that names its node type as a key. A leaf is
-a `ref` to a registered leaf type, with `params`. Each parameter's schema says whether it takes an expression. An
+A tree file is JSON. It uses the shape `kind: "bt.tree"`, with a `root` that names its node type as a key. The top
+level also has these fields:
+
+- **`id`:** a stable slug, for example `wall-sweep-pair-right`. Robot setups and the catalog refer to a tree by it.
+- **`name`:** the name that people see, for example "Wall-sweep pair: right robot".
+- **`description`:** optional text for the AUTO list and the catalog.
+- **`meta`:** optional data for the host, which the loader doesn't check. AUTO trees give their start position and,
+  for a pair, the partner's id.
+
+A leaf is a `ref` to a registered leaf type, with `params`. Each parameter's schema says whether it takes an expression. An
 enum parameter, such as an intake mode, takes a plain value. Any node can carry a `note`, which keeps the reason for a
 step next to the step.
 
-The following file is `src/auto/trees/right_harvest.json`, the right robot's AUTO, shortened to its first three steps
+The following file is `src/auto/trees/wall-sweep-pair-right.json`, the right robot's AUTO, shortened to its first three steps
 and its last. Its last step, the PARK, starts when all the other steps end, or when the clock shows 2.5 s, whichever
 comes first:
 
 ```json
 {
   "kind": "bt.tree",
-  "name": "right_harvest",
+  "id": "wall-sweep-pair-right",
+  "name": "Wall-sweep pair: right robot",
   "env": "onboard",
-  "note": "For the right start position, on the alliance wall: the first TIP from the pre-loads, then ...",
+  "description": "For the right start position, on the alliance wall: the first TIP from the pre-loads, then ...",
+  "meta": { "start": "right", "partner": "wall-sweep-pair-left" },
   "defs": {
     "len": "bots.me.dimensions.length",
     "flip": "if(bots.me.shooter.facing == 'front', 180, 0)",
@@ -430,7 +440,7 @@ exact match is the test for increments 2 and 3.
      PARK follows the race.
    - **Both alliances use red's HIVE pivot,** as the mirrored scripts did. Blue's own pivot is 0.4 mm farther out.
 3. **Convert TELEOP. Done.** `src/auto/driver.ts` holds the driver environment, the TELEOP leaves, and
-   `TeleopProgram`. The coach's decision and `scriptedTeleop` are the tree `src/auto/trees/teleop_default.json`: a
+   `TeleopProgram`. The coach's decision and `scriptedTeleop` are the tree `src/auto/trees/teleop-default.json`: a
    full-time defender first, and otherwise a reactive fallback, rechecked once per second, over FLOWER work, a TIP, a
    launch of what the robot carries, and PARK. Results:
    - **The inputs match on every step.** With the coach's old code driving and the tree running alongside, the two
@@ -467,6 +477,23 @@ exact match is the test for increments 2 and 3.
    first feature that needs accounts. See [Accounts](#accounts).
 9. **Score a tree in the browser.** Web Workers play a tree against the default tree on fixed seeds.
 10. **Add code leaves** in the QuickJS sandbox.
+
+## The tree catalog
+
+Every tree has a row in the `trees` table of the site's D1 database, with its id, name, description, and file. The
+system trees, which ship with the site, are the files in `src/auto/trees/`. The deployment that is live writes their
+rows itself:
+
+1. The build writes the tree files, a SHA-256 of each, and one hash over the set into `trees/catalog.json`, in the same
+   deployment as the code that runs them.
+2. The first request to `/api/trees` after a deployment goes live finds that D1 holds a different set. It replaces the
+   system rows in one batch, which D1 runs as a transaction, and records the new hash.
+3. A rollback works the same way: the older deployment's first request writes its own rows back.
+
+No second pipeline can fall out of step with the deployment. A row that someone saves has `system` 0, and a sync never
+changes it. The schema is in `migrations/`, and a production build applies new migrations after the site builds: see
+the README's deployment section. Until the catalog tables exist, and in a preview, `/api/trees` serves the
+deployment's own files. The page itself runs the trees that it was built with, and doesn't read the catalog yet.
 
 ## Accounts
 

@@ -1,7 +1,8 @@
 /**
  * Loads a tree file: checks it against the registry and the environment's schema, and compiles it into nodes.
  *
- * A tree file is JSON with the shape `{ kind: "bt.tree", name, env, defs?, note?, root }`. Each node is an object
+ * A tree file is JSON with the shape `{ kind: "bt.tree", id, name, env, description?, meta?, defs?, root }`. `id` is a
+ * stable slug, `name` is for people, and `meta` holds host data that the loader doesn't check. Each node is an object
  * with one key that names its type, plus an optional `id` and `note`. A leaf is `{ ref, params }`. See
  * docs/behavior-trees.md for the node types.
  *
@@ -33,9 +34,14 @@ export class TreeLoadError extends Error {
 
 /** A checked, compiled tree. One definition can run for any number of robots. */
 export interface TreeDef {
+  /** A stable slug, for example `wall-sweep-pair-right`. Settings and the catalog refer to a tree by it. */
+  id: string;
+  /** The name that people see, for example `Wall-sweep pair: right robot`. */
   name: string;
   env: string;
-  note?: string;
+  description?: string;
+  /** Host data, for example an AUTO tree's start position. The loader checks only that it is an object. */
+  meta: Readonly<Record<string, unknown>>;
   root: CNode;
   nodeCount: number;
   /** Definitions in file order. `Rt.def(i)` evaluates definition `i`. */
@@ -47,6 +53,7 @@ const NODE_KINDS = ['sequence', 'fallback', 'parallel', 'chain', 'guard', 'timeo
 const VALIDATE_TYPES: Record<string, Type> = { number: t.number(), string: t.string(), boolean: t.boolean(), list: t.array(t.any()), object: t.object({}) };
 const NAME = /^[A-Za-z_][A-Za-z0-9_]*$/;
 const ID = /^[A-Za-z0-9_-]{1,64}$/;
+const TREE_ID = /^[a-z0-9][a-z0-9-]{0,63}$/;
 const isObj = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
 const stringy = (type: Type): boolean => type.kind === 'string' || type.kind === 'enum' || (type.kind === 'nullable' && stringy(type.of));
 
@@ -62,9 +69,10 @@ export function loadTree(source: unknown, reg: Registry, limits: Partial<Limits>
   const issue = (path: string, message: string) => { issues.push({ path, message }); };
   const fns: Record<string, FnSpec> = { ...MATH_FNS, ...reg.fns };
   if (!isObj(source)) throw new TreeLoadError([{ path: 'tree', message: 'a tree file must be a JSON object' }]);
-  for (const k of Object.keys(source)) if (!['kind', 'name', 'env', 'note', 'defs', 'root'].includes(k)) issue('tree', `unknown field '${k}'`);
+  for (const k of Object.keys(source)) if (!['kind', 'id', 'name', 'env', 'description', 'meta', 'defs', 'root'].includes(k)) issue('tree', `unknown field '${k}'`);
   if (source.kind !== 'bt.tree') issue('tree', "'kind' must be \"bt.tree\"");
-  const name = typeof source.name === 'string' && source.name ? source.name : (issue('tree', "'name' must be a non-empty string"), '');
+  const id = typeof source.id === 'string' && TREE_ID.test(source.id) ? source.id : (issue('tree', "'id' must be 1 to 64 lowercase letters, digits, and '-', starting with a letter or digit"), '');
+  const name = typeof source.name === 'string' && source.name.trim() && source.name.length <= 80 ? source.name : (issue('tree', "'name' must be a non-empty string of at most 80 characters"), '');
   const envName = typeof source.env === 'string' ? source.env : '';
   const envType = reg.envs[envName];
   if (!envType || envType.kind !== 'object') {
@@ -72,7 +80,8 @@ export function loadTree(source: unknown, reg: Registry, limits: Partial<Limits>
     throw new TreeLoadError(issues);
   }
   const envFields = envType.fields;
-  if (source.note !== undefined && typeof source.note !== 'string') issue('tree', "'note' must be a string");
+  if (source.description !== undefined && typeof source.description !== 'string') issue('tree', "'description' must be a string");
+  if (source.meta !== undefined && !isObj(source.meta)) issue('tree', "'meta' must be an object");
 
   // ---- Expressions ----
   const defTypes = new Map<string, { i: number; type: Type }>(), defs: Compiled<Scope>[] = [], defNames: string[] = [];
@@ -324,5 +333,5 @@ export function loadTree(source: unknown, reg: Registry, limits: Partial<Limits>
   if (!('root' in source)) issue('tree', "'root' is required");
   const root = build(source.root, { path: '', depth: 1, input: t.any(), bindings: new Map(), inChain: false }, 'root', 0, true);
   if (issues.length) throw new TreeLoadError(issues);
-  return { name, env: envName, note: source.note as string | undefined, root, nodeCount: count, defs, defNames };
+  return { id, name, env: envName, description: source.description as string | undefined, meta: isObj(source.meta) ? source.meta : {}, root, nodeCount: count, defs, defNames };
 }

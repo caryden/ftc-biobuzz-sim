@@ -1,8 +1,13 @@
 {
  "kind": "bt.tree",
- "name": "right_cycle",
+ "id": "lane-sweep-pair-right",
+ "name": "Lane-sweep pair: right robot",
  "env": "onboard",
- "note": "The earlier default for the right start position, with lane sweeps: the first TIP from the pre-loads, then load the audience CELL after the left robot's TIP, sweep, launch for a third TIP, and PARK.",
+ "description": "The earlier default for the right start position, with lane sweeps: the first TIP from the pre-loads, then load the audience CELL after the left robot's TIP, sweep, launch for a third TIP, and PARK.",
+ "meta": {
+  "start": "right",
+  "partner": "lane-sweep-pair-left"
+ },
  "defs": {
   "len": "bots.me.dimensions.length",
   "flip": "if(bots.me.shooter.facing == 'front', 180, 0)",

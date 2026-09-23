@@ -80,12 +80,12 @@ export const SPECS: Record<string, Spec> = {
   'intake-60': { group: 'accuracy', label: 'Intake succeeds 60% of the time', red: { cfg: c => { c.intake.successP = 0.6; } } },
 
   // AUTO choreography between the right robot and the left robot.
-  'auto-harvest': { group: 'auto', label: 'right_harvest and left_harvest (baseline)' },
-  'auto-cycle': { group: 'auto', label: 'right_cycle and left_cycle: lane sweeps, no wall sweeps', red: { auto: ['right_cycle', 'left_cycle'] } },
-  'auto-harvest-right-only': { group: 'auto', label: 'right_harvest with left_cycle', red: { auto: ['right_harvest', 'left_cycle'] } },
-  'auto-naive': { group: 'auto', label: 'Both robots run the solo script', red: { auto: ['cycle_and_park', 'cycle_and_park'] } },
-  'auto-solo-leave': { group: 'auto', label: 'Right robot solo script, left robot only parks', red: { auto: ['cycle_and_park', 'leave_only'] } },
-  'auto-leave-leave': { group: 'auto', label: 'Both robots only LEAVE and PARK', red: { auto: ['leave_only', 'leave_only'] } },
+  'auto-harvest': { group: 'auto', label: 'Wall-sweep pair (baseline)' },
+  'auto-cycle': { group: 'auto', label: 'Lane-sweep pair: lane sweeps, no wall sweeps', red: { auto: ['lane-sweep-pair-right', 'lane-sweep-pair-left'] } },
+  'auto-harvest-right-only': { group: 'auto', label: 'Wall-sweep right robot with the lane-sweep left robot', red: { auto: ['wall-sweep-pair-right', 'lane-sweep-pair-left'] } },
+  'auto-naive': { group: 'auto', label: 'Both robots run the solo AUTO', red: { auto: ['solo-two-tip-sweep', 'solo-two-tip-sweep'] } },
+  'auto-solo-leave': { group: 'auto', label: 'Right robot solo AUTO, left robot only parks', red: { auto: ['solo-two-tip-sweep', 'leave-and-park'] } },
+  'auto-leave-leave': { group: 'auto', label: 'Both robots only LEAVE and PARK', red: { auto: ['leave-and-park', 'leave-and-park'] } },
   'auto-none': { group: 'auto', label: 'No AUTO at all', red: { auto: ['none', 'none'] } },
 
   // Follower tuning with active braking. These apply to all four robots, so read red plus blue.
