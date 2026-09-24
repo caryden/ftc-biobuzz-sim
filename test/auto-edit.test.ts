@@ -1,6 +1,6 @@
 import RAPIER from '@dimforge/rapier3d-compat';
 import { beforeAll, describe, expect, it } from 'vitest';
-import { addReference, changedDefs, changedSteps, clonePlan, editHandles, makeAbsolute, moveReference, referenceOf, referencePoints, referTo, findNode, isEdited, moveHandle, planId, poseText, resetHandle, sharedWith, shiftPose, sourceOf, turnHandle } from '../src/auto/auto-edit';
+import { addReference, changedDefs, deleteReference, changedSteps, clonePlan, editHandles, makeAbsolute, moveReference, referenceOf, referencePoints, referTo, findNode, isEdited, moveHandle, planId, poseText, resetHandle, sharedWith, shiftPose, sourceOf, turnHandle } from '../src/auto/auto-edit';
 import { AUTO_SOURCES, AUTO_TREES, BUILT_IN_AUTO, addAutoTree, removeAutoTree } from '../src/auto/onboard';
 import { Coach } from '../src/auto/coach';
 import { literalNumber, splitCall, type CNode } from '../src/bt';
@@ -135,6 +135,28 @@ describe('reference points', () => {
     expect((r.tree.defs as Json).midField).toBe('pose(-0.5, 0.25, 0)');
     addAutoTree(r.tree);
     try { expect(referencePoints(AUTO_TREES[String(r.tree.id)], newSim().view(0)).map(q => q.name)).toContain('midField'); } finally { removeAutoTree(String(r.tree.id)); }
+  });
+});
+
+describe('deleting a reference point', () => {
+  it('makes the steps that name it absolute where they are, and refuses while a definition still uses it', () => {
+    const view = newSim().view(0), id = 'wall-sweep-pair-right', tree = copy(id); addAutoTree(tree);
+    try {
+      const handles = editHandles(AUTO_TREES[String(tree.id)], view), users = handles.filter(h => h.kind === 'drive' && /^(offset\()?ownFlower\b/.test(poseText(tree, h) ?? ''));
+      expect(users.length).toBeGreaterThanOrEqual(2);
+      const r = deleteReference(tree, handles, 'ownFlower'); if (!('tree' in r)) throw new Error(r.error);
+      expect((r.tree.defs as Json).ownFlower).toBeUndefined();
+      expect(r.madeAbsolute).toEqual(users.map(u => u.path.split('/').pop()));
+      addAutoTree(r.tree);
+      const after = editHandles(AUTO_TREES[String(tree.id)], view);
+      for (const u of users) {
+        expect(poseText(r.tree, u)).toMatch(/^pose\(/);
+        const a = after.find(h => h.path === u.path)!; expect(a.pose.x).toBeCloseTo(u.pose.x, 2); expect(a.pose.y).toBeCloseTo(u.pose.y, 2); // 1 mm rounding
+      }
+      // parkRight is pose(park.x, …, park.headingDeg), so park can't go until parkRight changes.
+      const p = deleteReference(tree, handles, 'park'); expect(p).toEqual({ error: expect.stringMatching(/^parkRight still uses park\./) });
+      expect(deleteReference(tree, handles, 'nothing')).toEqual({ error: expect.stringMatching(/no definition/) });
+    } finally { removeAutoTree(`${id}-test`); }
   });
 });
 

@@ -56,7 +56,7 @@
   #aestatus { color: var(--dim); font-size: 11px; } #aestatus.warn { color: #ffb74d; }
   #aesnaprow { margin: 0; gap: 4px; white-space: nowrap; color: var(--fg); } #aesnaprow input { margin: 0; }
   #aehover { position: fixed; z-index: 7; pointer-events: none; background: #2a2340; color: #e1bee7; border: 1px solid #7e57c2; border-radius: 4px; padding: 1px 6px; font: 11px ui-monospace, SFMono-Regular, Menlo, monospace; }
-  #aemenu { z-index: 7; padding: 4px; } #aemenu button { margin: 0; width: auto; white-space: nowrap; }
+  #aemenu { z-index: 7; padding: 4px; } #aemenu button { display: block; margin: 0; width: 100%; text-align: left; white-space: nowrap; } #aemenu button + button { margin-top: 4px; } #aemenu button.hidden { display: none; }
   #aerefname { top: 84px; left: 50%; transform: translateX(-50%); width: 300px; z-index: 7; } #aerefname h2 { color: var(--fg); } #aerefname input { width: 180px; }
   #aerefname .btns { display: flex; gap: 6px; margin-top: 8px; } #aerefname .btns button { margin: 0; } #aereferr { color: #ff8a80; font-size: 12px; min-height: 16px; margin-top: 4px; }
   #notepop { width: 300px; z-index: 5; } #notepop h2 { color: var(--fg); } #notepop .btns { display: flex; gap: 6px; margin-top: 6px; } #notepop .btns button { margin: 0; }
@@ -147,7 +147,7 @@
 <div id="autoedit" class="panel hidden"><div class="aeinfo"><div><span id="aehead"></span> <span id="aestatus"></span> <span id="aeframe"></span></div><div id="aesel"></div></div>
   <button id="aeedit" title="Lets you drag the poses of this plan.">Edit</button><button id="aecreate" title="Makes a new plan from a copy of any plan for this robot's start position. The new plan becomes this robot's plan.">Create new</button> <label id="aesnaprow" title="Snaps a drag to a 1 in grid and a turn to 5°. Hold Alt, or Option on a Mac, while you drag to do the opposite."><input type="checkbox" id="aesnap"> Snap</label><button id="aeundo" title="Takes back the last edit (Cmd+Z or Ctrl+Z).">Undo</button><button id="aeredo" title="Makes the edit again (Shift+Cmd+Z or Shift+Ctrl+Z).">Redo</button><button id="aereset" title="Moves the selected step's poses back to where the plan that this one was copied from has them.">Reset this step</button><button id="aedelete" title="Deletes this plan. Every robot that ran it goes back to the plan that it was copied from.">Delete plan</button><button id="aedone" class="primary">Done</button></div>
 <div id="aehover" class="hidden"></div>
-<div id="aemenu" class="panel hidden"><button id="aeaddref">Add reference point here</button></div>
+<div id="aemenu" class="panel hidden"><button id="aeaddref">Add reference point here</button><button id="aeabs"></button><button id="aedelref"></button></div>
 <div id="aerefname" class="panel hidden"><h2>New reference point</h2>
   <label>Name <input id="aerefinput" type="text" maxlength="40" placeholder="For example, rearSpot"></label>
   <div id="aereferr"></div>

@@ -265,13 +265,17 @@ export class View {
     }
   }
 
-  /** Gets the line under a screen point, from the same list as `showLinks`, within 6 pixels, but not near its ends, where the handles are. */
+  /**
+   * Gets the line under a screen point, from the same list as `showLinks`, within 6 pixels. A line counts where it
+   * shows: outside the step disc at its start, 0.085 m, and the reference point disc at its end, 0.05 m.
+   */
   linkAt(clientX: number, clientY: number, list: readonly { from: { x: number; z: number }; to: { x: number; z: number } }[]): number | null {
     const px = (p: { x: number; z: number }) => { const q = new THREE.Vector3(p.x, 0.023, p.z).project(this.camera); return { x: ((q.x + 1) / 2) * innerWidth, y: ((1 - q.y) / 2) * innerHeight }; };
     let best: number | null = null, bestPx = 6;
     list.forEach((l, i) => {
-      const a = px(l.from), b = px(l.to), dx = b.x - a.x, dy = b.y - a.y, l2 = dx * dx + dy * dy; if (l2 < 400) return;
-      const t = ((clientX - a.x) * dx + (clientY - a.y) * dy) / l2; if (t < 0.15 || t > 0.85) return;
+      const len = Math.hypot(l.to.x - l.from.x, l.to.z - l.from.z), a = px(l.from), b = px(l.to), dx = b.x - a.x, dy = b.y - a.y, l2 = dx * dx + dy * dy;
+      if (len <= 0.135 || l2 < 1) return;
+      const t = ((clientX - a.x) * dx + (clientY - a.y) * dy) / l2; if (t < 0.085 / len || t > 1 - 0.05 / len) return;
       const d = Math.hypot(a.x + t * dx - clientX, a.y + t * dy - clientY); if (d < bestPx) { bestPx = d; best = i; }
     });
     return best;

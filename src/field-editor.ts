@@ -6,7 +6,7 @@
  * browser keeps your plans (`user-trees.ts`). See `auto/auto-edit.ts` for how a drag changes a tree.
  */
 import type { TreeDef } from './bt';
-import { addReference, changedDefs, changedSteps, clonePlan, editHandles, isEdited, makeAbsolute, moveHandle, moveReference, planId, poseText, referencePoints, referTo, resetHandle, sharedWith, sourceOf, stepReference, toAlliance, turnHandle, turnReference, type Handle, type RefPoint } from './auto/auto-edit';
+import { addReference, deleteReference, changedDefs, changedSteps, clonePlan, editHandles, isEdited, makeAbsolute, moveHandle, moveReference, planId, poseText, referencePoints, referTo, resetHandle, sharedWith, sourceOf, stepReference, toAlliance, turnHandle, turnReference, type Handle, type RefPoint } from './auto/auto-edit';
 import { AUTO_SOURCES, AUTO_TREES, BUILT_IN_AUTO, SOLO_AUTO, addAutoTree, autoFor, autoStart } from './auto/onboard';
 import type { View, CameraMode } from './render/view';
 import type { TreeEdit } from './render/tree-view';
@@ -52,6 +52,8 @@ export class FieldEditor {
   changedRefs: ReadonlySet<string> = new Set();
   /** The selected reference point, and the selected offset line, by the path of the step that it belongs to. */
   selectedRef: string | null = null; selectedLink: string | null = null;
+  /** A problem with the last action, such as a reference point that can't be deleted. The status line shows it until the selection or the plan changes. */
+  notice: string | null = null;
   /** If true, a drag snaps to the 1 in grid, and a turn to 5°. Holding Alt, or Option on a Mac, inverts it for one drag. */
   snapGrid = false;
   /** The reference point that a dragged pose rests on, and since when. After `REF_HOLD_MS`, a release refers the pose to it. */
@@ -68,13 +70,17 @@ export class FieldEditor {
       if (this.robot < 0 || e.button !== 0) return;
       // What's selected wins: a selected step's handle or the selected reference point under the pointer takes the press,
       // so that a step that names a reference point, and sits on it, can be dragged. Otherwise a reference point, small
-      // and drawn over the steps that name it, wins within its own few pixels, and then the step handles, and then the
-      // offset lines. A click on any of them is the editor's: the click that follows mustn't also pick the robot under it.
+      // and drawn over the steps that name it, wins within its own few pixels. Then an offset line wins where it shows
+      // outside the discs at its ends, because a step's disc takes presses out to 16 px and a short line is under that.
+      // Then the step handles. A click on any of them is the editor's: the click that follows mustn't also pick the
+      // robot under it.
       this.hoverRef?.(null, 0, 0);
       const handle = this.handleAt(e), refHit = this.host.view.refAt(e.clientX, e.clientY, this.refDrawList());
       const handleSelected = !!handle && this.handles[handle.index].path === this.selected, refSelected = !!refHit && this.refs[refHit.index].name === this.selectedRef;
-      const ref = refSelected || (refHit && !handleSelected) ? refHit : null, hit = ref ? null : handle;
-      if (!ref && !hit) { const k = this.host.view.linkAt(e.clientX, e.clientY, this.links()); if (k !== null) { this.selectLink(this.links()[k].path); this.swallowClick = true; } return; }
+      const ref = refSelected || (refHit && !handleSelected) ? refHit : null, knob = !ref && handle?.part === 'heading';
+      const k = ref || knob ? null : this.host.view.linkAt(e.clientX, e.clientY, this.links());
+      if (k !== null) { this.selectLink(this.links()[k].path); this.swallowClick = true; return; }
+      const hit = ref ? null : handle; if (!ref && !hit) return;
       this.swallowClick = true;
       if (ref) this.selectRef(this.refs[ref.index].name); else { const h = this.handles[hit!.index]; this.select(h.path, hit!.index); }
       if (!this.editing) return;
@@ -112,7 +118,7 @@ export class FieldEditor {
    * Gets the handle under the pointer. Two steps can put handles on one spot, as two sweeps with the same waypoints do,
    * so the selected step's handles come first and win a tie.
    */
-  private handleAt(e: PointerEvent): { index: number; part: 'pose' | 'heading' } | null {
+  private handleAt(e: { clientX: number; clientY: number }): { index: number; part: 'pose' | 'heading' } | null {
     const order = this.handles.map((_, i) => i).sort((a, b) => Number(this.handles[b].path === this.selected) - Number(this.handles[a].path === this.selected));
     const hit = this.host.view.handleAt(e.clientX, e.clientY, order.map(i => this.handles[i].sim));
     return hit && { index: order[hit.index], part: hit.part };
@@ -260,20 +266,47 @@ export class FieldEditor {
 
   /** Selects a step, and the point of it that the ghost robot shows: `point`, or the step's first handle. */
   select(path: string | null, point?: number) {
-    this.selected = path; this.point = point ?? this.handles.findIndex(h => h.path === path); this.selectedRef = null; this.selectedLink = null;
+    this.selected = path; this.point = point ?? this.handles.findIndex(h => h.path === path); this.selectedRef = null; this.selectedLink = null; this.notice = null;
     this.paint(); this.host.changed();
   }
 
   /** Selects a reference point. The steps that name it show their offset lines to it. */
-  selectRef(name: string) { this.selected = null; this.point = -1; this.selectedRef = name; this.selectedLink = null; this.paint(); this.host.changed(); }
+  selectRef(name: string) { this.notice = null; this.selected = null; this.point = -1; this.selectedRef = name; this.selectedLink = null; this.paint(); this.host.changed(); }
 
   /** Selects the offset line of a step, and the step. **Delete** then makes the step absolute. */
   selectLink(path: string) { this.select(path); this.selectedLink = path; this.paint(); this.host.changed(); }
 
   /** Makes the step of the selected offset line absolute: it keeps its place, and stops following its reference point. */
-  deleteLink() {
-    const h = this.handles.find(q => q.path === this.selectedLink && q.kind === 'drive'); if (!h || !this.editing) return;
+  deleteLink() { if (this.selectedLink) this.makeStepAbsolute(this.selectedLink); }
+
+  /** Makes a drive step absolute: it keeps its place, and stops following its reference point. */
+  makeStepAbsolute(path: string) {
+    const h = this.handles.find(q => q.path === path && q.kind === 'drive'); if (!h || !this.editing) return;
     this.remember(this.tree); this.selectedLink = null; this.apply(makeAbsolute(this.tree, h), true);
+  }
+
+  /**
+   * Gets what a right-click at a screen point can act on: the reference point there, or the drive step whose disc or
+   * offset line is there, with the reference point that the step is built on. Null if neither is there.
+   */
+  menuAt(clientX: number, clientY: number): { ref: string } | { step: string; id: string; ref: string | null } | null {
+    const r = this.host.view.refAt(clientX, clientY, this.refDrawList()); if (r) return { ref: this.refs[r.index].name };
+    const k = this.host.view.linkAt(clientX, clientY, this.links()), hit = this.handleAt({ clientX, clientY });
+    const h = k !== null ? this.handles.find(q => q.path === this.links()[k].path) : hit ? this.handles[hit.index] : undefined;
+    if (!h || h.kind !== 'drive') return null;
+    const name = stepReference(this.tree, h);
+    return { step: h.path, id: h.path.split('/').pop()!, ref: name && this.refs.some(q => q.name === name) ? name : null };
+  }
+
+  /**
+   * Deletes the selected reference point, or `name`. The steps that name it become absolute and keep their places.
+   * Returns a problem to show, such as another definition that uses the point, or null.
+   */
+  deleteRef(name = this.selectedRef): string | null {
+    if (!this.editing || !name) return null;
+    const r = deleteReference(this.tree, this.handles, name); if ('error' in r) { this.notice = r.error; this.host.changed(); return r.error; }
+    try { this.remember(this.tree); this.selectedRef = null; this.apply(r.tree, true); } catch (e) { this.past.pop(); return e instanceof Error ? e.message.replace(/^.*?: /, '') : String(e); }
+    return null;
   }
 
   /** Adds a reference point at a FIELD point, in the robot's alliance frame. Returns a problem to show, or null. */
@@ -339,21 +372,24 @@ export class FieldEditor {
   describe(fmtPos: (x: number, y: number) => string): string {
     const hs = this.handles.filter(h => h.path === this.selected);
     if (!this.def) return 'This robot runs no AUTO plan. Pick one in its robot config.';
+    if (this.notice) return this.notice;
     const ref = this.refs.find(r => r.name === this.selectedRef);
     if (ref) {
       const users = this.handles.filter(h => h.kind === 'drive' && stepReference(this.tree, h) === ref.name).map(h => h.path.split('/').pop());
       return `Reference point ${ref.name}: ${fmtPos(ref.pose.x, ref.pose.y)}, heading ${wrap(ref.pose.headingDeg).toFixed(1)}° · ${(this.tree.defs as Json)[ref.name]}`
-        + (users.length ? ` · used by ${users.join(', ')}${this.editing ? ': a drag moves them all' : ''}` : '');
+        + (users.length ? ` · used by ${users.join(', ')}${this.editing ? ': a drag moves them all' : ''}` : '')
+        + (this.editing ? ` · press Delete, or right-click, to delete it${users.length ? ', and its steps keep their places' : ''}` : '');
     }
     if (this.selectedLink) {
       const h = this.handles.find(q => q.path === this.selectedLink);
-      if (h) return `${h.path.split('/').pop()} is ${poseText(this.tree, h)}${this.editing ? ' · press Delete to make it absolute' : ''}`;
+      if (h) return `${h.path.split('/').pop()} is ${poseText(this.tree, h)}${this.editing ? ' · press Delete, or right-click, to make it absolute' : ''}`;
     }
     if (!hs.length) return this.selected ? 'This step has no pose on the FIELD.' : this.editing ? 'Drag a pose or its heading knob, or click a step in the tree.' : 'Click a pose or a step in the tree.';
     if (hs[0].kind === 'waypoint') return `${hs.length} waypoints${this.editing ? ' · drag one to move it' : ''}`;
     const h = hs[0], deg = wrap(h.pose.headingDeg), def = this.def, shared = sharedWith(this.tree, def, h);
     return `${fmtPos(h.pose.x, h.pose.y)}, heading ${deg.toFixed(1)}° · pose ${poseText(this.tree, h)}`
-      + (shared.length && this.editing ? ` · also used by ${shared.join(', ')}: a drag moves this step only` : '');
+      + (shared.length && this.editing ? ` · also used by ${shared.join(', ')}: a drag moves this step only` : '')
+      + (this.editing && stepReference(this.tree, h) ? ' · right-click it to make it absolute' : '');
   }
 
   /** The tree that a plan was copied from, or the tree itself. */
@@ -362,6 +398,7 @@ export class FieldEditor {
   /** Makes `next` the plan being edited. A drag saves to storage when it ends; other edits save at once. */
   private apply(next: Json, save: boolean) {
     if (!this.editing) return;
+    this.notice = null;
     addAutoTree(next); this.tree = next;
     this.rev++; this.refresh(); if (save) this.save(); this.host.changed();
   }

@@ -137,7 +137,8 @@ To change an AUTO plan, follow these steps:
 5. Click **Done**.
 
 The purple dots are reference points, such as `launchAudience`, which steps name. Drag one to move every step that
-names it, right-click the floor to add one, and turn on **Snap** to snap to a 1 in grid. For all the tools, see
+names it. Right-click the floor to add one, and right-click a point to delete it. Turn on **Snap** to snap to a 1 in
+grid. For all the tools, see
 [Reference points and snapping](behavior-trees.md#reference-points-and-snapping).
 
 This browser keeps your plans, and the **AUTO plan** list in the robot config shows them. An edited step has a green

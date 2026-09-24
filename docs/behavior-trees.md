@@ -555,11 +555,16 @@ name on hover. In a plan that you're editing:
   reference. A turn snaps to the reference point's heading within 5°.
 - **Change a step's reference.** Hold a dragged pose on a reference point for 0.5 s, until the point gets a yellow
   ring, and release: the pose becomes that point, or an offset from it that keeps the step's own heading.
-- **Make a step absolute.** A step that is an offset from a reference point draws a dotted white line to it, when the
-  step or the point is selected. Click the line, and press **Delete**: the pose becomes `pose(x, y, heading)` with the
-  numbers where it is, and it stops following the point and the robot's size.
+- **Make a step absolute.** Right-click the step, and choose **Make s3 absolute**, with the step's id. The pose becomes
+  `pose(x, y, heading)` with the numbers where it is, and it stops following the point and the robot's size. A step
+  that is an offset from a reference point also draws a dotted white line to it, when the step or the point is
+  selected. A click on the line where it shows between the two discs selects it, and **Delete** does the same.
 - **Add a reference point.** Right-click the FIELD floor, choose **Add reference point here**, and name it. The name is
   letters, digits, and underscores, because expressions use it.
+- **Delete a reference point.** Right-click it and choose **Delete reference point**, or select it and press
+  **Delete**. The steps that name it become absolute where they are. While another definition or a step's expression
+  still uses the name, for example `parkRight`, which is `pose(park.x, …)`, the editor keeps the point and names the
+  user in the bar.
 - **Snap to the grid.** With **Snap** on, a drag snaps to a 1 in grid, drawn only around the dragged point, and a turn
   to 5°. Holding Alt, or Option on a Mac, during a drag does the opposite of the checkbox. Control isn't used, because
   a Control-click on a Mac is a right-click.
@@ -791,8 +796,8 @@ tree in the page. Each increment is one pull request.
    - **References and snapping. Done.** The definitions that are poses show as reference points, with their names, which you
      can drag. An offset pose draws a dotted line to its reference point, and a drag snaps to reference points and, with
      a checkbox, to a 1 in grid. Alt, or Option on a Mac, inverts the checkbox. A right-click adds a reference point.
-     Holding a dragged pose on a reference point makes it reference that point, and deleting a selected offset line
-     makes the pose absolute.
+     Holding a dragged pose on a reference point makes it reference that point. A right-click on a step, or Delete on
+     its offset line, makes the pose absolute, and a right-click or Delete removes a reference point.
 9. **Forms, definitions, and validation.** A leaf's parameter schema drives a form: types, units, limits, enums,
    and doc strings. An expression field uses CodeMirror 6, which loads only with the editor: highlighting, completion
    from the environment schema and the tree's definitions, and errors from `src/bt/expr.ts`. A panel edits the
