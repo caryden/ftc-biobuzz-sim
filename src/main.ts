@@ -33,7 +33,8 @@ let treeRobot = -1; // -1 follows the focus robot.
 // One handler for the robot buttons. The buttons are rebuilt only when the robots or the choice change: a button that is
 // replaced between the press and the release of a click never receives the click.
 let treeBotsKey = '';
-$('treebots').onclick = e => { const btn = (e.target as HTMLElement).closest<HTMLButtonElement>('button[data-k]'); if (!btn) return; treeRobot = Number(btn.dataset.k); paintTree(); };
+// In the AUTO editor, the buttons pick which red robot's plan the editor shows.
+$('treebots').onclick = e => { const btn = (e.target as HTMLElement).closest<HTMLButtonElement>('button[data-k]'); if (!btn) return; if (editor.active) editor.showRobot(Number(btn.dataset.k)); else { treeRobot = Number(btn.dataset.k); paintTree(); } };
 
 // Every MATCH has two full alliances: R0, R1, B0, and B1. Each robot has its own setup, edited in the robot config popup.
 // The AUTO trees that the field editor saved load first, so that a setup can name one. A setup that names a tree this
@@ -104,10 +105,10 @@ function applyConfig() {
 for (const el of Object.values(bc)) { el.onchange = applyConfig; for (const ev of ['keydown', 'keyup']) el.addEventListener(ev, e => e.stopPropagation()); }
 // The 1x, 3x, and 5x chips fill in the reference launcher's errors times that factor.
 document.querySelectorAll<HTMLButtonElement>('[data-err]').forEach(el => { el.onclick = () => { const k = Number(el.dataset.err); bc.elev.value = String(+(REF_ERR.errElevDeg * k).toFixed(2)); bc.azim.value = String(+(REF_ERR.errAzimDeg * k).toFixed(2)); bc.speed.value = String(speedToInput(+(REF_ERR.errSpeed * k).toFixed(3), units)); applyConfig(); }; });
-// After a MATCH, the editor resets the FIELD first, because the plan preview draws from the start positions.
-$('bcedit').onclick = () => { if (editing < 0) return; const i = editing; closeConfig(); if (sim.phase !== 'pre') reset(); const why = editor.open(i);
-  if (why === 'blue') sim.say(`Edit AUTO trees from a red robot. ${bots[i].plate} runs its tree rotated 180° about the FIELD center.`);
-  if (why === 'none') sim.say(`${bots[i].plate} runs no AUTO tree, so it has no poses to edit.`); };
+/** Opens the AUTO editor on red robot `i`. After a MATCH, it resets the FIELD first, because the plan preview draws from the start positions. */
+function openEditor(i: number) { if (review.active || startAt) return; closeConfig(); if (sim.phase !== 'pre') reset(); editor.open(i); }
+$('bcedit').onclick = () => { if (editing >= 0 && editing < 2) openEditor(editing); };
+$('editauto').onclick = () => { $('editauto').blur(); if (editor.active) editor.close(); else openEditor(treeRobot === 1 ? 1 : 0); };
 $('bcdone').onclick = closeConfig; const applyPreset = (make: (i: number) => BotSetup) => { if (editing < 0) return; const i = editing, keep = { plate: bots[i].plate, driver: bots[i].driver, stickFrame: bots[i].stickFrame }; bots[i] = { ...make(i), ...keep }; saveBots(bots); reset(); openConfig(i); };
 $('bcdefault').onclick = () => applyPreset(metaBot); $('bcbaseline').onclick = () => applyPreset(defaultBot);
 // A click on the FIELD floor reports the position in the log, in the coordinate system that the floor labels show.
@@ -152,24 +153,42 @@ function scoreRows(r: AllianceScore | null, b: AllianceScore | null, totals: { r
   return html;
 }
 // ---------- field editor ----------
-$('aedone').onclick = () => editor.close(); $('aereset').onclick = () => editor.resetSelected(); $('aerevert').onclick = () => editor.revert();
+$('aedone').onclick = () => { closeNewPlan(); editor.close(); }; $('aereset').onclick = () => editor.resetSelected(); $('aeedit').onclick = () => editor.edit();
+$('aedelete').onclick = () => { const d = editor.def; if (d && confirm(`Delete the plan "${d.name}"? This browser keeps no other copy of it.`)) editor.deletePlan(); };
+// The new-plan dialog asks for the plan to copy, a name, and a description, and the editor checks them.
+const newPlan = { from: $<HTMLSelectElement>('aefrom'), name: $<HTMLInputElement>('aename'), desc: $<HTMLTextAreaElement>('aedesc') };
+for (const el of Object.values(newPlan)) for (const ev of ['keydown', 'keyup']) el.addEventListener(ev, e => e.stopPropagation());
+function closeNewPlan() { $('aenew').classList.add('hidden'); }
+$('aecreate').onclick = () => {
+  const current = editor.def?.id ?? '', esc = (t: string) => t.replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!);
+  newPlan.from.innerHTML = editor.sources().map(s => `<option value="${esc(s.id)}"${s.id === current ? ' selected' : ''}>${esc(s.name)}</option>`).join('');
+  newPlan.name.value = ''; newPlan.desc.value = ''; $('aeerr').textContent = ''; $('aenew').classList.remove('hidden'); newPlan.name.focus();
+};
+$('aecancel').onclick = closeNewPlan;
+$('aemake').onclick = () => { const err = editor.create(newPlan.from.value, newPlan.name.value, newPlan.desc.value); $('aeerr').textContent = err ?? ''; if (!err) closeNewPlan(); };
 // In the editor, a click on a step in the tree view selects it, and its handles on the FIELD light up.
 $('treebody').addEventListener('click', e => { if (!editor.active) return; const row = (e.target as HTMLElement).closest<HTMLElement>('.tv[data-path]'); if (row) editor.select(row.dataset.path!); });
 /** Draws the editor bar: the tree, the selected step's pose, and the buttons. */
 function paintEditor() {
   document.body.classList.toggle('editing', editor.active); $('autoedit').classList.toggle('hidden', !editor.active); if (!editor.active) return;
-  const def = editor.def, plate = bots[editor.robot].plate;
-  $('aehead').textContent = `${plate} · ${def?.name ?? 'AUTO'}`;
+  const def = editor.def, plate = bots[editor.robot].plate, wrong = editor.wrongStart;
+  $('aehead').textContent = `${plate} · ${def?.name ?? 'No AUTO plan'}`;
+  const status = $('aestatus'); status.classList.toggle('warn', !!wrong);
+  status.textContent = !def ? '' : wrong ? `This plan is for the ${wrong} start position.` : editor.isUserPlan ? (editor.editing ? 'Your plan · editing' : 'Your plan') : 'System plan · read-only';
   $('aeframe').textContent = 'Red alliance frame: +x toward the blue wall, +y toward the rear wall. Blue robots run this tree rotated 180°.';
   // The bar cuts long lines short, so each line's tooltip holds the whole text.
   for (const [id, text] of [['aeframe', $('aeframe').textContent ?? ''], ['aesel', editor.describe((x, y) => fmtPos(x, y, units))]] as const) { $(id).textContent = text; $(id).title = text; }
   $<HTMLButtonElement>('aereset').disabled = !editor.selectedEdited();
-  $<HTMLButtonElement>('aerevert').disabled = !editor.isCopy;
+  const edit = $<HTMLButtonElement>('aeedit'); edit.disabled = !editor.isUserPlan || editor.editing;
+  edit.title = editor.isUserPlan ? 'Lets you drag the poses of this plan.' : 'System plans are read-only. Create a copy to change it.';
+  $<HTMLButtonElement>('aedelete').disabled = !editor.isUserPlan;
 }
 
 /** Draws the tree view for the chosen robot: live during a match, and at the cursor in the review. */
 function paintTree() {
-  const el = $('tree'), on = treeSel.value === 'on' || editor.active; el.classList.toggle('hidden', !on); if (!on) return;
+  const el = $('tree'), on = treeSel.value === 'on' || editor.active; el.classList.toggle('hidden', !on);
+  if (!editor.active) view.insetLeft = 0;
+  if (!on) return;
   const i = treeRobot >= 0 ? treeRobot : focus(), plate = bots[i].plate;
   const botsKey = `${i}:${bots.map(b => b.plate).join(',')}`;
   if (botsKey !== treeBotsKey) {
@@ -180,11 +199,14 @@ function paintTree() {
   const below = review.active ? $('review') : editor.active ? $('autoedit') : $('log');
   el.style.top = `${$('left').getBoundingClientRect().bottom + 8}px`; el.style.bottom = `${innerHeight - below.getBoundingClientRect().top + 8}px`;
   if (editor.active) {
-    $('treebots').classList.add('hidden');
-    treePanel.paint(`${bots[editor.robot].plate} · AUTO · editing`, editor.def, { running: new Set(), last: new Map() }, 'This robot runs no AUTO tree.', editor.treeEdit());
+    // The overhead view keeps the FIELD clear of this panel, because the rear-side plans run under it.
+    view.insetLeft = el.getBoundingClientRect().right + 8;
+    // The editor's buttons are the two red robots: plans are written in red's frame.
+    const key = `edit:${editor.robot}:${bots[0].plate},${bots[1].plate}`;
+    if (key !== treeBotsKey) { treeBotsKey = key; $('treebots').innerHTML = [0, 1].map(k => `<button data-k="${k}" class="${k === editor.robot ? 'on' : ''}" style="border-color:var(--red)">${bots[k].plate}</button>`).join(''); }
+    treePanel.paint(`${bots[editor.robot].plate} · AUTO plan`, editor.def, { running: new Set(), last: new Map() }, 'This robot runs no AUTO plan.', editor.treeEdit());
     return;
   }
-  $('treebots').classList.remove('hidden');
   const cur = review.cursor, human = bots[i].driver !== 'planner';
   if (cur) {
     const at = treeStateAt(cur.trace, cur.index, i), def = at ? AUTO_TREES[at.tree] ?? TELEOP_TREES[at.tree] ?? null : null;
@@ -235,7 +257,7 @@ function hud(pads: Frame['pads']) {
   $('start').classList.toggle('hidden', sim.phase !== 'pre');
 }
 
-let last = performance.now(), acc = 0, frame = 0, autoPlan: ReturnType<typeof previewAuto> | null = null, autoPlanKey = '';
+let last = performance.now(), acc = 0, frame = 0, autoPlan: ReturnType<typeof previewAuto> | null = null, autoPlanKey = '', otherPlan: ReturnType<typeof previewAuto> | null = null, otherPlanKey = '';
 function tick(now: number) {
   const frameDt = (now - last) / 1000; acc = Math.min(acc + frameDt, 0.05); last = now;
   const inF = readInput();
@@ -268,6 +290,10 @@ function tick(now: number) {
   const name = bots[pi].auto === 'default' ? autoFor(pv, SOLO_AUTO) : bots[pi].auto, tree = AUTO_TREES[name], showPlan = !!tree && (editor.active || ((sim.mode === 'full' || sim.mode === 'auto') && (sim.phase === 'pre' || sim.phase === 'auto')));
   if (showPlan && sim.phase === 'pre') { const key = `${name}:${pi}:${seed}:${editor.rev}`; if (key !== autoPlanKey) { const p = pv.robot.translation(); autoPlan = previewAuto(tree, pv, { x: p.x, z: p.z }); autoPlanKey = key; } }
   view.showAutoPlan(showPlan ? autoPlan : null, autoPlanKey);
+  // In the editor, the other red robot's plan draws dimmed, so that you see where the partners go.
+  const oi = editor.active ? 1 - editor.robot : -1, ov = oi >= 0 ? sim.view(oi) : null, oName = ov ? (bots[oi].auto === 'default' ? autoFor(ov, SOLO_AUTO) : bots[oi].auto) : '', oTree = ov ? AUTO_TREES[oName] : undefined;
+  if (ov && oTree && sim.phase === 'pre') { const key = `${oName}:${oi}:${seed}:${editor.rev}`; if (key !== otherPlanKey) { const p = ov.robot.translation(); otherPlan = previewAuto(oTree, ov, { x: p.x, z: p.z }); otherPlanKey = key; } }
+  view.showOtherPlan(ov && oTree ? otherPlan : null, otherPlanKey);
   if (frame++ % 6 === 0) hud(inF.pads);
   requestAnimationFrame(tick);
 }

@@ -5,8 +5,7 @@
  "env": "onboard",
  "description": "The lane-sweep pair's left robot without the PARK: the robot keeps sweeping the rear spill.",
  "meta": {
-  "start": "left",
-  "partner": "lane-sweep-pair-right"
+  "start": "left"
  },
  "defs": {
   "full": "bots.me.transfer.full",

@@ -19,8 +19,8 @@ function simWith(sizeIn: number, facing: 'front' | 'rear' = 'rear') {
 describe('AUTO trees', () => {
   it('loads all eight trees, in the order of the AUTO list', () => {
     expect(Object.keys(AUTO_TREES)).toEqual(['wall-sweep-pair-right', 'wall-sweep-pair-left', 'lane-sweep-pair-right', 'lane-sweep-pair-left-no-park', 'lane-sweep-pair-left', 'solo-two-tip-sweep', 'solo-two-tip-sweep-no-park', 'leave-and-park']);
-    // Each half of a pair names the other half as its partner.
-    for (const def of Object.values(AUTO_TREES)) if (typeof def.meta.partner === 'string') expect(AUTO_TREES[def.meta.partner]?.meta.start).not.toBe(def.meta.start);
+    // A plan has no partner field: each red robot's plan is picked on its own. The Default setting pairs them in `autoFor`.
+    for (const def of Object.values(AUTO_TREES)) expect(def.meta.partner).toBeUndefined();
     for (const def of Object.values(AUTO_TREES)) expect(def.env).toBe('onboard');
   });
   it('computes poses from the robot size and the shooter direction', () => {

@@ -5,8 +5,7 @@
  "env": "onboard",
  "description": "The earlier default for the right start position, with lane sweeps: the first TIP from the pre-loads, then load the audience CELL after the left robot's TIP, sweep, launch for a third TIP, and PARK.",
  "meta": {
-  "start": "right",
-  "partner": "lane-sweep-pair-left"
+  "start": "right"
  },
  "defs": {
   "full": "bots.me.transfer.full",

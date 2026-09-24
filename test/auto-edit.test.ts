@@ -1,6 +1,6 @@
 import RAPIER from '@dimforge/rapier3d-compat';
 import { beforeAll, describe, expect, it } from 'vitest';
-import { editHandles, editedCopy, findNode, isEdited, moveHandle, poseText, resetHandle, sharedWith, shiftPose, turnHandle } from '../src/auto/auto-edit';
+import { clonePlan, editHandles, findNode, isEdited, moveHandle, planId, poseText, resetHandle, sharedWith, shiftPose, sourceOf, turnHandle } from '../src/auto/auto-edit';
 import { AUTO_SOURCES, AUTO_TREES, BUILT_IN_AUTO, addAutoTree, removeAutoTree } from '../src/auto/onboard';
 import { Coach } from '../src/auto/coach';
 import { literalNumber, splitCall, type CNode } from '../src/bt';
@@ -11,6 +11,7 @@ beforeAll(async () => { await RAPIER.init(); });
 type Json = Record<string, unknown>;
 const newSim = () => new Sim(RAPIER, undefined, 'full', 3, { opponent: true, partners: true });
 const source = (id: string) => AUTO_SOURCES[id] as Json;
+const copy = (id: string) => clonePlan(source(id), { id: `${id}-test`, name: `${source(id).name} (test)`, description: 'A copy for a test.' });
 const leaves = (n: CNode, out: CNode[] = []) => { if (n.leaf) out.push(n); n.children.forEach(c => leaves(c, out)); return out; };
 
 describe('expression helpers', () => {
@@ -67,7 +68,7 @@ describe('field edits', () => {
     expect(Math.cos(blue[0].sim.heading! - red[0].sim.heading! - Math.PI)).toBeCloseTo(1, 9);
   });
   it('moves and turns a drive pose, and moves a waypoint', () => {
-    const view = newSim().view(0), id = 'solo-two-tip-sweep', tree = editedCopy(source(id)); addAutoTree(tree);
+    const view = newSim().view(0), id = 'solo-two-tip-sweep', tree = copy(id); addAutoTree(tree);
     try {
       const at = (t: Json) => editHandles(AUTO_TREES[String(t.id)], view);
       const drive = at(tree)[0], lane = at(tree).find(h => h.kind === 'waypoint')!;
@@ -91,12 +92,16 @@ describe('field edits', () => {
   });
 });
 
-describe('edited copies', () => {
-  it('gets its own id and name, and names the original', () => {
-    const c = editedCopy(source('leave-and-park')), c2 = editedCopy(source('leave-and-park'), 2);
-    expect([c.id, c.name, (c.meta as Json).editedFrom]).toEqual(['leave-and-park-edited', `${source('leave-and-park').name} (edited)`, 'leave-and-park']);
-    expect([c2.id, c2.name]).toEqual(['leave-and-park-edited-2', `${source('leave-and-park').name} (edited 2)`]);
-    expect(editedCopy(c)).toBe(c);
+describe('plans', () => {
+  it('gets an id from its name, and names the plan that it was copied from', () => {
+    const taken = new Set(['rear-sweep-first']);
+    expect(planId('Rear sweep first!', id => taken.has(id))).toBe('rear-sweep-first-2');
+    expect(planId('  Élan: 2 TIPS  ', () => false)).toBe('elan-2-tips');
+    expect(planId('***', () => false)).toBe('plan');
+    const c = clonePlan(source('leave-and-park'), { id: 'my-park', name: 'My PARK', description: 'Parks.' });
+    expect([c.id, c.name, c.description, sourceOf(c)]).toEqual(['my-park', 'My PARK', 'Parks.', 'leave-and-park']);
+    expect(sourceOf(clonePlan(c, { id: 'my-park-2', name: 'My PARK 2', description: 'Parks again.' }))).toBe('my-park');
+    expect(sourceOf(source('leave-and-park'))).toBeNull();
   });
   it("can't replace or remove a built-in tree", () => {
     expect(() => addAutoTree(source('leave-and-park'))).toThrow(/built in/);
@@ -104,9 +109,9 @@ describe('edited copies', () => {
     expect(BUILT_IN_AUTO.size).toBe(8);
   });
   it('runs in the match: a moved first pose moves where the robot launches', () => {
-    const id = 'solo-two-tip-sweep', copy = editedCopy(source(id)), s1 = editHandles(AUTO_TREES[id], newSim().view(0))[0];
+    const id = 'solo-two-tip-sweep', plan = copy(id), s1 = editHandles(AUTO_TREES[id], newSim().view(0))[0];
     // Move the first launch pose 0.25 m toward the center line.
-    const moved = moveHandle(copy, s1, { x: s1.pose.x + 0.25, y: s1.pose.y }); addAutoTree(moved);
+    const moved = moveHandle(plan, s1, { x: s1.pose.x + 0.25, y: s1.pose.y }); addAutoTree(moved);
     try {
       const at = (tree: string) => {
         const sim = newSim(); sim.start(); const c = new Coach(); c.autoOverride = tree;

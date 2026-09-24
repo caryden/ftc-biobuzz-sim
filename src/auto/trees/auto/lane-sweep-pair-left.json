@@ -5,8 +5,7 @@
  "env": "onboard",
  "description": "For the left start position, on the rear wall: fill the rear CELL for the second TIP, sweep the rear spill, and PARK.",
  "meta": {
-  "start": "left",
-  "partner": "lane-sweep-pair-right"
+  "start": "left"
  },
  "defs": {
   "full": "bots.me.transfer.full",
