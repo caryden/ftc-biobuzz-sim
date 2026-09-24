@@ -191,8 +191,20 @@ export class View {
 
   /** Draws the partner's AUTO trajectory, dimmed, beside the plan that `showAutoPlan` draws. Null hides it. */
   showOtherPlan(plan: { path: { x: number; z: number }[] } | null, key: string) {
-    this.otherLine.visible = !!plan; if (!plan || key === this.otherKey) return; this.otherKey = key;
+    this.otherLine.visible = !!plan; if (!plan || key === this.otherKey) return; this.otherKey = key; this.otherPath = plan.path;
     this.otherLine.geometry.dispose(); this.otherLine.geometry = new THREE.BufferGeometry().setFromPoints(plan.path.map(q => new THREE.Vector3(q.x, 0.007, q.z))); this.otherLine.computeLineDistances();
+  }
+
+  private otherPath: { x: number; z: number }[] = [];
+  /** Checks whether a screen point is within 10 pixels of the dimmed path that `showOtherPlan` draws. */
+  nearOtherPlan(clientX: number, clientY: number): boolean {
+    if (!this.otherLine.visible) return false;
+    const px = this.otherPath.map(q => { const v = new THREE.Vector3(q.x, 0.007, q.z).project(this.camera); return { x: ((v.x + 1) / 2) * innerWidth, y: ((1 - v.y) / 2) * innerHeight }; });
+    for (let i = 1; i < px.length; i++) {
+      const a = px[i - 1], b = px[i], dx = b.x - a.x, dy = b.y - a.y, l2 = dx * dx + dy * dy, t = l2 ? Math.max(0, Math.min(1, ((clientX - a.x) * dx + (clientY - a.y) * dy) / l2)) : 0;
+      if (Math.hypot(a.x + t * dx - clientX, a.y + t * dy - clientY) <= 10) return true;
+    }
+    return false;
   }
 
   private debugLines = new THREE.Group();

@@ -115,6 +115,11 @@ $('bcdefault').onclick = () => applyPreset(metaBot); $('bcbaseline').onclick = (
 // In the review, a click on a robot adds a note instead, and the position goes to the review bar.
 canvas.addEventListener('click', e => {
   if (editor.takeClick()) return;
+  // In the editor, a click on the other red robot, or near its dimmed path, shows that robot's plan.
+  if (editor.active) {
+    const k = view.pickRobot(e.clientX, e.clientY), other = 1 - editor.robot;
+    if (k === other || (k === null && view.nearOtherPlan(e.clientX, e.clientY))) { editor.showRobot(other); return; }
+  }
   if (review.active && view.pickRobot(e.clientX, e.clientY) !== null) return; const q = view.pickFloor(e.clientX, e.clientY); if (!q) return;
   const text = `Field position: ${fmtPos(q.x, q.y, units)}`;
   if (review.active) $('nsaved').textContent = text; else sim.say(text);
@@ -190,10 +195,14 @@ function paintTree() {
   if (!editor.active) view.insetLeft = 0;
   if (!on) return;
   const i = treeRobot >= 0 ? treeRobot : focus(), plate = bots[i].plate;
-  const botsKey = `${i}:${bots.map(b => b.plate).join(',')}`;
+  // The buttons are built in one place and only when they change: a button that is replaced between the press and the
+  // release of a click never receives the click. In the editor they are the two red robots, in the order that the
+  // drivers see them on the FIELD: R1 starts on the left, and R0 on the right.
+  const order = editor.active ? [1, 0] : [0, 1, 2, 3], picked = editor.active ? editor.robot : i;
+  const botsKey = `${editor.active ? 'edit' : 'view'}:${picked}:${bots.map(b => b.plate).join(',')}`;
   if (botsKey !== treeBotsKey) {
     treeBotsKey = botsKey;
-    $('treebots').innerHTML = bots.map((b, k) => `<button data-k="${k}" class="${k === i ? 'on' : ''}" style="border-color:var(--${k < 2 ? 'red' : 'blue'})">${b.plate}</button>`).join('');
+    $('treebots').innerHTML = order.map(k => `<button data-k="${k}" class="${k === picked ? 'on' : ''}" style="border-color:var(--${k < 2 ? 'red' : 'blue'})">${bots[k].plate}</button>`).join('');
   }
   // The panel fills the space between the score panel and whatever is at the bottom left: the log, or the review bar.
   const below = review.active ? $('review') : editor.active ? $('autoedit') : $('log');
@@ -201,9 +210,6 @@ function paintTree() {
   if (editor.active) {
     // The overhead view keeps the FIELD clear of this panel, because the rear-side plans run under it.
     view.insetLeft = el.getBoundingClientRect().right + 8;
-    // The editor's buttons are the two red robots: plans are written in red's frame.
-    const key = `edit:${editor.robot}:${bots[0].plate},${bots[1].plate}`;
-    if (key !== treeBotsKey) { treeBotsKey = key; $('treebots').innerHTML = [0, 1].map(k => `<button data-k="${k}" class="${k === editor.robot ? 'on' : ''}" style="border-color:var(--red)">${bots[k].plate}</button>`).join(''); }
     treePanel.paint(`${bots[editor.robot].plate} · AUTO plan`, editor.def, { running: new Set(), last: new Map() }, 'This robot runs no AUTO plan.', editor.treeEdit());
     return;
   }
