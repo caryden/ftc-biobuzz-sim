@@ -5,8 +5,7 @@
  "env": "onboard",
  "description": "For the right start position, on the alliance wall: the first TIP from the pre-loads, the red FLOWER during the wait for the left robot's TIP, then an angled sweep of the audience wall from the center line to the corner, a third TIP, a second sweep after the spill lands, and a launch into the rear CELL for a fourth TIP.",
  "meta": {
-  "start": "right",
-  "partner": "wall-sweep-pair-left"
+  "start": "right"
  },
  "defs": {
   "full": "bots.me.transfer.full",

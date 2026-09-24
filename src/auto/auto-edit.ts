@@ -164,12 +164,25 @@ export function sharedWith(tree: Json, def: TreeDef, h: Handle): string[] {
 }
 
 /**
- * Makes an edited copy of a tree file: the id gets `-edited`, the name gets "(edited)", and `meta.editedFrom` names the
- * original. An edited copy comes back as it is, so a second edit doesn't copy it again.
- * @param n The copy's number. From 2, the id gets `-edited-N` and the name "(edited N)", so that a second copy of one tree doesn't replace the first.
+ * Makes a tree id from a plan's name: lowercase letters, digits, and hyphens, at most 64 characters, and unique among
+ * `taken`. A name with no letter or digit gets the id `plan`. A taken id gets `-2`, `-3`, and so on.
  */
-export function editedCopy(tree: Json, n = 1): Json {
-  const meta = (tree.meta ?? {}) as Json; if (typeof meta.editedFrom === 'string') return tree;
-  const suffix = n > 1 ? `-edited-${n}` : '-edited', label = n > 1 ? ` (edited ${n})` : ' (edited)';
-  return { ...structuredClone(tree), id: `${String(tree.id).slice(0, 64 - suffix.length)}${suffix}`, name: `${String(tree.name).slice(0, 80 - label.length)}${label}`, meta: { ...meta, editedFrom: tree.id } };
+export function planId(name: string, taken: (id: string) => boolean): string {
+  const base = name.toLowerCase().normalize('NFKD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 58).replace(/-+$/, '') || 'plan';
+  let id = base; for (let n = 2; taken(id); n++) id = `${base}-${n}`;
+  return id;
 }
+
+/**
+ * Makes a plan from a copy of a tree file, with its own id, name, and description. `meta.clonedFrom` names the
+ * source, so that the editor can reset a step to the source's value.
+ */
+export function clonePlan(tree: Json, plan: { id: string; name: string; description: string }): Json {
+  const { editedFrom: _, clonedFrom: __, ...meta } = (tree.meta ?? {}) as Json;
+  return { ...structuredClone(tree), id: plan.id, name: plan.name, description: plan.description, meta: { ...meta, clonedFrom: tree.id } };
+}
+
+/** Gets the id of the tree that a plan was copied from, or null for a tree that isn't a copy. */
+export const sourceOf = (tree: Json): string | null => {
+  const m = (tree.meta ?? {}) as Json, from = m.clonedFrom ?? m.editedFrom; return typeof from === 'string' ? from : null;
+};

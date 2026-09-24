@@ -134,6 +134,7 @@ Transit is about 73% of TELEOP. The changes that paid were the ones that removed
 | `e91-turret-270deg-360dps-aimed` | The turret of e87, 270° at 360°/s, and the AUTO hold | 844 ± 4.9 | Kept. +26.6 ± 10.1 against e77, no turret, and -12.8 ± 10.8 against e79, the ideal turret. AUTO points 191.2. |
 | `e92-turret-180deg-180dps-aimed` | The turret of e88, 180° at 180°/s, and the AUTO hold | 851 ± 7.9 | Kept. +33.9 ± 13.3 against e77, and +39.7 ± 10.3 against e88 without the hold. AUTO points 190.3. |
 | `e93-turret-360deg-90dps-aimed` | The turret of e89, 360° at 90°/s, and the AUTO hold | 796 ± 7.3 | Kept. -21.2 ± 10.0 against e77: a 90°/s turret is slower than the robot turns, and the robot waits for it at the spot. AUTO points 190.3, where e89 had 142.6. |
+| `e94-editor-flow` | The AUTO editor makes plans with **Create new**, and the tree files lose `meta.partner`, which no code read | 817 ± 9.3 | Identical to e90 on every seed. |
 
 Net for the planner: 736 to 800 combined on the default robots, or about +32 per alliance. The standard error of that difference is about 11.
 

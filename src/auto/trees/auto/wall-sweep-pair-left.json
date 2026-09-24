@@ -5,8 +5,7 @@
  "env": "onboard",
  "description": "For the left start position: the lane-sweep pair's left robot, but after its own TIP the robot waits 3 s for the spill and drives into the rear wall pocket between the rear FLOWER and the center line. Over 24 seeds it scores the same as the lane-sweep pair's left robot.",
  "meta": {
-  "start": "left",
-  "partner": "wall-sweep-pair-right"
+  "start": "left"
  },
  "defs": {
   "full": "bots.me.transfer.full",

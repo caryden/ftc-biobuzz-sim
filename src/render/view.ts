@@ -15,6 +15,8 @@ export class View {
   mode: CameraMode = 'driver';
   /** The number plate text of each robot, in `sim.robots` order. A missing entry shows the alliance letter and the slot. */
   plates: string[] = [];
+  /** Pixels at the left edge that a panel covers. The overhead camera centers the FIELD in the rest of the window. */
+  insetLeft = 0;
   private ballGeo: Record<'pollen' | 'nectar', THREE.BufferGeometry> = { pollen: new THREE.SphereGeometry(FIELD.pollenRadius, 20, 14), nectar: new THREE.SphereGeometry(FIELD.nectarRadius, 20, 14) };
   private ballMat = new Map<BallKind, THREE.Material>();
   private ballMeshes = new Map<number, THREE.Mesh>();
@@ -24,6 +26,7 @@ export class View {
   private pathLine = new THREE.Line(new THREE.BufferGeometry(), new THREE.LineBasicMaterial({ color: 0x3ab7ff }));
   private autoLine = new THREE.Line(new THREE.BufferGeometry(), new THREE.LineDashedMaterial({ color: 0xffa726, dashSize: 0.08, gapSize: 0.05 }));
   private autoPoses = new THREE.Group(); private autoKey = '';
+  private otherLine = new THREE.Line(new THREE.BufferGeometry(), new THREE.LineDashedMaterial({ color: 0xffa726, dashSize: 0.05, gapSize: 0.06, transparent: true, opacity: 0.35 })); private otherKey = '';
   private arc: THREE.Line; private arcMat = new THREE.LineBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.85 });
   private staticKey = ''; private chaseAngle: number | null = null;
 
@@ -37,7 +40,7 @@ export class View {
     for (const k of Object.keys(COLOR) as BallKind[]) this.ballMat.set(k, new THREE.MeshStandardMaterial({ color: COLOR[k], roughness: 0.45, side: THREE.DoubleSide }));
     this.buildFloor(); this.buildAxisLabels();
     this.scene.add(this.staticBalls);
-    this.arc = new THREE.Line(new THREE.BufferGeometry(), this.arcMat); this.arc.frustumCulled = false; this.pathLine.frustumCulled = false; this.autoLine.frustumCulled = false; this.scene.add(this.arc, this.pathLine, this.autoLine, this.autoPoses);
+    this.arc = new THREE.Line(new THREE.BufferGeometry(), this.arcMat); this.arc.frustumCulled = false; this.pathLine.frustumCulled = false; this.autoLine.frustumCulled = false; this.otherLine.frustumCulled = false; this.scene.add(this.arc, this.pathLine, this.autoLine, this.autoPoses, this.otherLine);
     this.loadField(); this.loadBalls();
     addEventListener('resize', () => this.resize()); this.resize();
   }
@@ -149,14 +152,15 @@ export class View {
   /**
    * Draws the field editor's handles: a disc at each pose, and for a drive step a line to a knob that sets its heading.
    * A selected handle is white and larger, and an edited one has a green ring. Handles draw over the FIELD elements, so
-   * that a pose under a FLOWER stays visible. An empty list clears them.
+   * that a pose under a FLOWER stays visible. Handles that can't be dragged, on a plan that isn't being edited, are
+   * faint. An empty list clears them.
    */
-  showHandles(list: readonly { x: number; z: number; heading?: number; kind: 'drive' | 'waypoint'; selected: boolean; edited: boolean }[]) {
+  showHandles(list: readonly { x: number; z: number; heading?: number; kind: 'drive' | 'waypoint'; selected: boolean; edited: boolean }[], editable = true) {
     if (!this.handleGroup.parent) { this.handleGroup.renderOrder = 10; this.scene.add(this.handleGroup); }
     this.handleGroup.traverse(o => { const m = o as THREE.Mesh; if (m.isMesh || (o as THREE.Line).isLine) { m.geometry.dispose(); (m.material as THREE.Material).dispose(); } });
     this.handleGroup.clear();
     const flat = (geo: THREE.BufferGeometry, color: number, x: number, z: number, y: number) => {
-      const m = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ color, depthTest: false, transparent: true, side: THREE.DoubleSide }));
+      const m = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ color, depthTest: false, transparent: true, opacity: editable ? 1 : 0.6, side: THREE.DoubleSide }));
       m.rotation.x = -Math.PI / 2; m.position.set(x, y, z); m.renderOrder = 10; this.handleGroup.add(m); return m;
     };
     for (const h of list) {
@@ -165,7 +169,7 @@ export class View {
       flat(new THREE.CircleGeometry(r, 32), color, h.x, h.z, 0.022);
       if (h.heading === undefined) continue;
       const kx = h.x + KNOB * Math.cos(h.heading), kz = h.z - KNOB * Math.sin(h.heading);
-      const line = new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(h.x, 0.022, h.z), new THREE.Vector3(kx, 0.022, kz)]), new THREE.LineBasicMaterial({ color, depthTest: false, transparent: true }));
+      const line = new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(h.x, 0.022, h.z), new THREE.Vector3(kx, 0.022, kz)]), new THREE.LineBasicMaterial({ color, depthTest: false, transparent: true, opacity: editable ? 1 : 0.6 }));
       line.renderOrder = 10; line.frustumCulled = false; this.handleGroup.add(line);
       flat(new THREE.CircleGeometry(0.035, 20), color, kx, kz, 0.023);
     }
@@ -183,6 +187,24 @@ export class View {
       const d = px(h.x, h.z); if (d < bestPx) { bestPx = d; best = { index, part: 'pose' }; }
     });
     return best;
+  }
+
+  /** Draws the partner's AUTO trajectory, dimmed, beside the plan that `showAutoPlan` draws. Null hides it. */
+  showOtherPlan(plan: { path: { x: number; z: number }[] } | null, key: string) {
+    this.otherLine.visible = !!plan; if (!plan || key === this.otherKey) return; this.otherKey = key; this.otherPath = plan.path;
+    this.otherLine.geometry.dispose(); this.otherLine.geometry = new THREE.BufferGeometry().setFromPoints(plan.path.map(q => new THREE.Vector3(q.x, 0.007, q.z))); this.otherLine.computeLineDistances();
+  }
+
+  private otherPath: { x: number; z: number }[] = [];
+  /** Checks whether a screen point is within 10 pixels of the dimmed path that `showOtherPlan` draws. */
+  nearOtherPlan(clientX: number, clientY: number): boolean {
+    if (!this.otherLine.visible) return false;
+    const px = this.otherPath.map(q => { const v = new THREE.Vector3(q.x, 0.007, q.z).project(this.camera); return { x: ((v.x + 1) / 2) * innerWidth, y: ((1 - v.y) / 2) * innerHeight }; });
+    for (let i = 1; i < px.length; i++) {
+      const a = px[i - 1], b = px[i], dx = b.x - a.x, dy = b.y - a.y, l2 = dx * dx + dy * dy, t = l2 ? Math.max(0, Math.min(1, ((clientX - a.x) * dx + (clientY - a.y) * dy) / l2)) : 0;
+      if (Math.hypot(a.x + t * dx - clientX, a.y + t * dy - clientY) <= 10) return true;
+    }
+    return false;
   }
 
   private debugLines = new THREE.Group();
@@ -269,7 +291,14 @@ export class View {
 
     const side = sim.alliance === 'red' ? -1 : 1;
     if (this.mode === 'driver') { this.camera.fov = 52; this.camera.position.set(side * 3.5, 1.68, side * -0.6); this.camera.lookAt(side * -0.2, 0.3, 0); }
-    else if (this.mode === 'overhead') { this.camera.fov = 40; this.camera.position.set(0, 6.4, 0.001); this.camera.up.set(side < 0 ? 1 : -1, 0, 0); this.camera.lookAt(0, 0, 0); }
+    else if (this.mode === 'overhead') {
+      this.camera.fov = 40; this.camera.position.set(0, 6.4, 0.001); this.camera.up.set(side < 0 ? 1 : -1, 0, 0); this.camera.lookAt(0, 0, 0);
+      // Slide the camera along the screen's horizontal axis by half the inset, so that the FIELD centers in the uncovered part.
+      if (this.insetLeft > 0) {
+        const pxPerM = innerHeight / (2 * 6.4 * Math.tan(((this.camera.fov / 2) * Math.PI) / 180)), right = new THREE.Vector3(1, 0, 0).applyQuaternion(this.camera.quaternion);
+        this.camera.position.addScaledVector(right, -this.insetLeft / 2 / pxPerM);
+      }
+    }
     else if (this.mode === 'audience') { this.camera.fov = 50; this.camera.position.set(0, 2.4, 4.4); this.camera.lookAt(0, 0.4, 0); }
     else {
       // The chase camera orbits the robot so that it always looks toward the robot's own HIVE: it sits on the line from the

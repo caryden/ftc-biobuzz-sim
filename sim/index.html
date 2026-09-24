@@ -51,6 +51,9 @@
   #marks { position: absolute; left: 8px; right: 8px; top: 0; height: 0; } #marks i { position: absolute; top: -3px; width: 10px; height: 10px; margin-left: -5px; border-radius: 50%; border: 2px solid #14171c; cursor: pointer; }
   #scrubtime { font: 700 13px ui-monospace, SFMono-Regular, Menlo, monospace; min-width: 118px; text-align: center; } #nsaved { color: var(--dim); font-size: 11px; max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   input[type=text] { background: #232831; color: var(--fg); border: 1px solid var(--line); border-radius: 6px; padding: 4px 8px; font: inherit; }
+  #aenew { top: 84px; left: 50%; transform: translateX(-50%); width: 340px; z-index: 6; } #aenew h2 { color: var(--fg); } #aenew label { gap: 8px; } #aenew input, #aenew select { width: 220px; }
+  #aenew .btns { display: flex; gap: 6px; margin-top: 8px; } #aenew .btns button { margin: 0; } #aeerr { color: #ff8a80; font-size: 12px; min-height: 16px; margin-top: 4px; }
+  #aestatus { color: var(--dim); font-size: 11px; } #aestatus.warn { color: #ffb74d; }
   #notepop { width: 300px; z-index: 5; } #notepop h2 { color: var(--fg); } #notepop .btns { display: flex; gap: 6px; margin-top: 6px; } #notepop .btns button { margin: 0; }
   body.reviewing #botcfg, body.reviewing #right, body.reviewing #bottom, body.reviewing #log, body.reviewing #help, body.reviewing #banner, body.reviewing #final { display: none !important; }
   body.reviewing canvas { cursor: crosshair; }
@@ -96,7 +99,7 @@
   <label>Sound <select id="sound"><option value="on">On</option><option value="off">Off</option></select></label>
   <label title="Shows a robot's behavior tree: the running nodes, and each other node's last result. It follows the review cursor too.">Tree view <select id="treeview"><option value="off">Off</option><option value="on">On</option></select></label>
   <label>Referee <select id="referee"><option value="rule">PINS (G421)</option><option value="off">Off</option></select></label>
-  <button id="start" class="primary">Start match (Enter)</button><button id="reset">Reset field (R)</button><button id="reviewbtn">Review match (V)</button>
+  <button id="start" class="primary">Start match (Enter)</button><button id="reset">Reset field (R)</button><button id="reviewbtn">Review match (V)</button><button id="editauto" title="Shows the red robots' AUTO plans on the FIELD. Create a plan from a copy of any plan, and drag its poses.">Edit AUTO paths</button>
 </div>
 <div id="botcfg" class="panel hidden"><h2 id="bchead"></h2>
   <label>Number plate <input id="bcplate" type="text" maxlength="6"></label>
@@ -108,7 +111,7 @@
   <label id="bcturretrow" title="The turret's range of motion, centered on the shooter's facing, and its top turn rate. An empty turn rate is an instant slew.">Turret range, ° <input id="bcturretrange" type="number" min="30" max="360" step="5"></label>
   <label id="bcslewrow">Turret turn rate, °/s <input id="bcturretslew" type="number" min="10" max="3600" step="10" placeholder="instant"></label>
   <label>AUTO plan <select id="bcauto"></select></label>
-  <button id="bcedit" type="button" title="Drag the AUTO poses on the FIELD, in red's frame. Blue robots run the same tree rotated 180°. The first edit makes an edited copy of the tree, which this robot runs and this browser keeps.">Edit the AUTO poses on the FIELD</button>
+  <button id="bcedit" type="button" title="Opens the AUTO editor on this robot. Plans are written in red's frame, and blue robots run them rotated 180°.">Edit AUTO paths</button>
   <label>TELEOP plan <select id="bcplan"><option value="0">Keep tipping</option><option value="30">FLOWERS from 30 s</option><option value="45">FLOWERS from 45 s</option><option value="66">FLOWERS from 66 s</option></select></label>
   <div class="errhead"><span title="How much one shot differs from the next, as one standard deviation. Measure it: launch 20 elements from one spot.">Launcher error, 1 SD</span><span class="chips"><button type="button" data-err="1">1x</button><button type="button" data-err="3">3x</button><button type="button" data-err="5">5x</button></span></div>
   <label>Elevation, ° <input id="bcelev" type="number" min="0" max="15" step="0.1"></label>
@@ -135,8 +138,14 @@
 </div>
 <div id="notepop" class="panel hidden"><h2 id="nhead"></h2><textarea id="ntext" rows="3" placeholder="What happened here?"></textarea>
   <div class="btns"><button id="nsave" class="primary">Save (Enter)</button><button id="ndel">Delete</button><button id="ncancel">Cancel (Esc)</button></div></div>
-<div id="autoedit" class="panel hidden"><div class="aeinfo"><div><span id="aehead"></span> <span id="aeframe"></span></div><div id="aesel"></div></div>
-  <button id="aereset" title="Moves the selected step's poses back to where the original tree has them.">Reset this step</button><button id="aerevert" title="Deletes the edited copy. Every robot that ran it runs the original tree.">Revert to the original</button><button id="aedone" class="primary">Done</button></div>
+<div id="autoedit" class="panel hidden"><div class="aeinfo"><div><span id="aehead"></span> <span id="aestatus"></span> <span id="aeframe"></span></div><div id="aesel"></div></div>
+  <button id="aeedit" title="Lets you drag the poses of this plan.">Edit</button><button id="aecreate" title="Makes a new plan from a copy of any plan for this robot's start position. The new plan becomes this robot's plan.">Create new</button><button id="aereset" title="Moves the selected step's poses back to where the plan that this one was copied from has them.">Reset this step</button><button id="aedelete" title="Deletes this plan. Every robot that ran it goes back to the plan that it was copied from.">Delete plan</button><button id="aedone" class="primary">Done</button></div>
+<div id="aenew" class="panel hidden"><h2>New AUTO plan</h2>
+  <label>Copy of <select id="aefrom"></select></label>
+  <label>Name <input id="aename" type="text" maxlength="80" placeholder="For example, Rear sweep first"></label>
+  <textarea id="aedesc" rows="3" placeholder="What the plan does, in a sentence or two"></textarea>
+  <div id="aeerr"></div>
+  <div class="btns"><button id="aemake" class="primary">Create</button><button id="aecancel">Cancel</button></div></div>
 <div id="final" class="panel hidden"></div>
 <div id="banner" class="panel hidden"></div>
 <script type="module" src="/src/main.ts"></script>
