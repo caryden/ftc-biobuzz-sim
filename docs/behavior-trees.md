@@ -1,10 +1,10 @@
 # Behavior-tree policies
 
-**Status: increments 1 to 7 are built; the rest is proposed.** The [plan](#plan) has two parts. Increments 1 to 5
+**Status: increments 1 to 8 are built; the rest is proposed.** The [plan](#plan) has two parts. Increments 1 to 5
 are done: the runtime in `src/bt/`, both periods as trees in `src/auto/trees/auto/` and `src/auto/trees/teleop/`, every
 TELEOP decision in the TELEOP tree, and a tree view on the simulator page, live and in review. The AUTO editor is the
-second part. Its first two increments are done: trees in FIELD x and y with a field editor that drags AUTO poses, and
-AUTO leaves that command the robot's subsystems. For how the simulator works, see [How the simulator works](simulator.md).
+second part. Its first three increments are done: trees in FIELD x and y with a field editor that drags AUTO poses,
+AUTO leaves that command the robot's subsystems, and plans that you create, name, and edit. For how the simulator works, see [How the simulator works](simulator.md).
 
 This document proposes replacing the robot's decision code with behavior trees. A behavior tree is a tree of small
 nodes. The inner nodes decide what runs, and the leaves read the field and drive the robot. The same tree format
@@ -417,8 +417,8 @@ level also has these fields:
 - **`id`:** a stable slug, for example `wall-sweep-pair-right`. Robot setups and the catalog refer to a tree by it.
 - **`name`:** the name that people see, for example "Wall-sweep pair: right robot".
 - **`description`:** optional text for the AUTO list and the catalog.
-- **`meta`:** optional data for the host, which the loader doesn't check. AUTO trees give their start position and,
-  for a pair, the partner's id.
+- **`meta`:** optional data for the host, which the loader doesn't check. AUTO trees give their start position, and a
+  plan that the editor made names its source in `clonedFrom`.
 
 A leaf is a `ref` to a registered leaf type, with `params`. Each parameter's schema says whether it takes an expression.
 An enum parameter, such as an intake mode, takes a plain value. Any node can carry a `note`, which keeps the reason for
@@ -436,7 +436,7 @@ the drive ends or the transfer is full:
   "name": "Lane-sweep pair: right robot",
   "env": "onboard",
   "description": "The earlier default for the right start position, with lane sweeps: the first TIP from the ...",
-  "meta": { "start": "right", "partner": "lane-sweep-pair-left" },
+  "meta": { "start": "right" },
   "defs": {
     "full": "bots.me.transfer.full",
     "len": "bots.me.dimensions.length",
@@ -502,10 +502,29 @@ Chain values aren't recorded yet: the page's recorders don't store node inputs a
 
 ## Editing AUTO poses
 
-The field editor in `src/field-editor.ts` edits a red robot's AUTO poses before a MATCH. To open it, click **Edit the
-AUTO poses on the FIELD** in a red robot's config. For a blue robot, the button is disabled, because a blue robot runs a
-red tree rotated. The camera changes to **Overhead**, the tree view shows the robot's AUTO tree, and the bar at the
-bottom names the frame. A step with handles has a dot after its leaf name.
+The AUTO editor in `src/field-editor.ts` shows the red robots' AUTO plans on the FIELD before a MATCH, and edits the
+poses of plans that you created. To open it, click **Edit AUTO paths** in the right-hand panel, or in a red robot's
+config. The camera changes to **Overhead**, with the FIELD beside the tree view, and the buttons above the tree pick
+either red robot. The other robot's path draws dimmed. Plans are written in red's frame, and a blue robot runs them
+rotated 180°, so the editor works on the red robots. A step with handles has a dot after its leaf name, and clicking a
+step or a handle selects the other.
+
+System plans, the tree files, are read-only. To change one, follow these steps:
+
+1. Click **Create new**, pick the plan to copy, and give the new plan a name and a description. The list holds the
+   plans for the robot's start position. The new plan becomes the robot's plan, and editing starts.
+2. Drag a pose, its heading knob, or a waypoint.
+3. Click **Done**.
+
+**Edit** starts editing a plan that you created earlier. **Reset this step** moves a step's handles back to where the
+plan that this one was copied from has them, and **Delete plan** deletes it: a robot that ran it goes back to its source
+plan, or to **Default** when that's the robot's default. The bar warns about a plan for the other start position. A
+plan has no partner field: you pick each red robot's plan, and **Default** keeps its pairing in `autoFor`.
+
+A plan's id comes from its name, for example `rear-sweep-first`, and `meta.clonedFrom` names its source. Plans that an
+earlier version made with a drag have `meta.editedFrom` instead, and they load as your plans. The browser keeps your
+plans in local storage under `biobuzz.trees.v2`, and the page loads them before the robot setups. A plan lives in one
+browser only: sharing is increment 12.
 
 A drive step's `pose` is an expression, such as `launchAudience`, which is computed from the robot's size and shooter
 direction. A drag changes the expression by one rule, in `shiftPose` in `src/auto/auto-edit.ts`:
@@ -518,16 +537,9 @@ direction. A drag changes the expression by one rule, in `shiftPose` in `src/aut
 
 So a step keeps following the robot's size, and the other steps that use the same definition don't move. The bar names
 them, for example "also used by s6, s11". An offset that comes back to zero goes away, so a drag back to the start
-restores the step as it was written. Positions round to 1 mm and headings to 0.5°. A path's waypoints are numbers, which
-`scripts/plan-sweeps.ts` writes for the sweeps, so a drag changes a waypoint itself. `src/auto/auto-edit.ts` has no DOM, so
-`test/auto-edit.test.ts` runs it.
-
-The first edit of a built-in tree makes an edited copy: the id gets `-edited`, the name gets "(edited)", and
-`meta.editedFrom` names the original. A second copy of one tree gets `-edited-2`. The robot switches to the copy. The
-browser keeps the copies in local storage under `biobuzz.trees.v2`, and the page loads them before the robot setups.
-**Reset this step** moves a step's handles back to the original. **Revert to the original** deletes the copy, and a
-robot whose default is the original goes back to **Default**. A copy lives in one browser only: sharing is increment
-12. Increment 8 replaces the edited copies with plans that you create and name.
+restores the step as it was written. Positions round to 1 mm and headings to 0.5°. A path's waypoints are numbers,
+which `scripts/plan-sweeps.ts` writes for the sweeps, so a drag changes a waypoint itself. `src/auto/auto-edit.ts` has
+no DOM, so `test/auto-edit.test.ts` runs it.
 
 ## Code leaves in a sandbox
 
@@ -736,16 +748,11 @@ tree in the page. Each increment is one pull request.
    - **`waitUntil`:** `e77-wait-until` is -7.3 ± 11.2 against e76, which is noise. The camera and clock waits lost
      their idle step. Against e73, before this increment, the total is +3.5 ± 8.4.
 
-8. **The editor flow.** An **Edit AUTO paths** button in the right-hand panel opens the editor, in red's frame, with
-   buttons for the two red robots above the tree. Both robots' paths show on the FIELD, and the other robot's is dimmed.
-   For the selected robot:
-   - **Edit** opens its plan. A system plan is read-only, so the button is disabled for it.
-   - **Create new** asks for a name, a description, and a plan to clone, which defaults to the robot's plan. The new
-     plan becomes the robot's plan.
-
-   A plan has no partner field: you pick each red robot's plan, and you can edit one or both. `meta.partner` goes
-   away, and **Default** keeps its pairing in `autoFor`. `meta.start` stays, and the editor warns about a plan for the
-   other start position.
+8. **The editor flow. Done.** **Edit AUTO paths** in the right-hand panel opens the editor on the red robots, and
+   the other robot's path draws dimmed. **Create new** copies a plan under a name and a description, **Edit** edits a
+   plan that you created, and system plans are read-only. `meta.partner` is gone. See
+   [Editing AUTO poses](#editing-auto-poses). The scores don't change: `e94-editor-flow` equals `e90-aimed-check` on
+   every seed.
 9. **Forms, definitions, validation, and undo.** A leaf's parameter schema drives a form: types, units, limits, enums,
    and doc strings. An expression field uses CodeMirror 6, which loads only with the editor: highlighting, completion
    from the environment schema and the tree's definitions, and errors from `src/bt/expr.ts`. A panel edits the

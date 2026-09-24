@@ -34,9 +34,10 @@ robot that is square to the wall fits legally.
 
 ## The AUTO editor
 
-The field editor drags AUTO poses. Increments 7 to 11 of the [behavior-tree plan](behavior-trees.md#plan) make it an
-editor for whole AUTO trees: motion and intake leaves, plans that you create and name, parameter forms and an
-expression editor, structure editing, and a quick AUTO run with a timeline of both red robots.
+The AUTO editor makes plans and drags their poses. Increments 9 to 11 of the
+[behavior-tree plan](behavior-trees.md#plan) make it an editor for whole AUTO trees: parameter forms and an expression
+editor, structure editing, and a quick AUTO run with a timeline of both red robots. A plan's name and description
+can't be changed after **Create new** yet.
 
 ## Turret follow-ups
 
