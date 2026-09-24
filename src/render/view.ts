@@ -28,6 +28,8 @@ export class View {
   plates: string[] = [];
   /** Pixels at the left edge that a panel covers. The overhead camera centers the FIELD in the rest of the window. */
   insetLeft = 0;
+  /** The width in pixels of the panel over the right side of the canvas, such as the field editor's settings. The overhead view centers the FIELD between the two insets. */
+  insetRight = 0;
   private ballGeo: Record<'pollen' | 'nectar', THREE.BufferGeometry> = { pollen: new THREE.SphereGeometry(FIELD.pollenRadius, 20, 14), nectar: new THREE.SphereGeometry(FIELD.nectarRadius, 20, 14) };
   private ballMat = new Map<BallKind, THREE.Material>();
   private ballMeshes = new Map<number, THREE.Mesh>();
@@ -427,10 +429,10 @@ export class View {
     if (this.mode === 'driver') { this.camera.fov = 52; this.camera.position.set(side * 3.5, 1.68, side * -0.6); this.camera.lookAt(side * -0.2, 0.3, 0); }
     else if (this.mode === 'overhead') {
       this.camera.fov = 40; this.camera.position.set(0, 6.4, 0.001); this.camera.up.set(side < 0 ? 1 : -1, 0, 0); this.camera.lookAt(0, 0, 0);
-      // Slide the camera along the screen's horizontal axis by half the inset, so that the FIELD centers in the uncovered part.
-      if (this.insetLeft > 0) {
+      // Slide the camera along the screen's horizontal axis by half the difference of the insets, so that the FIELD centers in the uncovered part.
+      if (this.insetLeft > 0 || this.insetRight > 0) {
         const pxPerM = innerHeight / (2 * 6.4 * Math.tan(((this.camera.fov / 2) * Math.PI) / 180)), right = new THREE.Vector3(1, 0, 0).applyQuaternion(this.camera.quaternion);
-        this.camera.position.addScaledVector(right, -this.insetLeft / 2 / pxPerM);
+        this.camera.position.addScaledVector(right, -(this.insetLeft - this.insetRight) / 2 / pxPerM);
       }
     }
     else if (this.mode === 'audience') { this.camera.fov = 50; this.camera.position.set(0, 2.4, 4.4); this.camera.lookAt(0, 0.4, 0); }

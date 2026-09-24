@@ -544,6 +544,12 @@ direction. A drag changes the expression by one rule, in `shiftPose` in `src/aut
 - **Otherwise,** the drag wraps the expression in `offset()`: `launchAudience` becomes `offset(launchAudience, 0.2,
   -0.1)`. A turn adds a fourth value, in degrees.
 
+So a step keeps following the robot's size, and the other steps that use the same definition don't move. The bar names
+them, for example "also used by s6, s11". An offset that comes back to zero goes away, so a drag back to the start
+restores the step as it was written. Positions round to 1 mm and headings to 0.5°. A path's waypoints are numbers,
+which `scripts/plan-sweeps.ts` writes for the sweeps, so a drag changes a waypoint itself. `src/auto/auto-edit.ts` has
+no DOM, so `test/auto-edit.test.ts` runs it.
+
 ### Reference points and snapping
 
 The definitions whose value is a pose, such as `launchAudience`, are *reference points*: small purple dots with their
@@ -573,11 +579,31 @@ What's selected wins a click: the selected step or reference point takes the pre
 reference point can be dragged. Otherwise a reference point wins within 7 pixels of its center, and a step handle
 within 16. **Reset this step** also resets a selected reference point to the source plan's definition.
 
-So a step keeps following the robot's size, and the other steps that use the same definition don't move. The bar names
-them, for example "also used by s6, s11". An offset that comes back to zero goes away, so a drag back to the start
-restores the step as it was written. Positions round to 1 mm and headings to 0.5°. A path's waypoints are numbers,
-which `scripts/plan-sweeps.ts` writes for the sweeps, so a drag changes a waypoint itself. `src/auto/auto-edit.ts` has
-no DOM, so `test/auto-edit.test.ts` runs it.
+### Settings, definitions, and problems
+
+The panel on the right of the editor shows the plan's problems, the selected step's settings, and the plan's
+definitions. For a system plan, it shows them read-only.
+
+- **Step settings.** Click a step in the tree or on the FIELD. The panel draws a field for each of the leaf's
+  parameters, from the leaf type's parameter specs in `src/auto/onboard.ts`: its type and unit, its limits, whether it
+  is required, its default, and its doc. A number field takes a number, or an expression such as `backOff * 10`. A
+  choice, such as a CELL, is a drop-down list. A path's waypoints show as a count, because you drag them on the FIELD. An empty
+  field removes the parameter, so the leaf gets its default. A field saves on Enter or when it loses focus, and each
+  save is one step of undo. Escape puts the field back.
+- **Definitions.** Each definition is a row with its expression and its value before the MATCH, for the selected robot,
+  such as `len = 0.305`. A definition whose value is a pose has a purple dot, and clicking its name selects its
+  reference point. **Add** adds a definition by name and expression, and **Delete** deletes one by the rule of
+  [Reference points and snapping](#reference-points-and-snapping).
+- **Problems.** Every edit loads the draft again with `checkTree` in `src/bt/load.ts`, which returns the tree and every
+  problem that the loader finds. Each problem shows under its field or definition, the step's row in the tree gets a
+  red bar, and the panel lists them all: click one to select its step. A draft with problems saves, and it loads again
+  with its problems after a reload, but it doesn't run. A robot whose plan has problems stays still in AUTO, and the
+  robot config's plan list marks the plan.
+
+In a draft with problems, a node that didn't compile is a placeholder that fails if it runs, and an expression that
+didn't compile gives null. A step whose pose doesn't evaluate, for example because it uses a broken definition, has no
+handle on the FIELD until the problem is fixed. `src/auto/draft.ts` builds the form fields and sorts the problems, with
+no DOM, and `test/draft.test.ts` runs it.
 
 ## Code leaves in a sandbox
 
@@ -798,12 +824,15 @@ tree in the page. Each increment is one pull request.
      a checkbox, to a 1 in grid. Alt, or Option on a Mac, inverts the checkbox. A right-click adds a reference point.
      Holding a dragged pose on a reference point makes it reference that point. A right-click on a step, or Delete on
      its offset line, makes the pose absolute, and a right-click or Delete removes a reference point.
-9. **Forms, definitions, and validation.** A leaf's parameter schema drives a form: types, units, limits, enums,
-   and doc strings. An expression field uses CodeMirror 6, which loads only with the editor: highlighting, completion
-   from the environment schema and the tree's definitions, and errors from `src/bt/expr.ts`. A panel edits the
-   definitions, and the definitions that are poses get handles on the FIELD, so a drag can move a shared spot.
-   Every edit loads the draft again, and each problem that the loader reports shows on its row and field. A draft with
-   problems can be saved but can't run. Undo and redo came earlier, with the editor's pose tools.
+9. **Forms, definitions, and validation.** Two pull requests:
+   - **Forms and problems. Done.** A leaf's parameter specs drive a form: types, units, limits, choices, and docs. A
+     panel edits the definitions, and the definitions that are poses have handles on the FIELD, which came with the
+     reference points. Every edit loads the draft again, and each problem that the loader reports shows on its field,
+     its definition, and its row in the tree. A draft with problems saves but doesn't run. See
+     [Settings, definitions, and problems](#settings-definitions-and-problems). `e95-editor-forms` equals
+     `e94-editor-flow` on every seed.
+   - **Expression fields.** An expression field uses CodeMirror 6, which loads only with the editor: highlighting,
+     completion from the environment schema and the tree's definitions, and errors from `src/bt/expr.ts` as you type.
 10. **Structure editing.** Insert a node from a palette of the node types and the AUTO leaves, with templates such as
     the sweep. Delete a node and its subtree, reorder by drag-and-drop, and wrap a node in a sequence, a parallel, or a
     fallback.

@@ -11,7 +11,7 @@
  * on its `timeoutSec`, whichever comes first, and then the robot does nothing for one physics step before the next
  * step starts, as a state machine that advances on its next loop does.
  */
-import { defineLeaf, loadTree, t, TreeRunner, type Behavior, type CNode, type FnSpec, type Recorder, type Registry, type TreeDef } from '../bt';
+import { checkTree, defineLeaf, loadTree, t, TreeLoadError, type LoadIssue, TreeRunner, type Behavior, type CNode, type FnSpec, type Recorder, type Registry, type TreeDef } from '../bt';
 import { seesRaisedCell } from '../sim/camera';
 import { FIELD } from '../sim/config';
 import { NO_INPUT, type Inputs, type IntakeFilter, type Sim } from '../sim/world';
@@ -224,8 +224,8 @@ const driveTo = leaf({
   id: 'drive.driveTo', version: 1, uses: ['drive'],
   doc: 'Drives to a pose on a path that the path planner picks around the FIELD elements and the AUTO center-line wall, and turns to the pose\'s heading. It ends on arrival or after `timeoutSec`. It leaves the intake as it is.',
   params: {
-    pose: { type: POSE, doc: 'The goal, in the alliance frame.' },
-    timeoutSec: { type: t.number('s'), min: 0, unit: 's' },
+    pose: { type: POSE, doc: 'The goal, in the alliance frame: red\'s FIELD x and y in meters, and a heading in degrees counterclockwise from +x. Drag it on the FIELD.' },
+    timeoutSec: { type: t.number('s'), min: 0, unit: 's', doc: 'The longest drive. The step ends here even if the robot hasn\'t arrived.' },
     tag: { type: t.string(), default: '', doc: 'A label for tools.' },
   },
   *run(ctx) { const p = ctx.params; begin(ctx.env, ctx.path, 'drive', p.tag || undefined); return yield* driveStep(ctx.env, p.pose, p.timeoutSec); },
@@ -238,7 +238,7 @@ const followPath = leaf({
   doc: 'Follows the path through `waypoints` in order, with no path planner: straight lines from where the robot starts, and through each waypoint without stopping. A waypoint with a heading turns the robot to it; one without faces along the path, so the intake leads. It ends at the last waypoint or after `timeoutSec`. It leaves the intake as it is.',
   params: {
     waypoints: { type: t.array(WAYPOINT), doc: 'The path, in the alliance frame. `scripts/plan-sweeps.ts` writes the waypoints of a path tagged `sweep-ROLE`.' },
-    timeoutSec: { type: t.number('s'), min: 0, unit: 's' },
+    timeoutSec: { type: t.number('s'), min: 0, unit: 's', doc: 'The longest drive along the path.' },
     tag: { type: t.string(), default: '', doc: 'A label for tools. `scripts/plan-sweeps.ts` finds its sweeps by the tags `sweep-solo`, `sweep-right`, and `sweep-left`.' },
   },
   *run(ctx) {
@@ -272,7 +272,7 @@ const followPath = leaf({
 const intakeRun = leaf({
   id: 'intake.run', version: 1, uses: ['intake'],
   doc: 'Runs the intake with `filter` for as long as this leaf runs. It never ends by itself: run it in a `parallel` node of policy `any` beside the steps that collect. When the parallel node ends, or a race halts it, the intake goes back to its default command, which stops it.',
-  params: { filter: { type: INTAKE } },
+  params: { filter: { type: INTAKE, doc: 'What the intake takes in.' } },
   *run(ctx) {
     try { for (;;) { ctx.env.bots.me.intake.set(ctx.params.filter); yield; } }
     finally { ctx.env.bots.me.intake.stop(); }
@@ -282,7 +282,10 @@ const intakeRun = leaf({
 const push = leaf({
   id: 'drive.push', version: 1, uses: ['drive'],
   doc: 'Pushes straight ahead for `timeoutSec`, for example against the bottom of a FLOWER to pick up its POLLEN. It leaves the intake as it is.',
-  params: { power: { type: t.number(), min: -1, max: 1 }, timeoutSec: { type: t.number('s'), min: 0, unit: 's' } },
+  params: {
+    power: { type: t.number(), min: -1, max: 1, doc: 'The drive power, from -1 to 1. Negative pushes backward.' },
+    timeoutSec: { type: t.number('s'), min: 0, unit: 's', doc: 'How long the push lasts.' },
+  },
   *run(ctx) {
     const e = ctx.env, p = ctx.params, timer = stepTimer(e); begin(e, ctx.path, 'push');
     for (;;) { if (timer.over(p.timeoutSec)) return yield* idle(); e.bots.me.drive.push(p.power); yield; }
@@ -292,7 +295,11 @@ const push = leaf({
 const shoot = leaf({
   id: 'shooter.shoot', version: 1, uses: ['shooter'],
   doc: 'Launches open loop from where the robot stands until `count` elements are gone or the transfer is empty. With `cell`, it holds its fire until the camera sees that CELL raised. A turret holds its fire until it points at the raised CELL. A shooter that launches out of both ends uses the end that faces the robot\'s own HIVE.',
-  params: { count: { type: t.number(), min: 1 }, timeoutSec: { type: t.number('s'), min: 0, unit: 's' }, cell: { type: t.nullable(CELL), default: null } },
+  params: {
+    count: { type: t.number(), min: 1, doc: 'How many elements to launch.' },
+    timeoutSec: { type: t.number('s'), min: 0, unit: 's', doc: 'The longest the step lasts, counting the wait for the CELL.' },
+    cell: { type: t.nullable(CELL), default: null, doc: 'The CELL to wait for. Null launches at once.' },
+  },
   *run(ctx) {
     const e = ctx.env, p = ctx.params, timer = stepTimer(e); let startCount = -1; begin(e, ctx.path, 'shoot');
     for (;;) {
@@ -323,7 +330,10 @@ const waitUntil = leaf({
 const waitTip = leaf({
   id: 'vision.waitTip', version: 1, needs: NEEDS_CAMERA,
   doc: 'Waits until `cell` tips: the camera saw it raised, and then no longer sees it raised. A CELL that isn\'t seen raised after 1 s counts as already tipping.',
-  params: { cell: { type: CELL }, timeoutSec: { type: t.number('s'), min: 0, unit: 's' } },
+  params: {
+    cell: { type: CELL, doc: 'The CELL to watch.' },
+    timeoutSec: { type: t.number('s'), min: 0, unit: 's', doc: 'The longest wait.' },
+  },
   *run(ctx) {
     const e = ctx.env, timer = stepTimer(e), cell = ctx.params.cell; let sawRaised = false; begin(e, ctx.path, 'waitTip');
     for (;;) {
@@ -338,7 +348,7 @@ const waitTip = leaf({
 const wait = leaf({
   id: 'wait', version: 1,
   doc: 'Waits `timeoutSec`, as one step with its idle step. To skip a wait whose only purpose is a pickup that follows, race it against `waitUntil` on a full transfer.',
-  params: { timeoutSec: { type: t.number('s'), min: 0, unit: 's' }, tag: { type: t.string(), default: '' } },
+  params: { timeoutSec: { type: t.number('s'), min: 0, unit: 's', doc: 'How long to wait.' }, tag: { type: t.string(), default: '', doc: 'A label for tools.' } },
   *run(ctx) { begin(ctx.env, ctx.path, 'wait', ctx.params.tag || undefined); return yield* waitStep(ctx.env, ctx.params.timeoutSec); },
 });
 
@@ -358,31 +368,40 @@ export const AUTO_REGISTRY: Registry = {
 
 /** The AUTO tree files in the order of the page's AUTO list. The catalog in D1 is seeded from them. */
 export const AUTO_FILES: readonly unknown[] = [wallSweepRight, wallSweepLeft, laneSweepRight, laneSweepLeftNoPark, laneSweepLeft, soloSweep, soloSweepNoPark, leaveAndPark];
-const trees: Record<string, TreeDef> = {}, sources: Record<string, Record<string, unknown>> = {}, builtIn = new Set<string>();
+const trees: Record<string, TreeDef> = {}, sources: Record<string, Record<string, unknown>> = {}, builtIn = new Set<string>(), problems: Record<string, readonly LoadIssue[]> = {};
 /** The AUTO trees by id: the tree files, then the trees that `addAutoTree` adds. A tree file that doesn't load throws with all of its problems. */
 export const AUTO_TREES: Readonly<Record<string, TreeDef>> = trees;
 /** The JSON source of each AUTO tree, by id, for the field editor, which edits a copy. */
 export const AUTO_SOURCES: Readonly<Record<string, Readonly<Record<string, unknown>>>> = sources;
 /** The ids of the tree files. `removeAutoTree` can't remove them. */
 export const BUILT_IN_AUTO: ReadonlySet<string> = builtIn;
+/**
+ * The problems of each draft in `AUTO_TREES` that has any, by id. A draft with problems is in `AUTO_TREES`, so that the
+ * field editor can show it, but a robot doesn't run it: see `Coach.update`.
+ */
+export const AUTO_PROBLEMS: Readonly<Record<string, readonly LoadIssue[]>> = problems;
 for (const src of AUTO_FILES) builtIn.add(addAutoTree(src).id);
 
 /**
  * Loads an AUTO tree and adds it to `AUTO_TREES`, or replaces the tree that has its id. The page adds the trees that
  * the field editor saves. A tree with a tree file's id can't replace that file.
- * @throws TreeLoadError If the tree doesn't load, with all of its problems.
+ * @param draft If true, adds a tree that has problems too, and records them in `AUTO_PROBLEMS`. If false, throws.
+ * @throws TreeLoadError If the tree doesn't load, with all of its problems. A draft throws only when it has no id, isn't
+ *   an object, or names no known environment.
  */
-export function addAutoTree(src: unknown): TreeDef {
-  const def = loadTree(src, AUTO_REGISTRY);
+export function addAutoTree(src: unknown, draft = false): TreeDef {
+  const r = draft ? checkTree(src, AUTO_REGISTRY) : { def: loadTree(src, AUTO_REGISTRY), issues: [] };
+  const def = r.def; if (!def || !def.id) throw new TreeLoadError(r.issues);
   if (builtIn.has(def.id)) throw new Error(`the tree '${def.id}' is built in and can't be replaced`);
   trees[def.id] = def; sources[def.id] = structuredClone(src as Record<string, unknown>);
+  if (r.issues.length) problems[def.id] = r.issues; else delete problems[def.id];
   return def;
 }
 
 /** Removes an AUTO tree that `addAutoTree` added. Returns false for a built-in tree or an unknown id. */
 export function removeAutoTree(id: string): boolean {
   if (builtIn.has(id) || !(id in trees)) return false;
-  delete trees[id]; delete sources[id]; return true;
+  delete trees[id]; delete sources[id]; delete problems[id]; return true;
 }
 
 /** The default AUTO for a robot with no partner, and for a name that no tree has. */
@@ -436,9 +455,17 @@ export class AutoProgram {
 export function leafParams(def: TreeDef, sim: Sim): { node: CNode; params: Record<string, unknown> }[] {
   const env = new OnboardAdapter(); env.use(sim, 0, 0);
   const runner = new TreeRunner(def, { env, now: () => 0 }), out: { node: CNode; params: Record<string, unknown> }[] = [];
-  const walk = (n: CNode) => { if (n.leaf) out.push({ node: n, params: runner.paramsOf(n)! }); n.children.forEach(walk); }; walk(def.root);
+  // In a draft with problems, a parameter can fail to evaluate, for example `offset(p, 1, 0)` where `p` is null. Such a
+  // leaf is left out.
+  const walk = (n: CNode) => { if (n.leaf) { try { out.push({ node: n, params: runner.paramsOf(n)! }); } catch { /* A draft's broken parameter. */ } } n.children.forEach(walk); };
+  walk(def.root);
   return out;
 }
+
+/** Checks whether a value is a pose with finite numbers. In a draft with problems, a pose parameter can be null. */
+export const isPose = (p: unknown): p is Pose => {
+  const q = p as Pose | null; return !!q && typeof q === 'object' && [q.x, q.y, q.headingDeg].every(Number.isFinite);
+};
 
 /** Checks whether a type is a pose: an object with the number fields `x`, `y`, and `headingDeg`. */
 const isPoseType = (ty: { kind: string; fields?: Record<string, { kind: string }> }) =>
@@ -448,8 +475,22 @@ const isPoseType = (ty: { kind: string; fields?: Record<string, { kind: string }
 export function definedPoses(def: TreeDef, sim: Sim): { name: string; pose: Pose }[] {
   const env = new OnboardAdapter(); env.use(sim, 0, 0);
   const runner = new TreeRunner(def, { env, now: () => 0 }), out: { name: string; pose: Pose }[] = [];
-  def.defs.forEach((d, i) => { if (isPoseType(d.type as never)) out.push({ name: def.defNames[i], pose: runner.defValue(i) as Pose }); });
+  def.defs.forEach((d, i) => {
+    if (!isPoseType(d.type as never)) return;
+    try { const pose = runner.defValue(i) as Pose; if (isPose(pose)) out.push({ name: def.defNames[i], pose }); } catch { /* A draft's broken definition. */ }
+  });
   return out;
+}
+
+/**
+ * Gets the value of each of a tree's definitions before the match, for the robot that `sim` views, in file order. A
+ * value that reads the clock, the transfer, or the camera is its pre-match value. A definition that fails to evaluate,
+ * in a draft with problems, gives undefined.
+ */
+export function defValues(def: TreeDef, sim: Sim): unknown[] {
+  const env = new OnboardAdapter(); env.use(sim, 0, 0);
+  const runner = new TreeRunner(def, { env, now: () => 0 });
+  return def.defs.map((_, i) => { try { return runner.defValue(i); } catch { return undefined; } });
 }
 
 /**
@@ -464,9 +505,9 @@ export function previewAuto(def: TreeDef, sim: Sim, start: Pt): { path: Pt[]; po
   const goals: { pose: Pose; planned: boolean; next: CNode | undefined }[] = [];
   let at: { x: number; y: number } = alliancePose(start, 0, rotate);
   leaves.forEach(({ node: n, params: p }, i) => {
-    if (n.label === 'drive.driveTo') { const pose = p.pose as Pose; goals.push({ pose, planned: true, next: leaves[i + 1]?.node }); at = pose; }
-    if (n.label === 'drive.followPath') {
-      const wps = p.waypoints as { x: number; y: number; headingDeg: number | null }[];
+    if (n.label === 'drive.driveTo' && isPose(p.pose)) { const pose = p.pose; goals.push({ pose, planned: true, next: leaves[i + 1]?.node }); at = pose; }
+    if (n.label === 'drive.followPath' && Array.isArray(p.waypoints)) {
+      const wps = (p.waypoints as { x: number; y: number; headingDeg: number | null }[]).filter(w => w && Number.isFinite(w.x) && Number.isFinite(w.y));
       wps.forEach((w, k) => {
         goals.push({ pose: { x: w.x, y: w.y, headingDeg: w.headingDeg ?? (Math.atan2(w.y - at.y, w.x - at.x) * 180) / Math.PI }, planned: false, next: k === wps.length - 1 ? leaves[i + 1]?.node : undefined });
         at = w;

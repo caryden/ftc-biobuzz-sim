@@ -1,6 +1,6 @@
 import RAPIER from '@dimforge/rapier3d-compat';
 import { beforeAll, describe, expect, it } from 'vitest';
-import { addReference, changedDefs, deleteReference, changedSteps, clonePlan, editHandles, makeAbsolute, moveReference, referenceOf, referencePoints, referTo, findNode, isEdited, moveHandle, planId, poseText, resetHandle, sharedWith, shiftPose, sourceOf, turnHandle } from '../src/auto/auto-edit';
+import { addReference, changedDefs, deleteDef, changedSteps, clonePlan, editHandles, makeAbsolute, moveReference, referenceOf, referencePoints, referTo, findNode, isEdited, moveHandle, planId, poseText, resetHandle, sharedWith, shiftPose, sourceOf, turnHandle } from '../src/auto/auto-edit';
 import { AUTO_SOURCES, AUTO_TREES, BUILT_IN_AUTO, addAutoTree, removeAutoTree } from '../src/auto/onboard';
 import { Coach } from '../src/auto/coach';
 import { literalNumber, splitCall, type CNode } from '../src/bt';
@@ -144,7 +144,7 @@ describe('deleting a reference point', () => {
     try {
       const handles = editHandles(AUTO_TREES[String(tree.id)], view), users = handles.filter(h => h.kind === 'drive' && /^(offset\()?ownFlower\b/.test(poseText(tree, h) ?? ''));
       expect(users.length).toBeGreaterThanOrEqual(2);
-      const r = deleteReference(tree, handles, 'ownFlower'); if (!('tree' in r)) throw new Error(r.error);
+      const r = deleteDef(tree, handles, 'ownFlower'); if (!('tree' in r)) throw new Error(r.error);
       expect((r.tree.defs as Json).ownFlower).toBeUndefined();
       expect(r.madeAbsolute).toEqual(users.map(u => u.path.split('/').pop()));
       addAutoTree(r.tree);
@@ -154,8 +154,8 @@ describe('deleting a reference point', () => {
         const a = after.find(h => h.path === u.path)!; expect(a.pose.x).toBeCloseTo(u.pose.x, 2); expect(a.pose.y).toBeCloseTo(u.pose.y, 2); // 1 mm rounding
       }
       // parkRight is pose(park.x, …, park.headingDeg), so park can't go until parkRight changes.
-      const p = deleteReference(tree, handles, 'park'); expect(p).toEqual({ error: expect.stringMatching(/^parkRight still uses park\./) });
-      expect(deleteReference(tree, handles, 'nothing')).toEqual({ error: expect.stringMatching(/no definition/) });
+      const p = deleteDef(tree, handles, 'park'); expect(p).toEqual({ error: expect.stringMatching(/^parkRight still uses park\./) });
+      expect(deleteDef(tree, handles, 'nothing')).toEqual({ error: expect.stringMatching(/no definition/) });
     } finally { removeAutoTree(`${id}-test`); }
   });
 });

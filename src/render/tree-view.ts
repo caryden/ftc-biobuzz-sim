@@ -39,9 +39,9 @@ export class LiveTreeState {
 
 /**
  * Options of the tree view in the field editor: the selected node, the nodes that have handles on the FIELD, and the
- * steps that differ from the plan that this one was copied from.
+ * steps that differ from the plan that this one was copied from, and the nodes that have problems.
  */
-export interface TreeEdit { selected: string | null; editable: ReadonlySet<string>; changed?: ReadonlySet<string> }
+export interface TreeEdit { selected: string | null; editable: ReadonlySet<string>; changed?: ReadonlySet<string>; problems?: ReadonlySet<string> }
 
 export class TreePanel {
   private lastLeaf = ''; private lastHtml = ''; private lastSel: string | null = null;
@@ -60,7 +60,8 @@ export class TreePanel {
       const cls = (running ? 'run' : code === undefined ? '' : code === 's' ? 'ok' : code.startsWith('f') ? 'fail' : code === 'h' ? 'halt' : 'err')
         + (edit?.editable.has(n.path) ? ' ed' : '') + (edit?.selected === n.path ? ' sel' : '')
         // A changed step gets a mark, and so, fainter, does every node with a changed step below it.
-        + (edit?.changed?.has(n.path) ? ' chg' : edit?.changed && [...edit.changed].some(p => p.startsWith(`${n.path}/`)) ? ' chg2' : '');
+        + (edit?.changed?.has(n.path) ? ' chg' : edit?.changed && [...edit.changed].some(p => p.startsWith(`${n.path}/`)) ? ' chg2' : '')
+        + (edit?.problems?.has(n.path) ? ' bad' : '');
       // A single child's path segment is its parent's key, such as `child`, which says nothing, so it isn't shown.
       const name = n.leaf ? n.label.replace(/^(auto|teleop)\./, '') : n.kind, id = segment(n), idText = id !== n.kind && id !== n.label && !['child', 'cleanup', 'otherwise'].includes(id) ? id : '';
       const result = running ? 'running' : code === undefined ? '' : code === 's' ? 'done' : code.startsWith('f:') ? code.slice(2) || 'failed' : code === 'h' ? 'halted' : 'error';

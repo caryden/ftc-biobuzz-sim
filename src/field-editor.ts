@@ -6,8 +6,9 @@
  * browser keeps your plans (`user-trees.ts`). See `auto/auto-edit.ts` for how a drag changes a tree.
  */
 import type { TreeDef } from './bt';
-import { addReference, deleteReference, changedDefs, changedSteps, clonePlan, editHandles, isEdited, makeAbsolute, moveHandle, moveReference, planId, poseText, referencePoints, referTo, resetHandle, sharedWith, sourceOf, stepReference, toAlliance, turnHandle, turnReference, type Handle, type RefPoint } from './auto/auto-edit';
-import { AUTO_SOURCES, AUTO_TREES, BUILT_IN_AUTO, SOLO_AUTO, addAutoTree, autoFor, autoStart } from './auto/onboard';
+import { addReference, deleteDef, changedDefs, changedSteps, clonePlan, editHandles, isEdited, makeAbsolute, moveHandle, moveReference, planId, poseText, referencePoints, referTo, resetHandle, sharedWith, sourceOf, stepReference, toAlliance, turnHandle, turnReference, type Handle, type RefPoint } from './auto/auto-edit';
+import { AUTO_PROBLEMS, AUTO_REGISTRY, AUTO_SOURCES, AUTO_TREES, BUILT_IN_AUTO, SOLO_AUTO, addAutoTree, autoFor, autoStart, defValues } from './auto/onboard';
+import { addDef, defRows, paramFields, readField, setDef, setParam, sortProblems, type DefRow, type ParamField, type Problems } from './auto/draft';
 import type { View, CameraMode } from './render/view';
 import type { TreeEdit } from './render/tree-view';
 import { startSide, type BotSetup } from './setup';
@@ -33,6 +34,15 @@ export interface EditorHost {
   changed(): void;
 }
 
+/** Writes a definition's value for the definitions panel: a number to 3 decimals, a pose as x, y, and heading. */
+function valueText(v: unknown): string | null {
+  if (v === undefined) return null;
+  if (typeof v === 'number') return String(Math.round(v * 1000) / 1000);
+  const p = v as { x?: unknown; y?: unknown; headingDeg?: unknown } | null;
+  if (p && typeof p === 'object' && typeof p.x === 'number' && typeof p.y === 'number' && typeof p.headingDeg === 'number') return `(${p.x.toFixed(3)}, ${p.y.toFixed(3)}, ${p.headingDeg.toFixed(1)}°)`;
+  return JSON.stringify(v);
+}
+
 export class FieldEditor {
   /** The red robot whose plan the editor shows, or -1 when the editor is closed. */
   robot = -1;
@@ -48,10 +58,12 @@ export class FieldEditor {
   changed: ReadonlySet<string> = new Set();
   /** The reference points: the plan's definitions that are poses. */
   refs: RefPoint[] = [];
-  /** The reference points whose definitions differ from the source plan. */
+  /** The definitions that differ from the source plan, including reference points and deleted definitions. */
   changedRefs: ReadonlySet<string> = new Set();
   /** The selected reference point, and the selected offset line, by the path of the step that it belongs to. */
   selectedRef: string | null = null; selectedLink: string | null = null;
+  /** The loader's problems with the plan shown, sorted onto its steps and definitions. A plan with problems doesn't run. */
+  problems: Problems = sortProblems(null, []);
   /** A problem with the last action, such as a reference point that can't be deleted. The status line shows it until the selection or the plan changes. */
   notice: string | null = null;
   /** If true, a drag snaps to the 1 in grid, and a turn to 5°. Holding Alt, or Option on a Mac, inverts it for one drag. */
@@ -241,7 +253,7 @@ export class FieldEditor {
     if (!d) return 'Say what the plan does, in a sentence or two.'; if (!src) return 'Pick a plan to copy.';
     if (Object.values(AUTO_TREES).some(t => t.name.toLowerCase() === n.toLowerCase())) return `A plan is already named "${n}".`;
     const tree = clonePlan(src, { id: planId(n, id => id in AUTO_TREES), name: n, description: d });
-    addAutoTree(tree); saveUserTree(tree);
+    addAutoTree(tree, true); saveUserTree(tree);
     this.host.setAuto(this.robot, String(tree.id));
     this.showRobot(this.robot); this.edit();
     return null;
@@ -262,7 +274,7 @@ export class FieldEditor {
   }
 
   /** The tree view's options: the selection, and the nodes with handles. */
-  treeEdit(): TreeEdit { return { selected: this.selected, editable: new Set(this.handles.map(h => h.path)), changed: this.changed }; }
+  treeEdit(): TreeEdit { return { selected: this.selected, editable: new Set(this.handles.map(h => h.path)), changed: this.changed, problems: new Set(this.problems.nodes.keys()) }; }
 
   /** Selects a step, and the point of it that the ghost robot shows: `point`, or the step's first handle. */
   select(path: string | null, point?: number) {
@@ -304,7 +316,7 @@ export class FieldEditor {
    */
   deleteRef(name = this.selectedRef): string | null {
     if (!this.editing || !name) return null;
-    const r = deleteReference(this.tree, this.handles, name); if ('error' in r) { this.notice = r.error; this.host.changed(); return r.error; }
+    const r = deleteDef(this.tree, this.handles, name); if ('error' in r) { this.notice = r.error; this.host.changed(); return r.error; }
     try { this.remember(this.tree); this.selectedRef = null; this.apply(r.tree, true); } catch (e) { this.past.pop(); return e instanceof Error ? e.message.replace(/^.*?: /, '') : String(e); }
     return null;
   }
@@ -334,6 +346,46 @@ export class FieldEditor {
     return out;
   }
 
+  /** Gets the form fields of the selected step, or null if the selection isn't a leaf. */
+  fields(): ParamField[] | null { return this.selected ? paramFields(this.tree, this.selected, AUTO_REGISTRY) : null; }
+
+  /** Gets the selected node: its type, such as `drive.driveTo` or `sequence`, its id, and the leaf type's doc. */
+  selectedNode(): { label: string; id: string; doc: string | null; leaf: boolean; detail?: string } | null {
+    const find = (n: TreeDef['root']): TreeDef['root'] | null => (n.path === this.selected ? n : n.children.map(find).find(Boolean) ?? null);
+    const n = this.def && this.selected ? find(this.def.root) : null; if (!n) return null;
+    return { label: n.label, id: n.path.split('/').pop()!, doc: n.leaf ? AUTO_REGISTRY.leaves[n.label]?.doc ?? null : null, leaf: !!n.leaf, detail: n.detail };
+  }
+
+  /** Sets a parameter of a step from a form field's text. An empty field removes the parameter. See `readField`. */
+  setParamText(path: string, key: string, text: string) {
+    const f = paramFields(this.tree, path, AUTO_REGISTRY)?.find(q => q.key === key); if (!f || !this.editing || f.control === 'list') return;
+    const next = setParam(this.tree, path, key, readField(f, text)); if (next === this.tree) return;
+    this.remember(this.tree); this.apply(next, true);
+  }
+
+  /** Gets the rows of the definitions panel, each with its value before the match, as text. */
+  defs(): (DefRow & { value: string | null })[] {
+    const def = this.def, values = def ? defValues(def, this.host.sim().view(this.robot)) : [];
+    return defRows(this.tree, def).map(r => {
+      const i = def?.defNames.indexOf(r.name) ?? -1;
+      return { ...r, value: i >= 0 ? valueText(values[i]) : null };
+    });
+  }
+
+  /** Sets a definition's expression. */
+  setDefText(name: string, text: string) {
+    if (!this.editing) return;
+    const next = setDef(this.tree, name, text); if (next === this.tree || JSON.stringify(next) === JSON.stringify(this.tree)) return;
+    this.remember(this.tree); this.apply(next, true);
+  }
+
+  /** Adds a definition. Returns a problem to show, or null. */
+  addDefinition(name: string, text: string): string | null {
+    if (!this.editing) return 'Edit a plan that you made to add definitions.';
+    const r = addDef(this.tree, name, text); if ('error' in r) return r.error;
+    this.remember(this.tree); this.apply(r.tree, true); return null;
+  }
+
   private refDrawList() { return this.refs.map(r => ({ ...r.sim, selected: r.name === this.selectedRef })); }
 
   get canUndo() { return this.editing && this.past.length > 0; }
@@ -348,7 +400,7 @@ export class FieldEditor {
   private remember(before: Json) { this.past.push(before); if (this.past.length > 200) this.past.shift(); this.future = []; }
 
   /** Makes `t` the plan, saves it, and redraws: for undo and redo. */
-  private commit(t: Json) { addAutoTree(t); this.tree = t; this.save(); this.rev++; this.refresh(); this.host.changed(); }
+  private commit(t: Json) { addAutoTree(t, true); this.tree = t; this.save(); this.rev++; this.refresh(); this.host.changed(); }
 
   /** Checks whether any handle of the selected node differs from the plan that this one was copied from. */
   selectedEdited() {
@@ -384,7 +436,7 @@ export class FieldEditor {
       const h = this.handles.find(q => q.path === this.selectedLink);
       if (h) return `${h.path.split('/').pop()} is ${poseText(this.tree, h)}${this.editing ? ' · press Delete, or right-click, to make it absolute' : ''}`;
     }
-    if (!hs.length) return this.selected ? 'This step has no pose on the FIELD.' : this.editing ? 'Drag a pose or its heading knob, or click a step in the tree.' : 'Click a pose or a step in the tree.';
+    if (!hs.length) return this.selected ? (this.problems.count && this.selectedNode()?.label.startsWith('drive.') ? 'This step\'s pose has a problem, or uses a definition that has one, so it isn\'t on the FIELD.' : 'This step has no pose on the FIELD.') : this.editing ? 'Drag a pose or its heading knob, or click a step in the tree.' : 'Click a pose or a step in the tree.';
     if (hs[0].kind === 'waypoint') return `${hs.length} waypoints${this.editing ? ' · drag one to move it' : ''}`;
     const h = hs[0], deg = wrap(h.pose.headingDeg), def = this.def, shared = sharedWith(this.tree, def, h);
     return `${fmtPos(h.pose.x, h.pose.y)}, heading ${deg.toFixed(1)}° · pose ${poseText(this.tree, h)}`
@@ -399,7 +451,7 @@ export class FieldEditor {
   private apply(next: Json, save: boolean) {
     if (!this.editing) return;
     this.notice = null;
-    addAutoTree(next); this.tree = next;
+    addAutoTree(next, true); this.tree = next;
     this.rev++; this.refresh(); if (save) this.save(); this.host.changed();
   }
 
@@ -410,6 +462,7 @@ export class FieldEditor {
     this.changed = def && this.isUserPlan ? changedSteps(def, this.tree, this.original) : new Set();
     this.refs = def ? referencePoints(def, this.host.sim().view(this.robot)) : [];
     this.changedRefs = def && this.isUserPlan ? changedDefs(this.tree, this.original) : new Set();
+    this.problems = sortProblems(def, typeof this.tree.id === 'string' ? AUTO_PROBLEMS[this.tree.id] ?? [] : []);
     if (this.point >= this.handles.length) this.point = -1;
     this.paint();
   }
