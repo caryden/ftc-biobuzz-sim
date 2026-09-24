@@ -96,8 +96,17 @@ export interface RobotConfig {
   /** `dualSided` adds a second intake on the rear face, so the robot collects floor elements from either end. Default: false. POLLEN still comes out of a FLOWER at the front only. */
   intake: { width: number; reach: number; successP: number; retrySec: number; flowerReach: number; flowerPeriodSec: number; dualSided?: boolean };
   /** `facing: 'rear'` launches out of the side opposite the intake, so the robot turns less between pickup and launch. */
-  /** `dualSided` lets the robot launch out of either end, for example with a two-position turret or two catapults. It launches out of the end that faces its own HIVE. Default: false. */
-  shooter: { type: ShooterType; facing: 'front' | 'rear'; cycleSec: number; pollen: LaunchParams; nectar: LaunchParams; dualSided?: boolean };
+  /**
+   * `dualSided` lets the robot launch out of either end, for example with a two-position turret or two catapults. It
+   * launches out of the end that faces its own HIVE. Default: false.
+   * `turret` mounts the shooter on a turret that tracks the raised CELL's mouth of the robot's own HIVE. With the
+   * default limits, full range of motion and an instant slew, each launch aims at the mouth whatever the robot's
+   * heading: an upper bound. It overrides `dualSided`. Default: false.
+   * `turretRangeDeg` is the turret's range of motion, centered on the direction that `facing` gives. Default: 360.
+   * `turretSlewDegPerSec` is its top turn rate. Default: Infinity. A limited turret turns toward the mouth on every
+   * step, from the start of the MATCH, and launches where it points, aimed or not.
+   */
+  shooter: { type: ShooterType; facing: 'front' | 'rear'; cycleSec: number; pollen: LaunchParams; nectar: LaunchParams; dualSided?: boolean; turret?: boolean; turretRangeDeg?: number; turretSlewDegPerSec?: number };
   place: { range: number; maxBearingDeg: number; durationSec: number; successP: number };
   /**
    * The AprilTag camera. It faces the same side as the shooter and looks up at the underside of the raised CELL.

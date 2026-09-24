@@ -66,18 +66,18 @@ describe('field edits', () => {
     expect(blue[0].sim.x).toBeCloseTo(-red[0].sim.x, 9); expect(blue[0].sim.z).toBeCloseTo(-red[0].sim.z, 9);
     expect(Math.cos(blue[0].sim.heading! - red[0].sim.heading! - Math.PI)).toBeCloseTo(1, 9);
   });
-  it('moves and turns a drive pose, and moves a lane point', () => {
+  it('moves and turns a drive pose, and moves a waypoint', () => {
     const view = newSim().view(0), id = 'solo-two-tip-sweep', tree = editedCopy(source(id)); addAutoTree(tree);
     try {
       const at = (t: Json) => editHandles(AUTO_TREES[String(t.id)], view);
-      const drive = at(tree)[0], lane = at(tree).find(h => h.kind === 'lane')!;
+      const drive = at(tree)[0], lane = at(tree).find(h => h.kind === 'waypoint')!;
       let t = moveHandle(tree, drive, { x: drive.pose.x + 0.2, y: drive.pose.y - 0.1 }); addAutoTree(t);
       // The shared definition stays as it is written, and the step gets an offset.
       expect(poseText(t, drive)).toBe('offset(launchAudience, 0.2, -0.1)');
       t = turnHandle(t, at(t)[0], drive.pose.headingDeg + 30); addAutoTree(t);
       expect(poseText(t, drive)).toBe('offset(launchAudience, 0.2, -0.1, 30)');
       t = moveHandle(t, lane, { x: lane.pose.x - 0.15, y: lane.pose.y + 0.05 }); addAutoTree(t);
-      const d = at(t)[0], l = at(t).find(h => h.path === lane.path && h.lane === lane.lane)!;
+      const d = at(t)[0], l = at(t).find(h => h.path === lane.path && h.index === lane.index)!;
       expect(d.pose.x).toBeCloseTo(drive.pose.x + 0.2, 3); expect(d.pose.y).toBeCloseTo(drive.pose.y - 0.1, 3); expect(d.pose.headingDeg).toBeCloseTo(drive.pose.headingDeg + 30, 6);
       expect(l.pose.x).toBeCloseTo(lane.pose.x - 0.15, 3); expect(l.pose.y).toBeCloseTo(lane.pose.y + 0.05, 3);
       expect(isEdited(t, d, source(id))).toBe(true); expect(isEdited(t, l, source(id))).toBe(true);

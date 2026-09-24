@@ -283,7 +283,7 @@ export function leaf(base: Base, type: LeafType, params: Readonly<Record<string,
   const keys = Object.keys(params);
   return node(base, function* (rt, input, b) {
     const s = sc(rt, input, b), values: Record<string, unknown> = {};
-    for (const k of keys) values[k] = params[k](s);
+    for (const k of keys) { const f = params[k]; values[k] = type.params[k]?.live ? () => f(s) : f(s); }
     const ctx: LeafCtx<unknown, Record<string, unknown>> = {
       env: rt.env, params: values, input, path: base.path,
       now: () => rt.now(), log: (event, data) => rt.rec?.log(rt.span, rt.now(), event, data),

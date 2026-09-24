@@ -60,6 +60,34 @@ describe('shooting and HIVE TIP', () => {
     expect(s.stash.red).toBe(4); // The HUMAN PLAYER entered one NECTAR after the TIP.
     expect(s.score('red').teleopTips).toBe(20);
   });
+  it('aims a turret at the raised CELL whatever the robot heading, where a fixed shooter needs the heading', () => {
+    const turret = () => { const c = structuredClone(DEFAULT_ROBOT); c.shooter.turret = true; return c; };
+    const t = new Sim(RAPIER, undefined, 'practice', 7, { configFor: turret }), f = new Sim(RAPIER, undefined, 'practice', 7);
+    const y = t.robot.translation().y, at = { x: HIVE.pivotX.red, y, z: 1.3 };
+    const face = (s: Sim, heading: number) => { s.robot.setTranslation(at, true); s.robot.setRotation({ x: 0, y: Math.sin(heading / 2), z: 0, w: Math.cos(heading / 2) }, true); };
+    // Four headings, a quarter turn apart. The fixed rear shooter scores from one of them.
+    const scores = (s: Sim) => [0, 1, 2, 3].map(q => { face(s, (q * Math.PI) / 2); return s.previewShot('pollen').scores; });
+    expect(scores(t)).toEqual([true, true, true, true]);
+    expect(scores(f).filter(Boolean).length).toBe(1);
+    // A real launch with the robot facing the HIVE, where a fixed rear shooter would launch away from it, tips the HIVE.
+    face(t, Math.PI / 2); face(f, Math.PI / 2); expect(f.previewShot('pollen').scores).toBe(false); let shots = 0;
+    while (t.hives.red.tips === 0 && shots < 16) { t.carried = ['pollen']; run(t, 0.05, { ...NO_INPUT, shootPollen: true }); run(t, 1.2); shots++; }
+    expect(t.hives.red.tips).toBe(1); expect(shots).toBeLessThanOrEqual(6);
+  });
+  it('turns a limited turret at its slew rate and stops it at the end of its range', () => {
+    const limited = (rangeDeg: number, slew: number) => () => { const c = structuredClone(DEFAULT_ROBOT); c.shooter.turret = true; c.shooter.turretRangeDeg = rangeDeg; c.shooter.turretSlewDegPerSec = slew; return c; };
+    const face = (s: Sim, heading: number) => s.robot.setRotation({ x: 0, y: Math.sin(heading / 2), z: 0, w: Math.cos(heading / 2) }, true);
+    // A full-range turret at 90°/s, aimed at the start. Then the robot turns half a turn, and the turret needs 2 s.
+    const s = new Sim(RAPIER, undefined, 'practice', 7, { configFor: limited(360, 90) }), y = s.robot.translation().y;
+    s.robot.setTranslation({ x: HIVE.pivotX.red, y, z: 1.4 }, true); face(s, -Math.PI / 2); run(s, 0.1);
+    expect(s.previewShot('pollen').scores).toBe(true);
+    face(s, Math.PI / 2); run(s, 0.5); expect(s.previewShot('pollen').scores).toBe(false);
+    run(s, 2); expect(s.previewShot('pollen').scores).toBe(true);
+    // A 90° turret can't reach a CELL half a turn away from its mount.
+    const n = new Sim(RAPIER, undefined, 'practice', 7, { configFor: limited(90, 3600) });
+    n.robot.setTranslation({ x: HIVE.pivotX.red, y, z: 1.4 }, true); face(n, Math.PI / 2); run(n, 1);
+    expect(n.previewShot('pollen').scores).toBe(false);
+  });
 });
 
 describe('initial state', () => {

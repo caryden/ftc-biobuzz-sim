@@ -61,7 +61,11 @@ Every MATCH has four robots: R0, R1, B0, and B1. To configure a robot before a M
 its number in the scoreboard or in the **Game setup** panel, or right-click the robot. The popup sets the following:
 
 - The number plate, the driver, and the stick frame for a human driver, which is field-centric by default.
-- The shooter's release, whether it launches from both ends, and the intake layout: front, or front and rear.
+- The shooter's release, where it launches from, and the intake layout: front, or front and rear. A shooter
+  launches from the rear end, from both ends, or from a turret. The turret aims at the raised CELL whatever the
+  robot's heading, with full range of motion and an instant slew, so it's an upper bound on what a real turret does.
+  On all four robots it adds 39.4 ± 13.6 combined points over 24 seeds (`e79-turret-all`). The popup also sets a
+  turret's range of motion and turn rate: a turret with 180° of range at 180°/s adds 33.9 ± 13.3.
 - The launcher's shot-to-shot error as one standard deviation each: elevation, azimuth, and launch speed. Chips fill
   in 1, 3, or 5 times the reference launcher.
 - The intake success probability, the AUTO plan, the TELEOP plan, and the defense policy.
@@ -86,15 +90,23 @@ Each AUTO plan is a behavior tree in `src/auto/trees/auto/`. It runs in the onbo
 and the camera. It has no ball, FLOWER, or robot positions. For how trees work, see [Behavior-tree
 policies](behavior-trees.md).
 
-A tree is a list of steps, and each step is a leaf:
+A tree is a list of steps. Each step is a leaf that commands one of the robot's subsystems:
 
-- **`auto.drive`** drives to a pose. **`auto.sweep`** drives a list of planned lanes.
-- **`auto.push`** pushes with the intake on, and **`auto.shoot`** launches a count open loop.
-- **`auto.wait`** waits, and **`auto.waitClock`** waits until a clock time.
-- **`auto.waitCell`** waits until the camera reads a CELL as raised, and **`auto.waitTip`** until it sees that CELL tip.
+- **`drive.driveTo`** drives to a pose on a path that the path planner picks. **`drive.followPath`** follows a path
+  through the tree's own waypoints, with no planner. **`drive.push`** pushes straight ahead.
+- **`intake.run`** runs the intake for as long as it runs. When no leaf runs the intake, it's stopped.
+- **`shooter.shoot`** launches a count open loop.
+- **`vision.waitTip`** waits until the camera sees a CELL tip.
+- **`wait`** waits a time, and **`waitUntil`** waits until a condition holds, for example `bots.me.transfer.full`,
+  `bots.me.vision.seesRaised('rear')`, or `clock.remaining <= 2.5`.
+
+A step that collects runs the intake beside a drive, as in FTC's command-based code. For example, a sweep is a
+`parallel` node that ends when its first child does: `waitUntil` on a full transfer, `intake.run`, and
+`drive.followPath`. For the subsystems and their state, see [Subsystems](behavior-trees.md#subsystems).
 
 Each step ends on its condition or its timeout. The robot then does nothing for one physics step, as a state machine
-that advances on its next loop does. A tree that ends with a PARK races its steps against the clock, so that the PARK
+that advances on its next loop does. `waitUntil` ends without that idle step, and `intake.run` ends only when its
+parent does. A tree that ends with a PARK races its steps against the clock, so that the PARK
 starts in time whatever step is running. Poses are expressions over the robot's size and shooter direction, so one
 tree fits every robot. Each step's note in the tree file says why the step is there.
 
@@ -107,8 +119,9 @@ a grazing-angle limit. The camera sits on the shooter side, 0.30 m up and pitche
 CELL's tags from both launch spots. The camera reads the HIVE, not the balls, and only AUTO uses it.
 
 The sweeps are blind but planned from data: `scripts/plan-sweeps.ts` records where spilled balls come to rest over
-many simulated AUTO periods, prints a heatmap, searches for the lanes that collect the most, and writes them into the
-sweep steps of the trees. Lanes lead with the intake, except along a wall, where the robot faces the wall and strafes.
+many simulated AUTO periods, prints a heatmap, searches for the lanes that collect the most, and writes them as the
+waypoints of the paths tagged `sweep-solo`, `sweep-right`, and `sweep-left`. Lanes lead with the intake, except along
+a wall, where the robot faces the wall and strafes.
 
 To move an AUTO pose, follow these steps:
 
@@ -116,7 +129,7 @@ To move an AUTO pose, follow these steps:
    changes to **Overhead**, and the tree view shows the robot's AUTO tree. You edit in red's frame, and blue robots run
    the same tree rotated 180°, so the button is disabled for a blue robot.
 2. Drag an orange disc to move a drive step's pose, or drag the knob at the end of its line to turn its heading. A cyan
-   disc is a sweep's lane point. Click a step in the tree view to find its handles: they turn white.
+   disc is a waypoint of a path, such as a sweep. Click a step in the tree view to find its handles: they turn white.
 3. Click **Done**.
 
 The first edit makes an edited copy of the tree, named "(edited)" in the **AUTO plan** list, and the robot runs the

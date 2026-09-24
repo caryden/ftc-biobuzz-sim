@@ -357,8 +357,9 @@ function detailOf(kind: string, raw: Record<string, unknown>, spec: unknown): st
     case 'fallback': return o.recheckSec === undefined ? undefined : `recheck every ${show(o.recheckSec)} s`;
     case 'parallel': return o.policy === undefined ? 'all' : show(o.policy);
     case 'ref': {
-      const params = isObj(raw.params) ? Object.entries(raw.params).filter(([k]) => k !== 'lanes') : [];
-      return params.length ? params.map(([k, v]) => `${k} ${show(v)}`).join(', ') : undefined;
+      // A list, such as a path's waypoints, shows as its length, so that one long setting doesn't fill the line.
+      const params = isObj(raw.params) ? Object.entries(raw.params) : [];
+      return params.length ? params.map(([k, v]) => `${k} ${Array.isArray(v) ? `[${v.length}]` : show(v)}`).join(', ') : undefined;
     }
     default: return undefined;
   }

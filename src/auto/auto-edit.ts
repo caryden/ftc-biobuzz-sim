@@ -9,24 +9,24 @@
  * A drive step's pose is an expression. A drag changes the expression by one rule: it edits the number literals of a
  * `pose(x, y, heading)` or `offset(p, dx, dy, dHeading)` call, and if the values that move aren't literals, it wraps
  * the expression in `offset()`. So `launchAudience` becomes `offset(launchAudience, 0.2, -0.1)`: the step still
- * follows the robot's size, and the steps that share the definition don't move. A sweep's lanes are numbers, so a
- * drag changes a lane point itself.
+ * follows the robot's size, and the steps that share the definition don't move. A path's waypoints are numbers, so a
+ * drag changes a waypoint itself.
  */
 import { literalNumber, splitCall, type TreeDef } from '../bt';
 import type { Sim } from '../sim/world';
 import { leafParams, simHeading, simPoint, type Pose } from './onboard';
 
 type Json = Record<string, unknown>;
-type Lane = { x: number; y: number; wall: string | null };
+type Waypoint = { x: number; y: number; headingDeg: number | null };
 
-/** One draggable point: a drive step's pose, or one lane point of a sweep. */
+/** One draggable point: a drive step's pose, or one waypoint of a path. */
 export interface Handle {
   /** The node's path in the tree, for example `root/steps/1.sequence/s3`. */
   path: string;
-  kind: 'drive' | 'lane';
-  /** The lane's index, for a lane point. */
-  lane?: number;
-  /** Where the tree puts the point, in the alliance frame. A lane point's heading is 0: a lane takes its heading from its direction or its wall. */
+  kind: 'drive' | 'waypoint';
+  /** The waypoint's index, for a waypoint. */
+  index?: number;
+  /** Where the tree puts the point, in the alliance frame. A waypoint without a heading has heading 0 here: the robot faces along the path. */
   pose: Pose;
   /** The same point on the simulator's floor axes, for drawing: three.js x and z, and the heading in radians. */
   sim: { x: number; z: number; heading?: number };
@@ -42,11 +42,11 @@ const num = (v: number) => String(Object.is(v, -0) ? 0 : v);
 export function editHandles(def: TreeDef, sim: Sim): Handle[] {
   const rotate = sim.alliance === 'blue', out: Handle[] = [];
   for (const { node, params: p } of leafParams(def, sim)) {
-    if (node.label === 'auto.drive') {
+    if (node.label === 'drive.driveTo') {
       const pose = p.pose as Pose;
       out.push({ path: node.path, kind: 'drive', pose, sim: { ...simPoint(pose, rotate), heading: simHeading(pose.headingDeg, rotate) } });
     }
-    if (node.label === 'auto.sweep') (p.lanes as Lane[]).forEach((l, i) => out.push({ path: node.path, kind: 'lane', lane: i, pose: { x: l.x, y: l.y, headingDeg: 0 }, sim: simPoint(l, rotate) }));
+    if (node.label === 'drive.followPath') (p.waypoints as Waypoint[]).forEach((w, i) => out.push({ path: node.path, kind: 'waypoint', index: i, pose: { x: w.x, y: w.y, headingDeg: w.headingDeg ?? 0 }, sim: simPoint(w, rotate) }));
   }
   return out;
 }
@@ -116,7 +116,7 @@ const offsetOf = (base: string, dx: number, dy: number, dh: number) =>
 export function moveHandle(tree: Json, h: Handle, to: { x: number; y: number }): Json {
   return editParams(tree, h.path, p => {
     if (h.kind === 'drive') p.pose = shiftPose(poseSource(p.pose), to.x - h.pose.x, to.y - h.pose.y, 0);
-    if (h.kind === 'lane' && h.lane !== undefined && Array.isArray(p.lanes)) { const l = p.lanes[h.lane] as Lane; p.lanes[h.lane] = { ...l, x: mm(to.x), y: mm(to.y) }; }
+    if (h.kind === 'waypoint' && h.index !== undefined && Array.isArray(p.waypoints)) { const w = p.waypoints[h.index] as Waypoint; p.waypoints[h.index] = { ...w, x: mm(to.x), y: mm(to.y) }; }
   });
 }
 
@@ -126,10 +126,10 @@ export function turnHandle(tree: Json, h: Handle, headingDeg: number): Json {
   return editParams(tree, h.path, p => { p.pose = shiftPose(poseSource(p.pose), 0, 0, wrapDeg(headingDeg - h.pose.headingDeg)); });
 }
 
-/** The value that a handle edits: a drive step's `pose`, or one lane point. */
+/** The value that a handle edits: a drive step's `pose`, or one waypoint. */
 function edited(tree: Json, h: Handle): unknown {
   const p = findNode(tree, h.path)?.params as Json | undefined;
-  return h.kind === 'drive' ? p?.pose : (p?.lanes as unknown[] | undefined)?.[h.lane ?? -1];
+  return h.kind === 'drive' ? p?.pose : (p?.waypoints as unknown[] | undefined)?.[h.index ?? -1];
 }
 
 /** Undoes the edits of one handle: its value goes back to what `original` has. */
@@ -137,7 +137,7 @@ export function resetHandle(tree: Json, h: Handle, original: Json): Json {
   const was = edited(original, h); if (was === undefined) return tree;
   return editParams(tree, h.path, p => {
     if (h.kind === 'drive') p.pose = structuredClone(was);
-    if (h.kind === 'lane' && h.lane !== undefined && Array.isArray(p.lanes)) p.lanes[h.lane] = structuredClone(was);
+    if (h.kind === 'waypoint' && h.index !== undefined && Array.isArray(p.waypoints)) p.waypoints[h.index] = structuredClone(was);
   });
 }
 
@@ -156,7 +156,7 @@ export function sharedWith(tree: Json, def: TreeDef, h: Handle): string[] {
   const mine = poseText(tree, h); if (!mine || !/^[A-Za-z_]\w*$/.test(mine)) return [];
   const out: string[] = [];
   const walk = (n: TreeDef['root']) => {
-    if (n.label === 'auto.drive' && n.path !== h.path && poseText(tree, { ...h, path: n.path }) === mine) out.push(n.path.split('/').pop()!);
+    if (n.label === 'drive.driveTo' && n.path !== h.path && poseText(tree, { ...h, path: n.path }) === mine) out.push(n.path.split('/').pop()!);
     n.children.forEach(walk);
   };
   walk(def.root);

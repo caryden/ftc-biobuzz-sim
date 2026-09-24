@@ -3,6 +3,7 @@ import type { RobotState } from '../sim/world';
 import type { Alliance } from '../sim/hive';
 import { NO_INPUT, retrievable, stackTop, type BallKind, type Flower, type Inputs, type IntakeFilter, type Sim } from '../sim/world';
 import { pursue } from './follow';
+import { Shooter } from './shooter';
 import { ballApproach, fieldObstacles, pathLength, planPath, segmentClear, type Capsule, type Pt } from './planner';
 
 export const TACTICS = ['tip_hive', 'collect_pollen', 'collect_own_nectar', 'launch_into_hive', 'work_flower', 'park'] as const;
@@ -223,6 +224,7 @@ export class Executor {
   }
   private endgame = false; private stagedReverse = { key: '', rev: false };
   private mateLoad = 0; private mateDecidedAt = -9; private launchSide: 'rear' | 'audience' | null = null; private launchCount = 0;
+  private readonly shooter = new Shooter();
   private pickup: Source[] = []; private pickupAt = -1; private pickupCost = Infinity; private pickupEnd: Pt | null = null; private staged = ''; private tipPhase: 'collect' | 'launch' = 'collect';
 
   setTactic(t: Tactic, flower: FlowerId | null) {
@@ -291,7 +293,8 @@ export class Executor {
   private R(sim: Sim) { return Math.hypot(sim.cfg.length, sim.cfg.width) / 2; }
 
   /**
-   * Gets the launch pose for the raised CELL. The shooter has a fixed azimuth, so the robot aims with its heading.
+   * Gets the launch pose for the raised CELL. A fixed shooter aims with the robot's heading. A turret aims itself, so
+   * its launch pose has no heading, and the robot doesn't turn to launch.
    * The first robot of an alliance launches from straight in front of the CELL. Its partner launches from 0.62 m
    * to the side, angled at the opening, so both can launch without sharing a spot.
    */
@@ -309,7 +312,19 @@ export class Executor {
     const z = side * (this.spot[key] ?? 1.3);
     // A dual-sided shooter launches out of either end, so the robot takes whichever heading needs the smaller turn.
     const h = headingAt(z), flipIt = !!sim.cfg.shooter.dualSided && Math.abs(wrap(h - sim.heading)) > Math.PI / 2;
-    return { x, z, heading: flipIt ? wrap(h + Math.PI) : h, key: `launch:${cell}` };
+    return { x, z, heading: sim.cfg.shooter.turret ? this.turretSpotHeading(sim, h) : flipIt ? wrap(h + Math.PI) : h, key: `launch:${cell}` };
+  }
+
+  /**
+   * Gets the heading of a turret robot's launch spot. `aimed` is the heading that would point the shooter's mount at the
+   * CELL. If the turret can reach the CELL from the robot's heading now, within its range of motion less 0.1 rad, the
+   * spot has no heading and the robot doesn't turn. Otherwise it turns only as far as the range needs.
+   */
+  private turretSpotHeading(sim: Sim, aimed: number): number | null {
+    const half = ((sim.cfg.shooter.turretRangeDeg ?? 360) * Math.PI) / 360 - 0.1;
+    if (half >= Math.PI - 0.1) return null;
+    const off = wrap(sim.heading - aimed);
+    return Math.abs(off) <= half ? null : wrap(aimed + Math.sign(off) * half);
   }
 
   /**
@@ -467,13 +482,10 @@ export class Executor {
       goal = this.launchSpot(sim); const p = sim.robot.translation();
       // The shot preview is the real gate, so the spot itself has a loose tolerance: a robot that a neighbor keeps
       // 10 cm off its spot still launches if the predicted path enters the CELL.
-      const at = Math.hypot(goal.x - p.x, goal.z - p.z) < 0.22 && Math.abs(wrap(goal.heading! - sim.heading)) < 0.08;
+      const at = Math.hypot(goal.x - p.x, goal.z - p.z) < 0.22 && (goal.heading === null || Math.abs(wrap(goal.heading - sim.heading)) < 0.08);
       const dual = sim.cfg.shooter.type === 'dual', next = dual ? (carriedPollen > 0 ? 'pollen' : 'nectar') : sim.carried[0] === 'pollen' ? 'pollen' : 'nectar';
-      // Fire-control interlock: release a shot only if the predicted path enters the CELL now and the robot is still.
-      // The HIVE must be calm too: the shot preview uses the CELL's pose now, and a CELL that rocks has moved by the time
-      // the element arrives. A sagging CELL that is still is fine.
-      const hv = sim.hives[sim.alliance], calm = !EXEC.tipByMotion || Math.abs(hv.body.angvel().x) < 0.35;
-      if (at && calm && sim.telemetry.speed < 0.2 && Math.abs(sim.robot.angvel().y) < 0.3 && sim.previewShot(next).scores) {
+      // Fire control is the shooter's: see `Shooter.canShoot`. The robot launches from its spot, still.
+      if (at && this.shooter.canShoot(sim, next, EXEC.tipByMotion)) {
         buttons.shootNectar = !dual || carriedNectar > keepNectar; buttons.shootPollen = true;
         if (onlyWhatTips && dual) {
           // The dual shooter can fire both types at once. Fire only what the TIP still needs, counting balls in

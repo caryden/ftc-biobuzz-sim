@@ -104,7 +104,9 @@
   <label id="bcdriverow">Stick frame <select id="bcdrive"><option value="field">Field-centric</option><option value="robot">Robot-centric</option></select></label>
   <label>Shooter <select id="bcshooter"><option value="dual">Dual, by type</option><option value="fifo">Single, FIFO</option><option value="catapult">Catapult, all 4</option></select></label>
   <label>Intake <select id="bcintake"><option value="front">Front</option><option value="dual">Front and rear</option></select></label>
-  <label>Launches from <select id="bcends"><option value="one">The rear end</option><option value="both">Both ends</option></select></label>
+  <label title="A turret aims each launch at the raised CELL, whatever the robot's heading, with full range of motion and an instant slew: an upper bound on what a turret can do.">Launches from <select id="bcends"><option value="one">The rear end</option><option value="both">Both ends</option><option value="turret">A turret</option></select></label>
+  <label id="bcturretrow" title="The turret's range of motion, centered on the shooter's facing, and its top turn rate. An empty turn rate is an instant slew.">Turret range, ° <input id="bcturretrange" type="number" min="30" max="360" step="5"></label>
+  <label id="bcslewrow">Turret turn rate, °/s <input id="bcturretslew" type="number" min="10" max="3600" step="10" placeholder="instant"></label>
   <label>AUTO plan <select id="bcauto"></select></label>
   <button id="bcedit" type="button" title="Drag the AUTO poses on the FIELD, in red's frame. Blue robots run the same tree rotated 180°. The first edit makes an edited copy of the tree, which this robot runs and this browser keeps.">Edit the AUTO poses on the FIELD</button>
   <label>TELEOP plan <select id="bcplan"><option value="0">Keep tipping</option><option value="30">FLOWERS from 30 s</option><option value="45">FLOWERS from 45 s</option><option value="66">FLOWERS from 66 s</option></select></label>

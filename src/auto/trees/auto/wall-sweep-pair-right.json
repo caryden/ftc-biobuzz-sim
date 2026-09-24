@@ -9,6 +9,7 @@
   "partner": "wall-sweep-pair-left"
  },
  "defs": {
+  "full": "bots.me.transfer.full",
   "len": "bots.me.dimensions.length",
   "flip": "if(bots.me.shooter.facing == 'front', 180, 0)",
   "hiveX": "-0.3237",
@@ -34,9 +35,9 @@
        {
         "id": "finish",
         "note": "When the clock shows 2.5 s, the last step starts, whatever step is running then.",
-        "ref": "auto.clockAtMost",
+        "ref": "waitUntil",
         "params": {
-         "sec": 2.5
+         "condition": "clock.remaining <= 2.5"
         }
        },
        {
@@ -44,7 +45,7 @@
          "children": [
           {
            "id": "s1",
-           "ref": "auto.drive",
+           "ref": "drive.driveTo",
            "params": {
             "pose": "launchAudience",
             "timeoutSec": 4
@@ -53,7 +54,7 @@
           {
            "id": "s2",
            "note": "The raised CELL starts with 3 NECTAR, so the third POLLEN tips the HIVE. The fourth stays for the next CELL.",
-           "ref": "auto.shoot",
+           "ref": "shooter.shoot",
            "params": {
             "count": 3,
             "timeoutSec": 2.5
@@ -62,33 +63,65 @@
           {
            "id": "s3",
            "note": "The red FLOWER's POLLEN fills the wait for the left robot's TIP, which raises the audience CELL again.",
-           "ref": "auto.drive",
+           "ref": "drive.driveTo",
            "params": {
             "pose": "offset(ownFlower, 0.2, 0)",
             "timeoutSec": 3.5
            }
           },
           {
-           "id": "s4",
-           "ref": "auto.drive",
-           "params": {
-            "pose": "ownFlower",
-            "intake": "pollen",
-            "timeoutSec": 1.5
-           }
-          },
-          {
-           "id": "s5",
-           "ref": "auto.push",
-           "params": {
-            "power": 0.35,
-            "intake": "pollen",
-            "timeoutSec": 2.2
+           "id": "collect-s4",
+           "parallel": {
+            "policy": "any",
+            "children": [
+             {
+              "ref": "intake.run",
+              "params": {
+               "filter": "pollen"
+              }
+             },
+             {
+              "sequence": {
+               "children": [
+                {
+                 "id": "s4",
+                 "ref": "drive.driveTo",
+                 "params": {
+                  "pose": "ownFlower",
+                  "timeoutSec": 1.5
+                 }
+                },
+                {
+                 "id": "full-s5",
+                 "parallel": {
+                  "policy": "any",
+                  "children": [
+                   {
+                    "ref": "waitUntil",
+                    "params": {
+                     "condition": "full"
+                    }
+                   },
+                   {
+                    "id": "s5",
+                    "ref": "drive.push",
+                    "params": {
+                     "power": 0.35,
+                     "timeoutSec": 2.2
+                    }
+                   }
+                  ]
+                 }
+                }
+               ]
+              }
+             }
+            ]
            }
           },
           {
            "id": "s6",
-           "ref": "auto.drive",
+           "ref": "drive.driveTo",
            "params": {
             "pose": "launchAudience",
             "timeoutSec": 4
@@ -97,15 +130,15 @@
           {
            "id": "s7",
            "note": "The camera wait keeps the robot from launching at the CELL before its partner's TIP raises it.",
-           "ref": "auto.waitCell",
+           "ref": "waitUntil",
            "params": {
-            "cell": "audience",
+            "condition": "bots.me.vision.seesRaised('audience')",
             "timeoutSec": 14
            }
           },
           {
            "id": "s8",
-           "ref": "auto.shoot",
+           "ref": "shooter.shoot",
            "params": {
             "count": 4,
             "timeoutSec": 2.5,
@@ -113,29 +146,73 @@
            }
           },
           {
-           "id": "s9",
-           "note": "An angled wall sweep: the robot yaws 30 degrees toward the wall, puts its wall-side front corner 1.5 cm from the wall, and drives toward the drivers' corner. The intake is 4.5 cm narrower than the chassis on each side, so a robot that is square to its path never reaches a ball on the wall. At 30 degrees the wall line crosses the front of the intake. The sweep starts as near the center line as G402 allows. The first TIP's spill rests along the audience wall, and the corner holds staged POLLEN.",
-           "ref": "auto.drive",
-           "params": {
-            "pose": "pose(sweepFrom, -wallReach, -150)",
-            "intake": "all",
-            "untilFull": true,
-            "timeoutSec": 2.5
-           }
-          },
-          {
-           "id": "s10",
-           "ref": "auto.drive",
-           "params": {
-            "pose": "pose(-(field.half - 0.31), -wallReach, -150)",
-            "intake": "all",
-            "untilFull": true,
-            "timeoutSec": 3
+           "id": "collect-s9",
+           "parallel": {
+            "policy": "any",
+            "children": [
+             {
+              "ref": "intake.run",
+              "params": {
+               "filter": "all"
+              }
+             },
+             {
+              "sequence": {
+               "children": [
+                {
+                 "id": "full-s9",
+                 "parallel": {
+                  "policy": "any",
+                  "children": [
+                   {
+                    "ref": "waitUntil",
+                    "params": {
+                     "condition": "full"
+                    }
+                   },
+                   {
+                    "id": "s9",
+                    "note": "An angled wall sweep: the robot yaws 30 degrees toward the wall, puts its wall-side front corner 1.5 cm from the wall, and drives toward the drivers' corner. The intake is 4.5 cm narrower than the chassis on each side, so a robot that is square to its path never reaches a ball on the wall. At 30 degrees the wall line crosses the front of the intake. The sweep starts as near the center line as G402 allows. The first TIP's spill rests along the audience wall, and the corner holds staged POLLEN.",
+                    "ref": "drive.driveTo",
+                    "params": {
+                     "pose": "pose(sweepFrom, -wallReach, -150)",
+                     "timeoutSec": 2.5
+                    }
+                   }
+                  ]
+                 }
+                },
+                {
+                 "id": "full-s10",
+                 "parallel": {
+                  "policy": "any",
+                  "children": [
+                   {
+                    "ref": "waitUntil",
+                    "params": {
+                     "condition": "full"
+                    }
+                   },
+                   {
+                    "id": "s10",
+                    "ref": "drive.driveTo",
+                    "params": {
+                     "pose": "pose(-(field.half - 0.31), -wallReach, -150)",
+                     "timeoutSec": 3
+                    }
+                   }
+                  ]
+                 }
+                }
+               ]
+              }
+             }
+            ]
            }
           },
           {
            "id": "s11",
-           "ref": "auto.drive",
+           "ref": "drive.driveTo",
            "params": {
             "pose": "launchAudience",
             "timeoutSec": 3.5
@@ -143,7 +220,7 @@
           },
           {
            "id": "s12",
-           "ref": "auto.shoot",
+           "ref": "shooter.shoot",
            "params": {
             "count": 4,
             "timeoutSec": 2.5,
@@ -151,48 +228,118 @@
            }
           },
           {
-           "id": "s13",
-           "note": "That volley was the third TIP, which raises the rear CELL. The robot backs under the HIVE, so that the spill passes over it to the wall, and sweeps after the spill lands.",
-           "ref": "auto.drive",
-           "params": {
-            "pose": "pose(hiveX, -0.62, -90 + flip)",
-            "untilFull": true,
-            "timeoutSec": 2
+           "id": "full-s13",
+           "parallel": {
+            "policy": "any",
+            "children": [
+             {
+              "ref": "waitUntil",
+              "params": {
+               "condition": "full"
+              }
+             },
+             {
+              "id": "s13",
+              "note": "That volley was the third TIP, which raises the rear CELL. The robot backs under the HIVE, so that the spill passes over it to the wall, and sweeps after the spill lands.",
+              "ref": "drive.driveTo",
+              "params": {
+               "pose": "pose(hiveX, -0.62, -90 + flip)",
+               "timeoutSec": 2
+              }
+             }
+            ]
            }
           },
           {
-           "id": "s14",
-           "note": "The camera can't read either CELL from under the HIVE, so the wait is timed: the HIVE tips about 2 s after the volley ends, and the spill needs about 1.6 s more to reach the wall. A full hopper skips the wait and the sweep.",
-           "ref": "auto.wait",
-           "params": {
-            "timeoutSec": 2.6,
-            "unlessFull": true
+           "id": "full-s14",
+           "parallel": {
+            "policy": "any",
+            "children": [
+             {
+              "ref": "waitUntil",
+              "params": {
+               "condition": "full"
+              }
+             },
+             {
+              "id": "s14",
+              "note": "The camera can't read either CELL from under the HIVE, so the wait is timed: the HIVE tips about 2 s after the volley ends, and the spill needs about 1.6 s more to reach the wall. A full transfer skips the wait and the sweep.",
+              "ref": "wait",
+              "params": {
+               "timeoutSec": 2.6
+              }
+             }
+            ]
            }
           },
           {
-           "id": "s15",
-           "note": "An angled wall sweep: the robot yaws 30 degrees toward the wall, puts its wall-side front corner 1.5 cm from the wall, and drives toward the drivers' corner. The intake is 4.5 cm narrower than the chassis on each side, so a robot that is square to its path never reaches a ball on the wall. At 30 degrees the wall line crosses the front of the intake. The sweep starts as near the center line as G402 allows.",
-           "ref": "auto.drive",
-           "params": {
-            "pose": "pose(sweepFrom, -wallReach, -150)",
-            "intake": "all",
-            "untilFull": true,
-            "timeoutSec": 2.5
-           }
-          },
-          {
-           "id": "s16",
-           "ref": "auto.drive",
-           "params": {
-            "pose": "pose(-(field.half - 0.31), -wallReach, -150)",
-            "intake": "all",
-            "untilFull": true,
-            "timeoutSec": 3
+           "id": "collect-s15",
+           "parallel": {
+            "policy": "any",
+            "children": [
+             {
+              "ref": "intake.run",
+              "params": {
+               "filter": "all"
+              }
+             },
+             {
+              "sequence": {
+               "children": [
+                {
+                 "id": "full-s15",
+                 "parallel": {
+                  "policy": "any",
+                  "children": [
+                   {
+                    "ref": "waitUntil",
+                    "params": {
+                     "condition": "full"
+                    }
+                   },
+                   {
+                    "id": "s15",
+                    "note": "An angled wall sweep: the robot yaws 30 degrees toward the wall, puts its wall-side front corner 1.5 cm from the wall, and drives toward the drivers' corner. The intake is 4.5 cm narrower than the chassis on each side, so a robot that is square to its path never reaches a ball on the wall. At 30 degrees the wall line crosses the front of the intake. The sweep starts as near the center line as G402 allows.",
+                    "ref": "drive.driveTo",
+                    "params": {
+                     "pose": "pose(sweepFrom, -wallReach, -150)",
+                     "timeoutSec": 2.5
+                    }
+                   }
+                  ]
+                 }
+                },
+                {
+                 "id": "full-s16",
+                 "parallel": {
+                  "policy": "any",
+                  "children": [
+                   {
+                    "ref": "waitUntil",
+                    "params": {
+                     "condition": "full"
+                    }
+                   },
+                   {
+                    "id": "s16",
+                    "ref": "drive.driveTo",
+                    "params": {
+                     "pose": "pose(-(field.half - 0.31), -wallReach, -150)",
+                     "timeoutSec": 3
+                    }
+                   }
+                  ]
+                 }
+                }
+               ]
+              }
+             }
+            ]
            }
           },
           {
            "id": "s17",
-           "ref": "auto.drive",
+           "ref": "drive.driveTo",
            "params": {
             "pose": "launchRear",
             "timeoutSec": 5
@@ -200,7 +347,7 @@
           },
           {
            "id": "s18",
-           "ref": "auto.shoot",
+           "ref": "shooter.shoot",
            "params": {
             "count": 4,
             "timeoutSec": 3,
@@ -208,28 +355,73 @@
            }
           },
           {
-           "id": "s19",
-           "note": "Spill collects on the rear wall between the rear FLOWER and the center line, 0.25 m behind the launch spot, and the intake already faces it. The pose is 3 cm toward the center line, so that a 0.43 m robot clears the FLOWER. In trace 20260920-155206, three POLLEN rested there and the robot parked with 6 s left.",
-           "ref": "auto.drive",
-           "params": {
-            "pose": "pose(hiveX + 0.03, wallStand, 90 + flip)",
-            "intake": "all",
-            "untilFull": true,
-            "timeoutSec": 1.5
-           }
-          },
-          {
-           "id": "s20",
-           "ref": "auto.push",
-           "params": {
-            "power": 0.3,
-            "intake": "all",
-            "timeoutSec": 0.6
+           "id": "collect-s19",
+           "parallel": {
+            "policy": "any",
+            "children": [
+             {
+              "ref": "intake.run",
+              "params": {
+               "filter": "all"
+              }
+             },
+             {
+              "sequence": {
+               "children": [
+                {
+                 "id": "full-s19",
+                 "parallel": {
+                  "policy": "any",
+                  "children": [
+                   {
+                    "ref": "waitUntil",
+                    "params": {
+                     "condition": "full"
+                    }
+                   },
+                   {
+                    "id": "s19",
+                    "note": "Spill collects on the rear wall between the rear FLOWER and the center line, 0.25 m behind the launch spot, and the intake already faces it. The pose is 3 cm toward the center line, so that a 0.43 m robot clears the FLOWER. In trace 20260920-155206, three POLLEN rested there and the robot parked with 6 s left.",
+                    "ref": "drive.driveTo",
+                    "params": {
+                     "pose": "pose(hiveX + 0.03, wallStand, 90 + flip)",
+                     "timeoutSec": 1.5
+                    }
+                   }
+                  ]
+                 }
+                },
+                {
+                 "id": "full-s20",
+                 "parallel": {
+                  "policy": "any",
+                  "children": [
+                   {
+                    "ref": "waitUntil",
+                    "params": {
+                     "condition": "full"
+                    }
+                   },
+                   {
+                    "id": "s20",
+                    "ref": "drive.push",
+                    "params": {
+                     "power": 0.3,
+                     "timeoutSec": 0.6
+                    }
+                   }
+                  ]
+                 }
+                }
+               ]
+              }
+             }
+            ]
            }
           },
           {
            "id": "s21",
-           "ref": "auto.drive",
+           "ref": "drive.driveTo",
            "params": {
             "pose": "launchRear",
             "timeoutSec": 2
@@ -237,7 +429,7 @@
           },
           {
            "id": "s22",
-           "ref": "auto.shoot",
+           "ref": "shooter.shoot",
            "params": {
             "count": 4,
             "timeoutSec": 1.5,
@@ -251,13 +443,26 @@
      }
     },
     {
-     "id": "s23",
-     "note": "Every drive to PARK runs the intake: the robot faces the alliance wall, where NECTAR from the LOADING ZONE collects, and a full hopper at the end of AUTO is a head start in TELEOP. LEAVE needs the robot clear of the wall by half its size plus 2 cm. The pose is 9 cm off the wall, which leaves margin for a 5 cm drive tolerance.",
-     "ref": "auto.drive",
-     "params": {
-      "pose": "parkRight",
-      "intake": "all",
-      "timeoutSec": 6
+     "id": "collect-s23",
+     "parallel": {
+      "policy": "any",
+      "children": [
+       {
+        "ref": "intake.run",
+        "params": {
+         "filter": "all"
+        }
+       },
+       {
+        "id": "s23",
+        "note": "Every drive to PARK runs the intake: the robot faces the alliance wall, where NECTAR from the LOADING ZONE collects, and a full transfer at the end of AUTO is a head start in TELEOP. LEAVE needs the robot clear of the wall by half its size plus 2 cm. The pose is 9 cm off the wall, which leaves margin for a 5 cm drive tolerance.",
+        "ref": "drive.driveTo",
+        "params": {
+         "pose": "parkRight",
+         "timeoutSec": 6
+        }
+       }
+      ]
      }
     }
    ]
