@@ -38,19 +38,22 @@ The field editor drags AUTO poses. Increments 7 to 11 of the [behavior-tree plan
 editor for whole AUTO trees: motion and intake leaves, plans that you create and name, parameter forms and an
 expression editor, structure editing, and a quick AUTO run with a timeline of both red robots.
 
-## A realistic turret
+## Turret follow-ups
 
-The simulator's turret has full range of motion and an instant slew, as an upper bound, and it raised scores:
-`e79-turret-all` is +39.4 ± 13.6 combined points with a turret on all four robots, and in `e80-turret-red` red gains
-15.1 ± 7.8. A real turret has a slew rate and a limited range of motion, so the next step is those two limits, to find
-how much of the gain is left. Part of the gain can be accuracy rather than time: an AUTO pose arrives within 0.05 rad of its heading, and the
-turret removes that error from each open-loop shot. AUTO points rose from 177 to 190.3. That split isn't measured.
+A turret raises scores: with all four robots on one, the ideal turret adds 39.4 ± 13.6 combined points, and a
+turret with 180° of range at 180°/s adds 33.9 ± 13.3. See [Subsystems](behavior-trees.md#subsystems) for the table.
+Three questions are open:
 
-Firing on the move lost 58.1 ± 9.3 points (`e82-turret-fire-en-route`): the robots launched more and tipped less.
-Before another try, find out why those shots miss: record, for each launch, whether the shot preview predicted a
-score and whether the element entered the CELL, for launches on the move and at the spot. If the preview is wrong on
-the move, for example because it leaves out the catapult's lateral spread, fix the preview. If it's right, the check
-needs a larger margin.
+- **A slow turret.** At 90°/s, a turret loses 21.2 ± 10.0 points, because the robot waits at the spot for the turret
+  to aim. A planner that also turns the robot, whichever is faster, might keep the gain.
+- **Accuracy or time.** Part of the gain can be accuracy rather than time: an AUTO pose arrives within 0.05 rad of its
+  heading, and the turret removes that error from each open-loop shot. AUTO points rose from 177 to 190.3 with the
+  ideal turret. That split isn't measured.
+- **Firing on the move.** It lost 58.1 ± 9.3 points (`e82-turret-fire-en-route`), because the shot preview is wrong on
+  the move: with no launch error, only 59% of the moving launches that it predicted to enter the CELL did, where 97% of
+  still ones do. To try again, first make the preview agree with the launch on the move. It leaves out the Magnus lift
+  from backspin, which the simulator applies. Two controlled tests without Magnus lift crashed the physics engine with
+  a Rapier `unreachable` error, which is worth finding too.
 
 ## Measured bounce and roll
 

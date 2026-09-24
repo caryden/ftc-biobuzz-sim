@@ -125,6 +125,15 @@ Transit is about 73% of TELEOP. The changes that paid were the ones that removed
 | `e82-turret-fire-en-route` | All four robots on the turret of e79, and a turret fires as soon as a robust check passes, on the way to its spot and on the move: the mean shot and the six shots one standard deviation off in elevation, speed, and azimuth, one at a time, must enter the CELL | 799 ± 6.9 | Not kept. -58.1 ± 9.3 against e79. The robots launched 68.3 elements each, where they launched 59, and made 36.8 TIPS, where they made 39.6: the extra shots missed. |
 | `e83-turret-intake-heading` | e82, and a turret robot on its way to launch points its intakes at the most floor elements that it collects | 785 ± 7.7 | Not kept. -13.0 ± 7.8 against e82. |
 | `e84-turret-default-check` | The code of e83 with both turret experiments off, the default | 857 ± 9.4 | Identical to e79 on every seed. |
+| `e85-no-turret-check` | The two turret experiments of e82 and e83 are removed, and a turret can have a range of motion and a slew rate, with no robot on a turret | 817 ± 9.3 | Identical to e77 on every seed. Before the removal, `scripts/shot-diagnostic.ts` found why e82 lost: 97% of still launches that the shot preview predicted entered the CELL, and only 59% of moving ones, with no launch error. |
+| `e86-ideal-turret-check` | The code of e85, with all four robots on the ideal turret of e79 | 857 ± 9.4 | Identical to e79 on every seed. |
+| `e87-turret-270deg-360dps` | All four robots on a turret with 270° of range and a 360°/s slew | 847 ± 7.5 | -9.3 ± 13.3 against e79, the ideal turret, and +30.0 ± 10.5 against e77, no turret. AUTO points 176.2. |
+| `e88-turret-180deg-180dps` | All four robots on a turret with 180° of range and a 180°/s slew | 811 ± 7.1 | -45.2 ± 14.0 against e79, and -5.8 ± 11.1 against e77. AUTO points 170.3. |
+| `e89-turret-360deg-90dps` | All four robots on a turret with a full turn of range and a 90°/s slew | 769 ± 7.4 | -88.0 ± 12.7 against e79, and -48.6 ± 12.2 against e77. AUTO points 142.6: AUTO fired open loop while the turret still turned, which e90 to e93 fix. |
+| `e90-aimed-check` | AUTO's `shooter.shoot` holds fire until a turret points at the raised CELL, with no robot on a turret | 817 ± 9.3 | Identical to e77 on every seed. |
+| `e91-turret-270deg-360dps-aimed` | The turret of e87, 270° at 360°/s, and the AUTO hold | 844 ± 4.9 | Kept. +26.6 ± 10.1 against e77, no turret, and -12.8 ± 10.8 against e79, the ideal turret. AUTO points 191.2. |
+| `e92-turret-180deg-180dps-aimed` | The turret of e88, 180° at 180°/s, and the AUTO hold | 851 ± 7.9 | Kept. +33.9 ± 13.3 against e77, and +39.7 ± 10.3 against e88 without the hold. AUTO points 190.3. |
+| `e93-turret-360deg-90dps-aimed` | The turret of e89, 360° at 90°/s, and the AUTO hold | 796 ± 7.3 | Kept. -21.2 ± 10.0 against e77: a 90°/s turret is slower than the robot turns, and the robot waits for it at the spot. AUTO points 190.3, where e89 had 142.6. |
 
 Net for the planner: 736 to 800 combined on the default robots, or about +32 per alliance. The standard error of that difference is about 11.
 

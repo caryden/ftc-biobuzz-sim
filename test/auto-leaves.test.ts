@@ -3,6 +3,7 @@ import { beforeAll, describe, expect, it } from 'vitest';
 import { AUTO_REGISTRY, AutoProgram, alliancePose } from '../src/auto/onboard';
 import { loadTree } from '../src/bt';
 import { DT, NO_INPUT, Sim, type Inputs } from '../src/sim/world';
+import { DEFAULT_ROBOT } from '../src/sim/config';
 
 beforeAll(async () => { await RAPIER.init(); });
 
@@ -58,6 +59,23 @@ describe('drive.followPath', () => {
     expect(Math.hypot(p.x - b.x, p.y - b.y)).toBeLessThan(0.06);
     // It passes the first waypoint at speed, where a drive to each point would stop.
     expect(nearA).toBeLessThan(0.1); expect(speedAtA).toBeGreaterThan(0.5);
+  });
+});
+
+describe('shooter.shoot', () => {
+  it('holds fire until a turret points at the raised CELL', () => {
+    // A slow turret, aimed at the start. The robot then turns half a turn, and the turret needs 2 s to aim again.
+    const cfg = () => { const c = structuredClone(DEFAULT_ROBOT); c.shooter.turret = true; c.shooter.turretSlewDegPerSec = 90; return c; };
+    const sim = new Sim(RAPIER, undefined, 'full', 3, { opponent: true, partners: true, configFor: cfg }); sim.start();
+    const program = new AutoProgram(tree({ ref: 'shooter.shoot', params: { count: 4, timeoutSec: 5 } })), q = sim.view(0).robot.rotation();
+    sim.step(sim.robots.map(() => NO_INPUT), sim.robots.map(() => true));
+    sim.view(0).robot.setRotation({ x: q.z, y: q.w, z: -q.x, w: -q.y }, true);
+    let firstShot = -1;
+    for (let k = 0; k < 3 / DT && firstShot < 0; k++) {
+      const inp = program.update(sim.view(0), DT); if (inp.shootPollen) firstShot = k * DT;
+      sim.step(sim.robots.map((_, i) => (i === 0 ? inp : NO_INPUT)), sim.robots.map(() => true));
+    }
+    expect(firstShot).toBeGreaterThan(1);
   });
 });
 

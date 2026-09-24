@@ -204,14 +204,35 @@ The AUTO trees' launch poses keep their headings. With the turret on all four ro
 13.6 combined points against `e77-wait-until`.
 
 `canShoot` is built for TELEOP, as `Shooter.canShoot` in `src/auto/shooter.ts`, and the planner asks it before each
-launch. By default, the robot must be at its launch spot and still, and the mean shot must enter the CELL. Two turret
-experiments are behind switches in `EXEC`, off by default, because both lost points:
+launch: the robot must be at its launch spot and still, and the mean shot preview must enter the CELL. Two turret
+experiments lost points and were removed:
 
-- **Fire on the way.** The turret fires as soon as the mean shot and the six shots one standard deviation off all
-  enter the CELL, on the move. `e82-turret-fire-en-route` is -58.1 ± 9.3 against e79: the robots launched 16% more
-  elements and made fewer TIPS.
-- **Point the intakes at balls.** A turret robot on its way to launch turns toward the most floor elements that it
+- **Fire on the way.** The turret fired as soon as the mean shot and the six shots one standard deviation off all
+  entered the CELL, on the move. `e82-turret-fire-en-route` is -58.1 ± 9.3 against e79: the robots launched 16% more
+  elements and made fewer TIPS. The shot preview is the reason. `scripts/shot-diagnostic.ts` compares it with what
+  launches do: 97% of still launches that it predicts enter the CELL, but only 59% of moving ones, even with no launch
+  error. With no launch error, a controlled test of 14 moving launches agreed with the preview in 9. The preview leaves
+  out the Magnus lift from backspin, which the simulator applies, and whose direction follows the element's velocity:
+  that is a likely cause, but it isn't confirmed.
+- **Point the intakes at balls.** A turret robot on its way to launch turned toward the most floor elements that it
   collects. `e83-turret-intake-heading` is -13.0 ± 7.8 more.
+
+A turret can also have limits: `turretRangeDeg`, its range of motion around the shooter's facing, and
+`turretSlewDegPerSec`, its top turn rate. A limited turret tracks the raised CELL on every step, from the start of the
+MATCH, and launches where it points. TELEOP fire control waits until it's aimed, because the shot preview uses the
+turret's angle. In AUTO, `shooter.shoot` holds fire until `bots.me.shooter.aimed`. If the range can't reach the CELL
+from the robot's heading at the launch spot, the robot turns only as far as the range needs. With the turret on all
+four robots, against no turret (`e77-wait-until`):
+
+| Range and slew | Combined points | Run |
+| --- | --- | --- |
+| Full turn, instant | +39.4 ± 13.6 | `e79-turret-all` |
+| 270°, 360°/s | +26.6 ± 10.1 | `e91-turret-270deg-360dps-aimed` |
+| 180°, 180°/s | +33.9 ± 13.3 | `e92-turret-180deg-180dps-aimed` |
+| Full turn, 90°/s | -21.2 ± 10.0 | `e93-turret-360deg-90dps-aimed` |
+
+A turret at 180°/s or faster keeps most of the ideal turret's gain: its slew hides in the drive time. A 90°/s turret
+turns slower than the robot does, and the robot waits for it at the spot.
 
 In AUTO, `shooter.shoot` still launches open loop from where the robot stands, and its `cell` parameter holds fire
 until the camera sees that CELL raised.
