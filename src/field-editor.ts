@@ -6,7 +6,7 @@
  * browser keeps your plans (`user-trees.ts`). See `auto/auto-edit.ts` for how a drag changes a tree.
  */
 import type { TreeDef } from './bt';
-import { clonePlan, editHandles, isEdited, moveHandle, planId, poseText, resetHandle, sharedWith, sourceOf, toAlliance, turnHandle, type Handle } from './auto/auto-edit';
+import { changedSteps, clonePlan, editHandles, isEdited, moveHandle, planId, poseText, resetHandle, sharedWith, sourceOf, toAlliance, turnHandle, type Handle } from './auto/auto-edit';
 import { AUTO_SOURCES, AUTO_TREES, BUILT_IN_AUTO, SOLO_AUTO, addAutoTree, autoFor, autoStart } from './auto/onboard';
 import type { View, CameraMode } from './render/view';
 import type { TreeEdit } from './render/tree-view';
@@ -37,7 +37,13 @@ export class FieldEditor {
   /** Counts the edits, for the key of the AUTO preview. */
   rev = 0;
   selected: string | null = null;
+  /** The index in `handles` of the point that the ghost robot shows: the handle clicked, or the selected step's first. */
+  point = -1;
   handles: Handle[] = [];
+  /** The steps that differ from the plan that this one was copied from. */
+  changed: ReadonlySet<string> = new Set();
+  /** Undo and redo: the plan before each edit, and the plans that an undo took back. A drag is one edit. */
+  private past: Json[] = []; private future: Json[] = []; private dragFrom: Json | null = null;
   private tree: Json = {}; private original: Json = {}; private drag: { index: number; part: 'pose' | 'heading'; moved: boolean; dx: number; dy: number } | null = null;
   private camera: CameraMode = 'driver'; private swallowClick = false;
 
@@ -47,11 +53,12 @@ export class FieldEditor {
       if (this.robot < 0 || e.button !== 0) return;
       const hit = this.handleAt(e); if (!hit) return;
       // Grabbing a handle selects its step; only a plan that you're editing lets it move.
-      const h = this.handles[hit.index]; this.select(h.path); if (!this.editing) return;
+      // A click on a handle is the editor's: the click that follows mustn't also pick the robot under the handle.
+      const h = this.handles[hit.index]; this.select(h.path, hit.index); this.swallowClick = true; if (!this.editing) return;
       e.preventDefault(); c.setPointerCapture(e.pointerId);
       // The drag keeps the offset between the pointer and the handle, so that the handle doesn't jump to the pointer.
       const q = this.pointer(e);
-      this.drag = { ...hit, moved: false, dx: q ? h.pose.x - q.x : 0, dy: q ? h.pose.y - q.y : 0 };
+      this.drag = { ...hit, moved: false, dx: q ? h.pose.x - q.x : 0, dy: q ? h.pose.y - q.y : 0 }; this.dragFrom = this.tree;
     });
     c.addEventListener('pointermove', e => {
       if (this.robot < 0) return;
@@ -64,7 +71,8 @@ export class FieldEditor {
       if (e.type === 'pointerup') this.dragTo(e);
       if (c.hasPointerCapture(e.pointerId)) c.releasePointerCapture(e.pointerId);
       // The click that follows the release would report the FIELD position in the log.
-      this.swallowClick = true; if (this.drag.moved) this.save(); this.drag = null; c.style.cursor = '';
+      this.swallowClick = true; if (this.drag.moved && this.dragFrom) { this.remember(this.dragFrom); this.save(); this.host.changed(); }
+      this.drag = null; this.dragFrom = null; c.style.cursor = '';
     };
     c.addEventListener('pointerup', end); c.addEventListener('pointercancel', end);
   }
@@ -96,7 +104,7 @@ export class FieldEditor {
 
   get active() { return this.robot >= 0; }
 
-  /** Checks whether the canvas click that just happened ended a drag, and forgets it. The page ignores such a click. */
+  /** Checks whether the canvas click that just happened was on a handle, or ended a drag, and forgets it. The page ignores such a click. */
   takeClick() { const s = this.swallowClick; this.swallowClick = false; return s; }
 
   /** Gets the id of the AUTO tree that robot `i` runs, or null for none. */
@@ -116,7 +124,7 @@ export class FieldEditor {
   /** Shows the plan of red robot `i`. Editing stops: each plan is edited on purpose, with **Edit**. */
   showRobot(i: number) {
     const id = this.treeOf(i);
-    this.robot = i; this.editing = false; this.selected = null; this.drag = null;
+    this.robot = i; this.editing = false; this.selected = null; this.point = -1; this.drag = null; this.past = []; this.future = [];
     this.tree = id ? (AUTO_SOURCES[id] as Json) : {}; this.original = this.originalOf(this.tree);
     this.rev++; this.refresh(); this.host.changed();
   }
@@ -179,9 +187,27 @@ export class FieldEditor {
   }
 
   /** The tree view's options: the selection, and the nodes with handles. */
-  treeEdit(): TreeEdit { return { selected: this.selected, editable: new Set(this.handles.map(h => h.path)) }; }
+  treeEdit(): TreeEdit { return { selected: this.selected, editable: new Set(this.handles.map(h => h.path)), changed: this.changed }; }
 
-  select(path: string | null) { this.selected = path; this.paint(); this.host.changed(); }
+  /** Selects a step, and the point of it that the ghost robot shows: `point`, or the step's first handle. */
+  select(path: string | null, point?: number) {
+    this.selected = path; this.point = point ?? this.handles.findIndex(h => h.path === path);
+    this.paint(); this.host.changed();
+  }
+
+  get canUndo() { return this.editing && this.past.length > 0; }
+  get canRedo() { return this.editing && this.future.length > 0; }
+
+  /** Takes back the last edit of the plan being edited, and saves the plan as it was. */
+  undo() { const t = this.past.pop(); if (!t || !this.editing) return; this.future.push(this.tree); this.commit(t); }
+  /** Makes again the last edit that `undo` took back. */
+  redo() { const t = this.future.pop(); if (!t || !this.editing) return; this.past.push(this.tree); this.commit(t); }
+
+  /** Keeps a plan in the undo history, and clears the redo history, because a new edit starts a new branch. At most 200 are kept. */
+  private remember(before: Json) { this.past.push(before); if (this.past.length > 200) this.past.shift(); this.future = []; }
+
+  /** Makes `t` the plan, saves it, and redraws: for undo and redo. */
+  private commit(t: Json) { addAutoTree(t); this.tree = t; this.save(); this.rev++; this.refresh(); this.host.changed(); }
 
   /** Checks whether any handle of the selected node differs from the plan that this one was copied from. */
   selectedEdited() { return this.editing && this.handles.some(h => h.path === this.selected && isEdited(this.tree, h, this.original)); }
@@ -190,7 +216,7 @@ export class FieldEditor {
   resetSelected() {
     if (!this.selected || !this.editing) return; let t = this.tree;
     for (const h of this.handles.filter(q => q.path === this.selected)) t = resetHandle(t, h, this.original);
-    if (t !== this.tree) this.apply(t, true);
+    if (t !== this.tree) { this.remember(this.tree); this.apply(t, true); }
   }
 
   /** Describes the selected step: its pose in red's FIELD coordinates, its pose as written, and the steps that share its definition. */
@@ -216,7 +242,12 @@ export class FieldEditor {
 
   private save() { if (this.isUserPlan) saveUserTree(this.tree); }
 
-  private refresh() { const def = this.def; this.handles = def ? editHandles(def, this.host.sim().view(this.robot)) : []; this.paint(); }
+  private refresh() {
+    const def = this.def; this.handles = def ? editHandles(def, this.host.sim().view(this.robot)) : [];
+    this.changed = def && this.isUserPlan ? changedSteps(def, this.tree, this.original) : new Set();
+    if (this.point >= this.handles.length) this.point = -1;
+    this.paint();
+  }
 
   private paint() {
     this.host.view.showHandles(this.handles.map(h => ({ ...h.sim, kind: h.kind, selected: h.path === this.selected, edited: this.isUserPlan && isEdited(this.tree, h, this.original) })), this.editing);

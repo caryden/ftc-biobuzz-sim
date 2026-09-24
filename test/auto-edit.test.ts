@@ -1,6 +1,6 @@
 import RAPIER from '@dimforge/rapier3d-compat';
 import { beforeAll, describe, expect, it } from 'vitest';
-import { clonePlan, editHandles, findNode, isEdited, moveHandle, planId, poseText, resetHandle, sharedWith, shiftPose, sourceOf, turnHandle } from '../src/auto/auto-edit';
+import { changedSteps, clonePlan, editHandles, findNode, isEdited, moveHandle, planId, poseText, resetHandle, sharedWith, shiftPose, sourceOf, turnHandle } from '../src/auto/auto-edit';
 import { AUTO_SOURCES, AUTO_TREES, BUILT_IN_AUTO, addAutoTree, removeAutoTree } from '../src/auto/onboard';
 import { Coach } from '../src/auto/coach';
 import { literalNumber, splitCall, type CNode } from '../src/bt';
@@ -85,6 +85,14 @@ describe('field edits', () => {
       const back = resetHandle(resetHandle(t, d, source(id)), l, source(id));
       expect(isEdited(back, d, source(id))).toBe(false); expect(isEdited(back, l, source(id))).toBe(false);
     } finally { removeAutoTree(String(tree.id)); }
+  });
+  it('lists the steps that differ from the plan that this one was copied from', () => {
+    const view = newSim().view(0), id = 'solo-two-tip-sweep', tree = copy(id); addAutoTree(tree);
+    try {
+      expect(changedSteps(AUTO_TREES[String(tree.id)], tree, source(id)).size).toBe(0);
+      const h = editHandles(AUTO_TREES[String(tree.id)], view)[0], t = moveHandle(tree, h, { x: h.pose.x + 0.1, y: h.pose.y }); addAutoTree(t);
+      expect([...changedSteps(AUTO_TREES[String(t.id)], t, source(id))]).toEqual([h.path]);
+    } finally { removeAutoTree(`${id}-test`); }
   });
   it('names the other steps that share a definition', () => {
     const def = AUTO_TREES['wall-sweep-pair-right'], s1 = editHandles(def, newSim().view(0))[0];

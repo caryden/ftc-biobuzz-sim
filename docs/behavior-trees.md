@@ -505,7 +505,8 @@ Chain values aren't recorded yet: the page's recorders don't store node inputs a
 The AUTO editor in `src/field-editor.ts` shows the red robots' AUTO plans on the FIELD before a MATCH, and edits the
 poses of plans that you created. To open it, click **Edit AUTO paths** in the right-hand panel, or in a red robot's
 config. The camera changes to **Overhead**, with the FIELD beside the tree view, and the buttons above the tree pick
-either red robot. The other robot's path draws dimmed. Plans are written in red's frame, and a blue robot runs them
+either red robot, and so does a click on the other robot. Only the selected robot's plan shows, so that a click on
+the FIELD can't pick the other plan where they overlap. Plans are written in red's frame, and a blue robot runs them
 rotated 180°, so the editor works on the red robots. A step with handles has a dot after its leaf name, and clicking a
 step or a handle selects the other.
 
@@ -516,7 +517,15 @@ System plans, the tree files, are read-only. To change one, follow these steps:
 2. Drag a pose, its heading knob, or a waypoint.
 3. Click **Done**.
 
-**Edit** starts editing a plan that you created earlier. **Reset this step** moves a step's handles back to where the
+A see-through robot, sized from the robot's config, stands at the selected point, so that you see which end faces
+where and how close it comes to the FIELD elements. A second later, another one drives the planned path into the point
+and on toward the next one, fading in and out, again and again. It moves at 0.8 m/s along the planned path and turns
+evenly between poses, so it shows clearances, not the robot's real motion. A launch pose has a dashed orange circle.
+
+**Edit** starts editing a plan that you created earlier. **Undo** and **Redo**, or Cmd+Z and Shift+Cmd+Z (Ctrl on
+other systems), step through the edits since you opened the plan: a drag is one edit. A step that differs from the
+source plan has a green dot in the tree view, a node with such a step below it has a faint one, and the bar counts
+them. **Reset this step** moves a step's handles back to where the
 plan that this one was copied from has them, and **Delete plan** deletes it: a robot that ran it goes back to its source
 plan, or to **Default** when that's the robot's default. The bar warns about a plan for the other start position. A
 plan has no partner field: you pick each red robot's plan, and **Default** keeps its pairing in `autoFor`.
@@ -748,18 +757,24 @@ tree in the page. Each increment is one pull request.
    - **`waitUntil`:** `e77-wait-until` is -7.3 ± 11.2 against e76, which is noise. The camera and clock waits lost
      their idle step. Against e73, before this increment, the total is +3.5 ± 8.4.
 
-8. **The editor flow. Done.** **Edit AUTO paths** in the right-hand panel opens the editor on the red robots, and
-   the other robot's path draws dimmed. **Create new** copies a plan under a name and a description, **Edit** edits a
+8. **The editor flow. Done.** **Edit AUTO paths** in the right-hand panel opens the editor on the red robots, one at
+   a time. **Create new** copies a plan under a name and a description, **Edit** edits a
    plan that you created, and system plans are read-only. `meta.partner` is gone. See
    [Editing AUTO poses](#editing-auto-poses). The scores don't change: `e94-editor-flow` equals `e90-aimed-check` on
-   every seed.
-9. **Forms, definitions, validation, and undo.** A leaf's parameter schema drives a form: types, units, limits, enums,
+   every seed. Two follow-ups extend the editor:
+   - **Pose visuals. Done.** A see-through robot at the selected point, a second one that drives the path through it,
+     undo and redo, and marks on the changed steps.
+   - **References and snapping.** The definitions that are poses show as reference points, with their names, which you
+     can drag. An offset pose draws a dotted line to its reference point, and a drag snaps to reference points and, with
+     a checkbox, to a 1 in grid. Alt, or Option on a Mac, inverts the checkbox. A right-click adds a reference point.
+     Holding a dragged pose on a reference point makes it reference that point, and deleting a selected offset line
+     makes the pose absolute.
+9. **Forms, definitions, and validation.** A leaf's parameter schema drives a form: types, units, limits, enums,
    and doc strings. An expression field uses CodeMirror 6, which loads only with the editor: highlighting, completion
    from the environment schema and the tree's definitions, and errors from `src/bt/expr.ts`. A panel edits the
    definitions, and the definitions that are poses get handles on the FIELD, so a drag can move a shared spot.
    Every edit loads the draft again, and each problem that the loader reports shows on its row and field. A draft with
-   problems can be saved but can't run. Undo and redo keep a history of the tree's JSON, because every edit is a pure
-   function of it.
+   problems can be saved but can't run. Undo and redo came earlier, with the editor's pose tools.
 10. **Structure editing.** Insert a node from a palette of the node types and the AUTO leaves, with templates such as
     the sweep. Delete a node and its subtree, reorder by drag-and-drop, and wrap a node in a sequence, a parallel, or a
     fallback.

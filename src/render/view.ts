@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { FIELD, HIVE } from '../sim/config';
+import type { RobotConfig } from '../sim/config';
 import { flowerHeights, type BallKind, type Sim } from '../sim/world';
 
 const COLOR: Record<BallKind, number> = { pollen: 0xf2c81e, nectar_red: 0xd8261c, nectar_blue: 0x1f4fd8 };
@@ -8,6 +9,16 @@ export const CAMERAS = ['driver', 'overhead', 'chase', 'audience'] as const;
 export type CameraMode = (typeof CAMERAS)[number];
 /** The distance from a drive handle to its heading knob, in meters. */
 export const KNOB = 0.3;
+/** A position on the simulator's floor axes and a heading in radians. */
+export interface Pose2 { x: number; z: number; heading: number }
+/** Gets the pose a fraction `f` of the way along a path by length. Headings turn the short way between points. */
+function along(p: Pose2[], f: number): Pose2 | null {
+  if (!p.length) return null; if (p.length === 1) return p[0];
+  const seg = p.slice(1).map((q, i) => Math.hypot(q.x - p[i].x, q.z - p[i].z)), total = seg.reduce((a, b) => a + b, 0) || 1;
+  let d = f * total, i = 0; while (i < seg.length - 1 && d > seg[i]) { d -= seg[i]; i++; }
+  const u = seg[i] ? Math.min(1, d / seg[i]) : 1, a = p[i], b = p[i + 1], dh = Math.atan2(Math.sin(b.heading - a.heading), Math.cos(b.heading - a.heading));
+  return { x: a.x + (b.x - a.x) * u, z: a.z + (b.z - a.z) * u, heading: a.heading + dh * u };
+}
 
 /** Draws the simulation with three.js. The official field CAD supplies every FIELD element mesh. */
 export class View {
@@ -26,7 +37,6 @@ export class View {
   private pathLine = new THREE.Line(new THREE.BufferGeometry(), new THREE.LineBasicMaterial({ color: 0x3ab7ff }));
   private autoLine = new THREE.Line(new THREE.BufferGeometry(), new THREE.LineDashedMaterial({ color: 0xffa726, dashSize: 0.08, gapSize: 0.05 }));
   private autoPoses = new THREE.Group(); private autoKey = '';
-  private otherLine = new THREE.Line(new THREE.BufferGeometry(), new THREE.LineDashedMaterial({ color: 0xffa726, dashSize: 0.05, gapSize: 0.06, transparent: true, opacity: 0.35 })); private otherKey = '';
   private arc: THREE.Line; private arcMat = new THREE.LineBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.85 });
   private staticKey = ''; private chaseAngle: number | null = null;
 
@@ -40,7 +50,7 @@ export class View {
     for (const k of Object.keys(COLOR) as BallKind[]) this.ballMat.set(k, new THREE.MeshStandardMaterial({ color: COLOR[k], roughness: 0.45, side: THREE.DoubleSide }));
     this.buildFloor(); this.buildAxisLabels();
     this.scene.add(this.staticBalls);
-    this.arc = new THREE.Line(new THREE.BufferGeometry(), this.arcMat); this.arc.frustumCulled = false; this.pathLine.frustumCulled = false; this.autoLine.frustumCulled = false; this.otherLine.frustumCulled = false; this.scene.add(this.arc, this.pathLine, this.autoLine, this.autoPoses, this.otherLine);
+    this.arc = new THREE.Line(new THREE.BufferGeometry(), this.arcMat); this.arc.frustumCulled = false; this.pathLine.frustumCulled = false; this.autoLine.frustumCulled = false; this.scene.add(this.arc, this.pathLine, this.autoLine, this.autoPoses);
     this.loadField(); this.loadBalls();
     addEventListener('resize', () => this.resize()); this.resize();
   }
@@ -136,15 +146,20 @@ export class View {
     }
   }
 
-  /** Projects an AUTO trajectory onto the FIELD: a dashed line, a wedge at each pose, and a ring where the robot shoots. */
+  /** Projects an AUTO trajectory onto the FIELD: a dashed line, a wedge at each pose, and a dashed circle where the robot shoots. */
   showAutoPlan(plan: { path: { x: number; z: number }[]; poses: { x: number; z: number; heading: number; shoots: boolean }[] } | null, key: string) {
     this.autoLine.visible = this.autoPoses.visible = !!plan; if (!plan || key === this.autoKey) return; this.autoKey = key;
     this.autoLine.geometry.dispose(); this.autoLine.geometry = new THREE.BufferGeometry().setFromPoints(plan.path.map(q => new THREE.Vector3(q.x, 0.008, q.z))); this.autoLine.computeLineDistances();
     this.autoPoses.clear();
-    const mat = new THREE.MeshBasicMaterial({ color: 0xffa726 }), shootMat = new THREE.MeshBasicMaterial({ color: 0xff5252, side: THREE.DoubleSide });
+    // A launch pose gets a dashed circle in the plan's own orange, like its path, so that it reads as an annotation and
+    // not as FIELD tape, which is solid red or blue.
+    const mat = new THREE.MeshBasicMaterial({ color: 0xffa726 }), shootMat = new THREE.LineDashedMaterial({ color: 0xffa726, dashSize: 0.05, gapSize: 0.035, transparent: true, opacity: 0.85 });
     for (const q of plan.poses) {
       const w = new THREE.Mesh(new THREE.ConeGeometry(0.05, 0.13, 3), mat); w.rotation.set(0, q.heading, -Math.PI / 2, 'YXZ'); w.position.set(q.x, 0.01, q.z); w.scale.y = 1; this.autoPoses.add(w);
-      if (q.shoots) { const ring = new THREE.Mesh(new THREE.RingGeometry(0.2, 0.225, 40), shootMat); ring.rotation.x = -Math.PI / 2; ring.position.set(q.x, 0.009, q.z); this.autoPoses.add(ring); }
+      if (q.shoots) {
+        const pts = Array.from({ length: 49 }, (_, k) => { const a = (k / 48) * 2 * Math.PI; return new THREE.Vector3(q.x + 0.21 * Math.cos(a), 0.009, q.z + 0.21 * Math.sin(a)); });
+        const ring = new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), shootMat); ring.computeLineDistances(); this.autoPoses.add(ring);
+      }
     }
   }
 
@@ -177,36 +192,66 @@ export class View {
 
   /**
    * Gets the handle under a screen point, from the same list as `showHandles`: its index, and whether the point is on
-   * its heading knob. A knob wins over a disc at the same distance. Returns null if no handle is within 16 pixels.
+   * its heading knob. A knob wins over a disc at the same distance, and for handles at the same place, the one first in
+   * the list wins. Returns null if no handle is within 16 pixels.
    */
   handleAt(clientX: number, clientY: number, list: readonly { x: number; z: number; heading?: number }[]): { index: number; part: 'pose' | 'heading' } | null {
     const px = (x: number, z: number) => { const q = new THREE.Vector3(x, 0.022, z).project(this.camera); return Math.hypot(((q.x + 1) / 2) * innerWidth - clientX, ((1 - q.y) / 2) * innerHeight - clientY); };
     let best: { index: number; part: 'pose' | 'heading' } | null = null, bestPx = 16;
     list.forEach((h, index) => {
-      if (h.heading !== undefined) { const d = px(h.x + KNOB * Math.cos(h.heading), h.z - KNOB * Math.sin(h.heading)); if (d <= bestPx) { bestPx = d; best = { index, part: 'heading' }; } }
-      const d = px(h.x, h.z); if (d < bestPx) { bestPx = d; best = { index, part: 'pose' }; }
+      // A knob beats a disc of the same handle at the same distance; an earlier handle beats a later one.
+      const knob = h.heading !== undefined ? px(h.x + KNOB * Math.cos(h.heading), h.z - KNOB * Math.sin(h.heading)) : Infinity, disc = px(h.x, h.z);
+      if (knob <= disc && knob < bestPx) { bestPx = knob; best = { index, part: 'heading' }; }
+      else if (disc < bestPx) { bestPx = disc; best = { index, part: 'pose' }; }
     });
     return best;
   }
 
-  /** Draws the partner's AUTO trajectory, dimmed, beside the plan that `showAutoPlan` draws. Null hides it. */
-  showOtherPlan(plan: { path: { x: number; z: number }[] } | null, key: string) {
-    this.otherLine.visible = !!plan; if (!plan || key === this.otherKey) return; this.otherKey = key; this.otherPath = plan.path;
-    this.otherLine.geometry.dispose(); this.otherLine.geometry = new THREE.BufferGeometry().setFromPoints(plan.path.map(q => new THREE.Vector3(q.x, 0.007, q.z))); this.otherLine.computeLineDistances();
+  // ---- Ghost robots: a see-through robot at the selected pose, and one that runs the path into it and out of it. ----
+  private ghost: THREE.Group | null = null; private runner: THREE.Group | null = null; private ghostCfg = '';
+  private run: { into: Pose2[]; out: Pose2[]; at: number } | null = null;
+
+  /** Builds a see-through robot: the chassis, the intake bars, and the heading arrow, as `syncRobot` sizes them. */
+  private buildGhost(c: RobotConfig): THREE.Group {
+    const g = new THREE.Group(), mat = (color: number) => new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.5, depthWrite: false });
+    const box = (sx: number, sy: number, sz: number, x: number, y: number, color: number) => { const m = new THREE.Mesh(new THREE.BoxGeometry(sx, sy, sz), mat(color)); m.position.set(x, y, 0); g.add(m); };
+    box(c.length, c.height * 0.55, c.width - 0.09, 0, 0.03 + c.height * 0.275, 0xdde3ea);
+    box(0.03, 0.06, c.intake.width, c.length / 2 + 0.015, 0.05, 0x3ad17a);
+    if (c.intake.dualSided) box(0.03, 0.06, c.intake.width, -c.length / 2 - 0.015, 0.05, 0x3ad17a);
+    const arrow = new THREE.Mesh(new THREE.ConeGeometry(0.05, 0.14, 3), mat(0xffffff)); arrow.rotation.z = -Math.PI / 2; arrow.position.set(c.length / 2 - 0.09, 0.04 + c.height * 0.55, 0); g.add(arrow);
+    g.visible = false; this.scene.add(g); return g;
   }
 
-  private otherPath: { x: number; z: number }[] = [];
-  /** Checks whether a screen point is within 10 pixels of the dimmed path that `showOtherPlan` draws. */
-  nearOtherPlan(clientX: number, clientY: number): boolean {
-    if (!this.otherLine.visible) return false;
-    const px = this.otherPath.map(q => { const v = new THREE.Vector3(q.x, 0.007, q.z).project(this.camera); return { x: ((v.x + 1) / 2) * innerWidth, y: ((1 - v.y) / 2) * innerHeight }; });
-    for (let i = 1; i < px.length; i++) {
-      const a = px[i - 1], b = px[i], dx = b.x - a.x, dy = b.y - a.y, l2 = dx * dx + dy * dy, t = l2 ? Math.max(0, Math.min(1, ((clientX - a.x) * dx + (clientY - a.y) * dy) / l2)) : 0;
-      if (Math.hypot(a.x + t * dx - clientX, a.y + t * dy - clientY) <= 10) return true;
-    }
-    return false;
+  private setOpacity(g: THREE.Group, a: number) { g.traverse(o => { const m = (o as THREE.Mesh).material as THREE.MeshBasicMaterial | undefined; if (m) m.opacity = a; }); g.visible = a > 0.01; }
+
+  /**
+   * Shows a see-through robot at a pose, at half opacity, and after a second runs a second one along `into`, the path
+   * to the pose, fading in, and then along `out`, the path to the next pose, fading out, again and again. Positions
+   * are the simulator's x and z, and headings are in radians. Null hides both.
+   */
+  showGhost(at: Pose2 | null, cfg: RobotConfig | null, into: Pose2[] = [], out: Pose2[] = []) {
+    if (!at || !cfg) { if (this.ghost) this.ghost.visible = false; if (this.runner) this.runner.visible = false; this.run = null; return; }
+    const key = `${cfg.length}:${cfg.width}:${cfg.height}:${cfg.intake.width}:${!!cfg.intake.dualSided}`;
+    if (key !== this.ghostCfg) { for (const g of [this.ghost, this.runner]) if (g) this.scene.remove(g); this.ghost = this.buildGhost(cfg); this.runner = this.buildGhost(cfg); this.ghostCfg = key; }
+    this.ghost!.position.set(at.x, 0, at.z); this.ghost!.rotation.y = at.heading; this.setOpacity(this.ghost!, 0.5);
+    // A turn changes only headings, so the check compares them too: an edited pose restarts the run, a second later.
+    const eq = (a: Pose2[], b: Pose2[]) => a.length === b.length && a.every((q, i) => q.x === b[i].x && q.z === b[i].z && q.heading === b[i].heading);
+    const same = this.run && eq(this.run.into, into) && eq(this.run.out, out);
+    if (!same) this.run = into.length > 1 || out.length > 1 ? { into, out, at: performance.now() + 1000 } : null;
   }
 
+  /** Moves the running ghost for this frame. It drives 0.8 m/s, holds 0.3 s at the pose, and rests 0.6 s between runs. */
+  private stepGhost(now: number) {
+    const r = this.run, g = this.runner; if (!g) return; if (!r || now < r.at) { g.visible = false; return; }
+    const len = (p: Pose2[]) => p.slice(1).reduce((s, q, i) => s + Math.hypot(q.x - p[i].x, q.z - p[i].z), 0);
+    const tIn = Math.max(0.6, len(r.into) / 0.8), tOut = Math.max(0.6, len(r.out) / 0.8), cycle = tIn + 0.3 + tOut + 0.6;
+    let t = ((now - r.at) / 1000) % cycle, pose: Pose2 | null = null, a = 0;
+    if (t < tIn) { pose = along(r.into, t / tIn); a = 0.5 * (t / tIn); }
+    else if ((t -= tIn) < 0.3) { pose = r.into[r.into.length - 1] ?? null; a = 0.5; }
+    else if ((t -= 0.3) < tOut) { pose = along(r.out, t / tOut); a = 0.5 * (1 - t / tOut); }
+    if (!pose) { g.visible = false; return; }
+    g.position.set(pose.x, 0, pose.z); g.rotation.y = pose.heading; this.setOpacity(g, a);
+  }
   private debugLines = new THREE.Group();
   /** Draws each robot's planned path, for the review mode. An empty list clears them. */
   showDebugPaths(list: { pts: [number, number][]; color: number }[]) {
@@ -216,13 +261,14 @@ export class View {
 
   /**
    * Gets the index of the robot at a screen point, for click-to-annotate. A click that misses every robot mesh selects
-   * the robot whose projected center is within 70 pixels, because a robot at the far side of the FIELD is a small target.
+   * the robot whose projected center is within `nearPx` pixels, because a robot at the far side of the FIELD is a small
+   * target. Default: 70. With 0, only a click on the robot itself counts.
    */
-  pickRobot(clientX: number, clientY: number): number | null {
+  pickRobot(clientX: number, clientY: number, nearPx = 70): number | null {
     const ray = new THREE.Raycaster(); ray.setFromCamera(new THREE.Vector2((clientX / innerWidth) * 2 - 1, 1 - (clientY / innerHeight) * 2), this.camera);
     const shown = this.robotGroups.filter(g => g.visible), hit = ray.intersectObjects(shown, true)[0];
     if (hit) { let o: THREE.Object3D = hit.object; while (o.parent && !shown.includes(o as THREE.Group)) o = o.parent; return this.robotGroups.indexOf(o as THREE.Group); }
-    let best: number | null = null, bestPx = 70;
+    let best: number | null = null, bestPx = nearPx;
     shown.forEach(g => { const q = g.position.clone().setY(0.15).project(this.camera), d = Math.hypot(((q.x + 1) / 2) * innerWidth - clientX, ((1 - q.y) / 2) * innerHeight - clientY); if (q.z < 1 && d < bestPx) { bestPx = d; best = this.robotGroups.indexOf(g); } });
     return best;
   }
@@ -264,6 +310,7 @@ export class View {
     while (this.robotGroups.length < sim.robots.length) this.robotGroups.push(this.buildRobot());
     this.robotGroups.forEach((g, i) => { g.visible = i < sim.robots.length; if (g.visible) { const r = sim.robots[i]; this.syncRobot(g, sim.view(i), this.plates[i] ?? `${r.alliance === 'red' ? 'R' : 'B'}${r.slot}`); } });
     const p = sim.robot.translation(), th = sim.heading;
+    this.stepGhost(performance.now());
 
     const seen = new Set<number>();
     for (const b of sim.balls.values()) {

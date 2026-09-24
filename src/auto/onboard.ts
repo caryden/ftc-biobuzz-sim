@@ -445,7 +445,7 @@ export function leafParams(def: TreeDef, sim: Sim): { node: CNode; params: Recor
  * It follows the tree's steps in order and skips the race against the clock, so it shows the path of a full AUTO.
  * The plan uses only fixed FIELD geometry, so it is known before the MATCH, like a real AUTO path.
  */
-export function previewAuto(def: TreeDef, sim: Sim, start: Pt): { path: Pt[]; poses: (Pt & { heading: number; shoots: boolean })[] } {
+export function previewAuto(def: TreeDef, sim: Sim, start: Pt): { path: Pt[]; poses: (Pt & { heading: number; shoots: boolean })[]; ends: number[] } {
   const rotate = sim.alliance === 'blue', R = Math.hypot(sim.cfg.length, sim.cfg.width) / 2;
   const leaves = leafParams(def, sim).filter(l => l.node.label !== 'waitUntil' && l.node.label !== 'intake.run');
   // A goal is a pose that the planner routes to, or a waypoint that the robot drives to in a straight line.
@@ -461,11 +461,12 @@ export function previewAuto(def: TreeDef, sim: Sim, start: Pt): { path: Pt[]; po
       });
     }
   });
-  const path: Pt[] = [start], poses: (Pt & { heading: number; shoots: boolean })[] = []; let from = start;
+  // `ends[i]` is the index in `path` where the robot reaches pose `i`, so that tools can find the path into each pose.
+  const path: Pt[] = [start], poses: (Pt & { heading: number; shoots: boolean })[] = [], ends: number[] = []; let from = start;
   for (const { pose, planned, next } of goals) {
     const goal = simPoint(pose, rotate);
     path.push(...(planned ? planPath(from, goal, R, [...fieldObstacles(), centerWall(rotate)]).slice(1) : [goal])); from = goal;
-    poses.push({ ...goal, heading: simHeading(pose.headingDeg, rotate), shoots: next?.label === 'shooter.shoot' });
+    poses.push({ ...goal, heading: simHeading(pose.headingDeg, rotate), shoots: next?.label === 'shooter.shoot' }); ends.push(path.length - 1);
   }
-  return { path, poses };
+  return { path, poses, ends };
 }

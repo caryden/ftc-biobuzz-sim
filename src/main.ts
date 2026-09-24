@@ -115,10 +115,10 @@ $('bcdefault').onclick = () => applyPreset(metaBot); $('bcbaseline').onclick = (
 // In the review, a click on a robot adds a note instead, and the position goes to the review bar.
 canvas.addEventListener('click', e => {
   if (editor.takeClick()) return;
-  // In the editor, a click on the other red robot, or near its dimmed path, shows that robot's plan.
+  // In the editor, a click on the other red robot shows that robot's plan. A click on a handle never gets here.
   if (editor.active) {
-    const k = view.pickRobot(e.clientX, e.clientY), other = 1 - editor.robot;
-    if (k === other || (k === null && view.nearOtherPlan(e.clientX, e.clientY))) { editor.showRobot(other); return; }
+    // Only a click on the robot itself counts: in the overhead view a robot is a large target, and its path passes near it.
+    const other = 1 - editor.robot; if (view.pickRobot(e.clientX, e.clientY, 0) === other) { editor.showRobot(other); return; }
   }
   if (review.active && view.pickRobot(e.clientX, e.clientY) !== null) return; const q = view.pickFloor(e.clientX, e.clientY); if (!q) return;
   const text = `Field position: ${fmtPos(q.x, q.y, units)}`;
@@ -158,7 +158,14 @@ function scoreRows(r: AllianceScore | null, b: AllianceScore | null, totals: { r
   return html;
 }
 // ---------- field editor ----------
-$('aedone').onclick = () => { closeNewPlan(); editor.close(); }; $('aereset').onclick = () => editor.resetSelected(); $('aeedit').onclick = () => editor.edit();
+$('aedone').onclick = () => { closeNewPlan(); editor.close(); }; $('aeundo').onclick = () => editor.undo(); $('aeredo').onclick = () => editor.redo();
+// Undo and redo keys, while you edit a plan. They leave the dialog's text fields to the browser.
+addEventListener('keydown', e => {
+  if (!editor.active || !editor.editing || (e.target as HTMLElement).closest?.('input, textarea, select')) return;
+  const z = e.key === 'z' || e.key === 'Z';
+  if ((e.metaKey || e.ctrlKey) && z) { e.preventDefault(); if (e.shiftKey) editor.redo(); else editor.undo(); }
+  else if (e.ctrlKey && e.key === 'y') { e.preventDefault(); editor.redo(); }
+}, true); $('aereset').onclick = () => editor.resetSelected(); $('aeedit').onclick = () => editor.edit();
 $('aedelete').onclick = () => { const d = editor.def; if (d && confirm(`Delete the plan "${d.name}"? This browser keeps no other copy of it.`)) editor.deletePlan(); };
 // The new-plan dialog asks for the plan to copy, a name, and a description, and the editor checks them.
 const newPlan = { from: $<HTMLSelectElement>('aefrom'), name: $<HTMLInputElement>('aename'), desc: $<HTMLTextAreaElement>('aedesc') };
@@ -179,7 +186,9 @@ function paintEditor() {
   const def = editor.def, plate = bots[editor.robot].plate, wrong = editor.wrongStart;
   $('aehead').textContent = `${plate} · ${def?.name ?? 'No AUTO plan'}`;
   const status = $('aestatus'); status.classList.toggle('warn', !!wrong);
-  status.textContent = !def ? '' : wrong ? `This plan is for the ${wrong} start position.` : editor.isUserPlan ? (editor.editing ? 'Your plan · editing' : 'Your plan') : 'System plan · read-only';
+  const n = editor.changed.size, changes = n ? ` · ${n} step${n === 1 ? '' : 's'} changed` : '';
+  status.textContent = !def ? '' : wrong ? `This plan is for the ${wrong} start position.` : editor.isUserPlan ? `${editor.editing ? 'Your plan · editing' : 'Your plan'}${changes}` : 'System plan · read-only';
+  $<HTMLButtonElement>('aeundo').disabled = !editor.canUndo; $<HTMLButtonElement>('aeredo').disabled = !editor.canRedo;
   $('aeframe').textContent = 'Red alliance frame: +x toward the blue wall, +y toward the rear wall. Blue robots run this tree rotated 180°.';
   // The bar cuts long lines short, so each line's tooltip holds the whole text.
   for (const [id, text] of [['aeframe', $('aeframe').textContent ?? ''], ['aesel', editor.describe((x, y) => fmtPos(x, y, units))]] as const) { $(id).textContent = text; $(id).title = text; }
@@ -263,7 +272,25 @@ function hud(pads: Frame['pads']) {
   $('start').classList.toggle('hidden', sim.phase !== 'pre');
 }
 
-let last = performance.now(), acc = 0, frame = 0, autoPlan: ReturnType<typeof previewAuto> | null = null, autoPlanKey = '', otherPlan: ReturnType<typeof previewAuto> | null = null, otherPlanKey = '';
+/**
+ * In the editor, shows a see-through robot at the selected point, and runs another one along the path into the point and
+ * out of it. The preview has a pose for each handle, in the same order, and `ends` marks where the path reaches each.
+ */
+function paintGhost(me: Sim, plan: ReturnType<typeof previewAuto> | null) {
+  const i = editor.point;
+  if (!editor.active || !plan || i < 0 || plan.poses.length !== editor.handles.length) { view.showGhost(null, null); return; }
+  // Headings turn evenly by distance between two poses, the short way.
+  const ramp = (pts: { x: number; z: number }[], h0: number, h1: number) => {
+    const d = pts.map((_, k) => (k ? Math.hypot(pts[k].x - pts[k - 1].x, pts[k].z - pts[k - 1].z) : 0)), total = d.reduce((a, b) => a + b, 0) || 1, dh = Math.atan2(Math.sin(h1 - h0), Math.cos(h1 - h0));
+    let run = 0; return pts.map((q, k) => { run += d[k]; return { x: q.x, z: q.z, heading: h0 + (dh * run) / total }; });
+  };
+  const at = plan.poses[i], from = i ? plan.ends[i - 1] : 0, to = plan.ends[i], next = plan.ends[i + 1];
+  const into = ramp(plan.path.slice(from, to + 1), i ? plan.poses[i - 1].heading : me.heading, at.heading);
+  const out = next === undefined ? [] : ramp(plan.path.slice(to, next + 1), at.heading, plan.poses[i + 1].heading);
+  view.showGhost({ x: at.x, z: at.z, heading: at.heading }, me.cfg, into, out);
+}
+
+let last = performance.now(), acc = 0, frame = 0, autoPlan: ReturnType<typeof previewAuto> | null = null, autoPlanKey = '';
 function tick(now: number) {
   const frameDt = (now - last) / 1000; acc = Math.min(acc + frameDt, 0.05); last = now;
   const inF = readInput();
@@ -296,10 +323,7 @@ function tick(now: number) {
   const name = bots[pi].auto === 'default' ? autoFor(pv, SOLO_AUTO) : bots[pi].auto, tree = AUTO_TREES[name], showPlan = !!tree && (editor.active || ((sim.mode === 'full' || sim.mode === 'auto') && (sim.phase === 'pre' || sim.phase === 'auto')));
   if (showPlan && sim.phase === 'pre') { const key = `${name}:${pi}:${seed}:${editor.rev}`; if (key !== autoPlanKey) { const p = pv.robot.translation(); autoPlan = previewAuto(tree, pv, { x: p.x, z: p.z }); autoPlanKey = key; } }
   view.showAutoPlan(showPlan ? autoPlan : null, autoPlanKey);
-  // In the editor, the other red robot's plan draws dimmed, so that you see where the partners go.
-  const oi = editor.active ? 1 - editor.robot : -1, ov = oi >= 0 ? sim.view(oi) : null, oName = ov ? (bots[oi].auto === 'default' ? autoFor(ov, SOLO_AUTO) : bots[oi].auto) : '', oTree = ov ? AUTO_TREES[oName] : undefined;
-  if (ov && oTree && sim.phase === 'pre') { const key = `${oName}:${oi}:${seed}:${editor.rev}`; if (key !== otherPlanKey) { const p = ov.robot.translation(); otherPlan = previewAuto(oTree, ov, { x: p.x, z: p.z }); otherPlanKey = key; } }
-  view.showOtherPlan(ov && oTree ? otherPlan : null, otherPlanKey);
+  paintGhost(pv, showPlan ? autoPlan : null);
   if (frame++ % 6 === 0) hud(inF.pads);
   requestAnimationFrame(tick);
 }
