@@ -132,16 +132,18 @@ To change an AUTO plan, follow these steps:
    robot's plan, and editing starts. System plans are read-only. To edit a plan that you made earlier, click **Edit**.
 3. Drag an orange disc to move a drive step's pose, or drag the knob at the end of its line to turn its heading. A cyan
    disc is a waypoint of a path, such as a sweep. Click a step in the tree view to find its handles: they turn white.
-4. Click **Done**.
+   A see-through robot shows the selected pose, and a second one drives the path through it.
+4. To take back an edit, click **Undo**, or press Cmd+Z (Ctrl+Z on other systems).
+5. Click **Done**.
 
 This browser keeps your plans, and the **AUTO plan** list in the robot config shows them. An edited step has a green
-ring. **Reset this step** moves the selected step back to where the source plan has it, and **Delete plan** deletes the
+ring on the FIELD and a green dot in the tree view. **Reset this step** moves the selected step back to where the source plan has it, and **Delete plan** deletes the
 plan. The bar shows the selected step's pose in FIELD x and y, and the pose as the plan writes it, for example
 `offset(launchAudience, 0.2, -0.1)`: a drag keeps the expression and adds an offset to it, so the plan still fits a
 robot of another size. For the rule, see [Editing AUTO poses](behavior-trees.md#editing-auto-poses).
 
-The page projects the tree onto the FIELD as a dashed orange line, with a wedge at each pose and a red ring where the
-robot shoots.
+The page projects the tree onto the FIELD as a dashed orange line, with a wedge at each pose and a dashed orange circle
+where the robot shoots. The circle marks a launch pose only: its 0.21 m radius isn't a range.
 
 ### Alliance partners
 

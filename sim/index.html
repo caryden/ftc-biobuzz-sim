@@ -76,6 +76,7 @@
   .tv.ok em { color: #6fae86; } .tv.fail em { color: #f0857b; } .tv.halt em { color: #8b939f; } .tv.err em, .tv.err b { color: var(--red); }
   .tv-empty { color: var(--dim); }
   /* The field editor: the tree view selects steps, and a bar at the bottom edge shows the selected pose. */
+  .tv.chg > b::before { content: "\25CF  "; color: var(--ok); } .tv.chg2 > b::before { content: "\25CB  "; color: #6fae86; }
   .tv.ed { cursor: pointer; } .tv.ed b.leaf::after { content: " \25C9"; color: #ffa726; } .tv.ed:hover { background: rgba(255,255,255,.07); } .tv.sel, .tv.sel:hover { background: rgba(255,167,38,.28); }
   #autoedit { bottom: 10px; left: 12px; right: 12px; display: flex; align-items: center; gap: 10px; padding: 6px 10px; }
   #autoedit button { width: auto; margin: 0; } #autoedit button:disabled { opacity: .45; cursor: default; }
@@ -139,7 +140,7 @@
 <div id="notepop" class="panel hidden"><h2 id="nhead"></h2><textarea id="ntext" rows="3" placeholder="What happened here?"></textarea>
   <div class="btns"><button id="nsave" class="primary">Save (Enter)</button><button id="ndel">Delete</button><button id="ncancel">Cancel (Esc)</button></div></div>
 <div id="autoedit" class="panel hidden"><div class="aeinfo"><div><span id="aehead"></span> <span id="aestatus"></span> <span id="aeframe"></span></div><div id="aesel"></div></div>
-  <button id="aeedit" title="Lets you drag the poses of this plan.">Edit</button><button id="aecreate" title="Makes a new plan from a copy of any plan for this robot's start position. The new plan becomes this robot's plan.">Create new</button><button id="aereset" title="Moves the selected step's poses back to where the plan that this one was copied from has them.">Reset this step</button><button id="aedelete" title="Deletes this plan. Every robot that ran it goes back to the plan that it was copied from.">Delete plan</button><button id="aedone" class="primary">Done</button></div>
+  <button id="aeedit" title="Lets you drag the poses of this plan.">Edit</button><button id="aecreate" title="Makes a new plan from a copy of any plan for this robot's start position. The new plan becomes this robot's plan.">Create new</button><button id="aeundo" title="Takes back the last edit (Cmd+Z or Ctrl+Z).">Undo</button><button id="aeredo" title="Makes the edit again (Shift+Cmd+Z or Shift+Ctrl+Z).">Redo</button><button id="aereset" title="Moves the selected step's poses back to where the plan that this one was copied from has them.">Reset this step</button><button id="aedelete" title="Deletes this plan. Every robot that ran it goes back to the plan that it was copied from.">Delete plan</button><button id="aedone" class="primary">Done</button></div>
 <div id="aenew" class="panel hidden"><h2>New AUTO plan</h2>
   <label>Copy of <select id="aefrom"></select></label>
   <label>Name <input id="aename" type="text" maxlength="80" placeholder="For example, Rear sweep first"></label>

@@ -186,3 +186,17 @@ export function clonePlan(tree: Json, plan: { id: string; name: string; descript
 export const sourceOf = (tree: Json): string | null => {
   const m = (tree.meta ?? {}) as Json, from = m.clonedFrom ?? m.editedFrom; return typeof from === 'string' ? from : null;
 };
+
+/**
+ * Gets the leaves of `def` whose JSON in `tree` differs from the node at the same path in `original`, the plan that
+ * `tree` was copied from. A leaf that `original` doesn't have counts as changed. Returns their paths.
+ */
+export function changedSteps(def: TreeDef, tree: Json, original: Json): Set<string> {
+  const out = new Set<string>();
+  const walk = (n: TreeDef['root']) => {
+    if (n.leaf) { const a = findNode(tree, n.path), b = findNode(original, n.path); if (JSON.stringify(a) !== JSON.stringify(b)) out.add(n.path); }
+    n.children.forEach(walk);
+  };
+  walk(def.root);
+  return out;
+}
