@@ -1,6 +1,6 @@
 import RAPIER from '@dimforge/rapier3d-compat';
 import { beforeAll, describe, expect, it } from 'vitest';
-import { changedSteps, clonePlan, editHandles, findNode, isEdited, moveHandle, planId, poseText, resetHandle, sharedWith, shiftPose, sourceOf, turnHandle } from '../src/auto/auto-edit';
+import { addReference, changedDefs, changedSteps, clonePlan, editHandles, makeAbsolute, moveReference, referenceOf, referencePoints, referTo, findNode, isEdited, moveHandle, planId, poseText, resetHandle, sharedWith, shiftPose, sourceOf, turnHandle } from '../src/auto/auto-edit';
 import { AUTO_SOURCES, AUTO_TREES, BUILT_IN_AUTO, addAutoTree, removeAutoTree } from '../src/auto/onboard';
 import { Coach } from '../src/auto/coach';
 import { literalNumber, splitCall, type CNode } from '../src/bt';
@@ -97,6 +97,44 @@ describe('field edits', () => {
   it('names the other steps that share a definition', () => {
     const def = AUTO_TREES['wall-sweep-pair-right'], s1 = editHandles(def, newSim().view(0))[0];
     expect(sharedWith(source('wall-sweep-pair-right'), def, s1)).toEqual(['s6', 's11']);
+  });
+});
+
+describe('reference points', () => {
+  it('lists the definitions that are poses, and names the one that a pose is built on', () => {
+    const refs = referencePoints(AUTO_TREES['wall-sweep-pair-right'], newSim().view(0)).map(r => r.name);
+    expect(refs).toEqual(expect.arrayContaining(['launchAudience', 'launchRear', 'ownFlower', 'park', 'parkRight']));
+    expect(refs).not.toContain('hiveX');
+    expect([referenceOf('launchAudience'), referenceOf('offset(ownFlower, 0.2, 0)'), referenceOf('pose(park.x, 1, 0)')]).toEqual(['launchAudience', 'ownFlower', null]);
+  });
+  it('moves every step that names a reference point, and keeps a step in place when it changes reference or goes absolute', () => {
+    const view = newSim().view(0), id = 'wall-sweep-pair-right', tree = copy(id); addAutoTree(tree);
+    try {
+      const at = (t: Json) => editHandles(AUTO_TREES[String(t.id)], view), refs = (t: Json) => referencePoints(AUTO_TREES[String(t.id)], view);
+      const launch = refs(tree).find(r => r.name === 'launchAudience')!, users = at(tree).filter(h => poseText(tree, h) === 'launchAudience');
+      expect(users.length).toBe(3);
+      let t = moveReference(tree, launch, { x: launch.pose.x + 0.1, y: launch.pose.y }); addAutoTree(t);
+      for (const u of users) expect(at(t).find(h => h.path === u.path)!.pose.x).toBeCloseTo(launch.pose.x + 0.1, 6);
+      expect(changedDefs(t, source(id))).toEqual(new Set(['launchAudience']));
+      // s3 is offset(ownFlower, 0.2, 0). Refer it to launchRear instead: it stays where it is.
+      const s3 = at(t).find(h => h.path.endsWith('/s3'))!, rear = refs(t).find(r => r.name === 'launchRear')!;
+      t = referTo(t, s3, rear); addAutoTree(t);
+      expect(poseText(t, s3)).toMatch(/^offset\(launchRear, /);
+      const moved = at(t).find(h => h.path === s3.path)!;
+      expect(moved.pose.x).toBeCloseTo(s3.pose.x, 3); expect(moved.pose.y).toBeCloseTo(s3.pose.y, 3); expect(moved.pose.headingDeg).toBeCloseTo(s3.pose.headingDeg, 1);
+      t = makeAbsolute(t, moved); addAutoTree(t);
+      expect(poseText(t, s3)).toMatch(/^pose\(-?[\d.]+, -?[\d.]+, -?[\d.]+\)$/);
+      expect(at(t).find(h => h.path === s3.path)!.pose.x).toBeCloseTo(s3.pose.x, 3);
+    } finally { removeAutoTree(`${id}-test`); }
+  });
+  it('adds a reference point with a name that expressions can use', () => {
+    const tree = copy('leave-and-park');
+    expect(addReference(tree, '2fast', { x: 0, y: 0 })).toEqual({ error: expect.stringMatching(/letters/) });
+    expect(addReference(tree, 'park', { x: 0, y: 0 })).toEqual({ error: expect.stringMatching(/already/) });
+    const r = addReference(tree, 'midField', { x: -0.5, y: 0.25 }); if (!('tree' in r)) throw new Error(r.error);
+    expect((r.tree.defs as Json).midField).toBe('pose(-0.5, 0.25, 0)');
+    addAutoTree(r.tree);
+    try { expect(referencePoints(AUTO_TREES[String(r.tree.id)], newSim().view(0)).map(q => q.name)).toContain('midField'); } finally { removeAutoTree(String(r.tree.id)); }
   });
 });
 

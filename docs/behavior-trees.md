@@ -544,6 +544,30 @@ direction. A drag changes the expression by one rule, in `shiftPose` in `src/aut
 - **Otherwise,** the drag wraps the expression in `offset()`: `launchAudience` becomes `offset(launchAudience, 0.2,
   -0.1)`. A turn adds a fourth value, in degrees.
 
+### Reference points and snapping
+
+The definitions whose value is a pose, such as `launchAudience`, are *reference points*: small purple dots with their
+name on hover. In a plan that you're editing:
+
+- **Drag a reference point** to move its definition, by the rule in the list that follows. Every step that names it
+  moves, and so does every definition built on it: `parkRight` is built on `park.x`.
+- **Snap a step onto a reference point.** A dragged pose within 12 pixels of one snaps onto it, and keeps its own
+  reference. A turn snaps to the reference point's heading within 5°.
+- **Change a step's reference.** Hold a dragged pose on a reference point for 0.5 s, until the point gets a yellow
+  ring, and release: the pose becomes that point, or an offset from it that keeps the step's own heading.
+- **Make a step absolute.** A step that is an offset from a reference point draws a dotted white line to it, when the
+  step or the point is selected. Click the line, and press **Delete**: the pose becomes `pose(x, y, heading)` with the
+  numbers where it is, and it stops following the point and the robot's size.
+- **Add a reference point.** Right-click the FIELD floor, choose **Add reference point here**, and name it. The name is
+  letters, digits, and underscores, because expressions use it.
+- **Snap to the grid.** With **Snap** on, a drag snaps to a 1 in grid, drawn only around the dragged point, and a turn
+  to 5°. Holding Alt, or Option on a Mac, during a drag does the opposite of the checkbox. Control isn't used, because
+  a Control-click on a Mac is a right-click.
+
+What's selected wins a click: the selected step or reference point takes the press, so that a step that sits on its
+reference point can be dragged. Otherwise a reference point wins within 7 pixels of its center, and a step handle
+within 16. **Reset this step** also resets a selected reference point to the source plan's definition.
+
 So a step keeps following the robot's size, and the other steps that use the same definition don't move. The bar names
 them, for example "also used by s6, s11". An offset that comes back to zero goes away, so a drag back to the start
 restores the step as it was written. Positions round to 1 mm and headings to 0.5°. A path's waypoints are numbers,
@@ -764,7 +788,7 @@ tree in the page. Each increment is one pull request.
    every seed. Two follow-ups extend the editor:
    - **Pose visuals. Done.** A see-through robot at the selected point, a second one that drives the path through it,
      undo and redo, and marks on the changed steps.
-   - **References and snapping.** The definitions that are poses show as reference points, with their names, which you
+   - **References and snapping. Done.** The definitions that are poses show as reference points, with their names, which you
      can drag. An offset pose draws a dotted line to its reference point, and a drag snaps to reference points and, with
      a checkbox, to a 1 in grid. Alt, or Option on a Mac, inverts the checkbox. A right-click adds a reference point.
      Holding a dragged pose on a reference point makes it reference that point, and deleting a selected offset line

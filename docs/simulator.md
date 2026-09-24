@@ -136,6 +136,10 @@ To change an AUTO plan, follow these steps:
 4. To take back an edit, click **Undo**, or press Cmd+Z (Ctrl+Z on other systems).
 5. Click **Done**.
 
+The purple dots are reference points, such as `launchAudience`, which steps name. Drag one to move every step that
+names it, right-click the floor to add one, and turn on **Snap** to snap to a 1 in grid. For all the tools, see
+[Reference points and snapping](behavior-trees.md#reference-points-and-snapping).
+
 This browser keeps your plans, and the **AUTO plan** list in the robot config shows them. An edited step has a green
 ring on the FIELD and a green dot in the tree view. **Reset this step** moves the selected step back to where the source plan has it, and **Delete plan** deletes the
 plan. The bar shows the selected step's pose in FIELD x and y, and the pose as the plan writes it, for example

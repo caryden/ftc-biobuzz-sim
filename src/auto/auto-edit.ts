@@ -14,7 +14,7 @@
  */
 import { literalNumber, splitCall, type TreeDef } from '../bt';
 import type { Sim } from '../sim/world';
-import { leafParams, simHeading, simPoint, type Pose } from './onboard';
+import { definedPoses, leafParams, simHeading, simPoint, type Pose } from './onboard';
 
 type Json = Record<string, unknown>;
 type Waypoint = { x: number; y: number; headingDeg: number | null };
@@ -199,4 +199,81 @@ export function changedSteps(def: TreeDef, tree: Json, original: Json): Set<stri
   };
   walk(def.root);
   return out;
+}
+
+// ---- Reference points: the definitions whose value is a pose, such as `launchAudience`. ----
+
+/** A definition whose value is a pose. Steps can name it, or be an offset from it. */
+export interface RefPoint {
+  name: string;
+  /** The value for the robot shown, in the alliance frame. */
+  pose: Pose;
+  /** The same point on the simulator's floor axes, for drawing. */
+  sim: { x: number; z: number; heading: number };
+}
+
+/** Gets a tree's reference points for the robot that `sim` views. */
+export function referencePoints(def: TreeDef, sim: Sim): RefPoint[] {
+  const rotate = sim.alliance === 'blue';
+  return definedPoses(def, sim).map(({ name, pose }) => ({ name, pose, sim: { ...simPoint(pose, rotate), heading: simHeading(pose.headingDeg, rotate) } }));
+}
+
+const NAME = /^[A-Za-z_][A-Za-z0-9_]*$/;
+
+/** Gets the reference point that a pose expression is built on: `launchAudience`, or the first value of `offset(launchAudience, ...)`. Returns null for any other expression. */
+export function referenceOf(source: string): string | null {
+  const t = source.trim(); if (NAME.test(t)) return t;
+  const c = splitCall(t); return c?.name === 'offset' && NAME.test(c.args[0]) ? c.args[0] : null;
+}
+
+/** Gets the reference point that a drive step's pose is built on, or null. */
+export const stepReference = (tree: Json, h: Handle): string | null => { const t = poseText(tree, h); return t ? referenceOf(t) : null; };
+
+/** Copies a tree and applies `edit` to its `defs`, or returns the tree itself if it has no definition `name`. */
+function editDef(tree: Json, name: string, edit: (src: string) => string): Json {
+  const src = (tree.defs as Json | undefined)?.[name]; if (typeof src !== 'string') return tree;
+  const out = structuredClone(tree); (out.defs as Json)[name] = edit(src); return out;
+}
+
+/** Moves a reference point to a point in the alliance frame. Its definition changes by the rule of `shiftPose`, so every step that names it moves too. */
+export function moveReference(tree: Json, ref: RefPoint, to: { x: number; y: number }): Json {
+  return editDef(tree, ref.name, src => shiftPose(src, to.x - ref.pose.x, to.y - ref.pose.y, 0));
+}
+
+/** Turns a reference point to a heading in degrees in the alliance frame. */
+export function turnReference(tree: Json, ref: RefPoint, headingDeg: number): Json {
+  return editDef(tree, ref.name, src => shiftPose(src, 0, 0, wrapDeg(headingDeg - ref.pose.headingDeg)));
+}
+
+/**
+ * Makes a drive step's pose refer to a reference point: the pose becomes the point's name, or an offset from it that
+ * keeps the step where it is now. Values round to 1 mm and 0.5°.
+ */
+export function referTo(tree: Json, h: Handle, ref: RefPoint): Json {
+  if (h.kind !== 'drive') return tree;
+  return editParams(tree, h.path, p => { p.pose = offsetOf(ref.name, mm(h.pose.x - ref.pose.x), mm(h.pose.y - ref.pose.y), halfDeg(wrapDeg(h.pose.headingDeg - ref.pose.headingDeg))); });
+}
+
+/** Makes a drive step's pose absolute: `pose(x, y, heading)` with the numbers where it is now. It no longer follows its reference point or the robot's size. */
+export function makeAbsolute(tree: Json, h: Handle): Json {
+  if (h.kind !== 'drive') return tree;
+  return editParams(tree, h.path, p => { p.pose = `pose(${num(mm(h.pose.x))}, ${num(mm(h.pose.y))}, ${num(halfDeg(wrapDeg(h.pose.headingDeg)))})`; });
+}
+
+/**
+ * Adds a reference point: a definition `name = pose(x, y, 0)` at a point in the alliance frame. Returns the tree, or
+ * the problem with the name. The loader also rejects a name that the environment or a function already has.
+ */
+export function addReference(tree: Json, name: string, at: { x: number; y: number }): { tree: Json } | { error: string } {
+  const n = name.trim();
+  if (!NAME.test(n)) return { error: 'A name is letters, digits, and underscores, and starts with a letter.' };
+  if ((tree.defs as Json | undefined)?.[n] !== undefined) return { error: `The plan already has a definition named ${n}.` };
+  const out = structuredClone(tree); out.defs = { ...((out.defs as Json | undefined) ?? {}), [n]: `pose(${num(mm(at.x))}, ${num(mm(at.y))}, 0)` };
+  return { tree: out };
+}
+
+/** Gets the names of the definitions whose source in `tree` differs from `original`'s, including new ones. */
+export function changedDefs(tree: Json, original: Json): Set<string> {
+  const a = (tree.defs ?? {}) as Json, b = (original.defs ?? {}) as Json;
+  return new Set(Object.keys(a).filter(k => a[k] !== b[k]));
 }

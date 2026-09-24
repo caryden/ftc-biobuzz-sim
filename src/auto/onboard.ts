@@ -440,6 +440,18 @@ export function leafParams(def: TreeDef, sim: Sim): { node: CNode; params: Recor
   return out;
 }
 
+/** Checks whether a type is a pose: an object with the number fields `x`, `y`, and `headingDeg`. */
+const isPoseType = (ty: { kind: string; fields?: Record<string, { kind: string }> }) =>
+  ty.kind === 'object' && ['x', 'y', 'headingDeg'].every(k => ty.fields?.[k]?.kind === 'number');
+
+/** Gets a tree's definitions whose value is a pose, with their values before the match for the robot that `sim` views. */
+export function definedPoses(def: TreeDef, sim: Sim): { name: string; pose: Pose }[] {
+  const env = new OnboardAdapter(); env.use(sim, 0, 0);
+  const runner = new TreeRunner(def, { env, now: () => 0 }), out: { name: string; pose: Pose }[] = [];
+  def.defs.forEach((d, i) => { if (isPoseType(d.type as never)) out.push({ name: def.defNames[i], pose: runner.defValue(i) as Pose }); });
+  return out;
+}
+
 /**
  * Gets an AUTO tree's whole trajectory before the match: the planned path through every drive pose, and the poses.
  * It follows the tree's steps in order and skips the race against the clock, so it shows the path of a full AUTO.
