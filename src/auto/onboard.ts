@@ -53,7 +53,8 @@ export const ONBOARD_SCHEMA = t.object({
     drive: t.object({ pose: POSE, speed: t.number('m/s') }),
     /** The transfer: the elements that the robot holds between the intake and the shooter. */
     transfer: t.object({ count: t.number(), capacity: t.number(), full: t.boolean() }),
-    shooter: t.object({ facing: t.enum('front', 'rear'), type: t.enum('catapult', 'fifo', 'dual') }),
+    /** The shooter. `aimed` is false while a turret still turns toward the raised CELL; a fixed shooter is always aimed. */
+    shooter: t.object({ facing: t.enum('front', 'rear'), type: t.enum('catapult', 'fifo', 'dual'), aimed: t.boolean() }),
     /** The camera: `seesRaised(cell)` is true while it reads that CELL's AprilTags in the raised position. */
     vision: t.object({ seesRaised: t.fn([CELL], t.boolean()) }),
   }) }),
@@ -79,7 +80,7 @@ export interface OnboardEnv {
     drive: DriveSubsystem;
     intake: IntakeSubsystem;
     transfer: { count: number; capacity: number; full: boolean };
-    shooter: { facing: 'front' | 'rear'; type: 'catapult' | 'fifo' | 'dual'; fire(): void };
+    shooter: { facing: 'front' | 'rear'; type: 'catapult' | 'fifo' | 'dual'; aimed: boolean; fire(): void };
     vision: { seesRaised(cell: 'rear' | 'audience'): boolean };
   } };
   out: AutoOutput;
@@ -157,7 +158,7 @@ class OnboardAdapter implements OnboardEnv {
       drive,
       intake: { set: f => { out.inputs.intake = f; }, stop: () => { out.inputs.intake = this.intakeDefault; } },
       transfer: { count: s.carried.length, capacity: s.cfg.capacity, full: s.carried.length >= s.cfg.capacity },
-      shooter: { facing: s.cfg.shooter.facing, type: s.cfg.shooter.type, fire: () => { out.inputs.shootPollen = true; out.inputs.shootNectar = true; } },
+      shooter: { facing: s.cfg.shooter.facing, type: s.cfg.shooter.type, aimed: s.turretAimed(), fire: () => { out.inputs.shootPollen = true; out.inputs.shootNectar = true; } },
       // Rotated 180°, blue's rear CELL is where red's audience CELL is, so a tree's `rear` means red's rear.
       vision: { seesRaised: cell => seesRaisedCell(s, rotate ? (cell === 'rear' ? 'audience' : 'rear') : cell) },
     } };
@@ -290,13 +291,15 @@ const push = leaf({
 
 const shoot = leaf({
   id: 'shooter.shoot', version: 1, uses: ['shooter'],
-  doc: 'Launches open loop from where the robot stands until `count` elements are gone or the transfer is empty. With `cell`, it holds its fire until the camera sees that CELL raised. A shooter that launches out of both ends uses the end that faces the robot\'s own HIVE.',
+  doc: 'Launches open loop from where the robot stands until `count` elements are gone or the transfer is empty. With `cell`, it holds its fire until the camera sees that CELL raised. A turret holds its fire until it points at the raised CELL. A shooter that launches out of both ends uses the end that faces the robot\'s own HIVE.',
   params: { count: { type: t.number(), min: 1 }, timeoutSec: { type: t.number('s'), min: 0, unit: 's' }, cell: { type: t.nullable(CELL), default: null } },
   *run(ctx) {
     const e = ctx.env, p = ctx.params, timer = stepTimer(e); let startCount = -1; begin(e, ctx.path, 'shoot');
     for (;;) {
       if (timer.over(p.timeoutSec)) return yield* idle();
       if (p.cell && !e.bots.me.vision.seesRaised(p.cell)) { yield; continue; }
+      // A turret holds fire until it points at the CELL: the shooter, not the tree, knows where it aims.
+      if (!e.bots.me.shooter.aimed) { yield; continue; }
       if (startCount < 0) startCount = e.bots.me.transfer.count;
       if (e.bots.me.transfer.count === 0 || startCount - e.bots.me.transfer.count >= p.count) return yield* idle();
       e.bots.me.shooter.fire(); yield;

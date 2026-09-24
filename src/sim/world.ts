@@ -457,6 +457,16 @@ export class Sim {
     st.turretAngle += Math.max(-step, Math.min(step, d)); if (half >= Math.PI) st.turretAngle = wrap(st.turretAngle);
   }
 
+  /**
+   * Checks whether the shooter points at the raised CELL's mouth, within `tolRad`. A fixed shooter and an ideal turret
+   * always count as aimed: the robot's heading aims the one, and the other aims at once.
+   */
+  turretAimed(tolRad = 0.02): boolean {
+    if (!this.turretLimited) return true;
+    const d = this.mountHeading() + this.robots[this.me].turretAngle - this.turretHeading();
+    return Math.abs(Math.atan2(Math.sin(d), Math.cos(d))) < tolRad;
+  }
+
   /** Gets where a launch goes now, as a heading in radians before launch error: a turret's aim, or the shooter's facing. */
   private launchAim(pose?: { x: number; z: number; heading: number }): number {
     if (this.cfg.shooter.turret) return this.turretLimited && !pose ? this.mountHeading() + this.robots[this.me].turretAngle : this.turretHeading(pose);
