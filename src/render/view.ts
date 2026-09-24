@@ -192,14 +192,17 @@ export class View {
 
   /**
    * Gets the handle under a screen point, from the same list as `showHandles`: its index, and whether the point is on
-   * its heading knob. A knob wins over a disc at the same distance. Returns null if no handle is within 16 pixels.
+   * its heading knob. A knob wins over a disc at the same distance, and for handles at the same place, the one first in
+   * the list wins. Returns null if no handle is within 16 pixels.
    */
   handleAt(clientX: number, clientY: number, list: readonly { x: number; z: number; heading?: number }[]): { index: number; part: 'pose' | 'heading' } | null {
     const px = (x: number, z: number) => { const q = new THREE.Vector3(x, 0.022, z).project(this.camera); return Math.hypot(((q.x + 1) / 2) * innerWidth - clientX, ((1 - q.y) / 2) * innerHeight - clientY); };
     let best: { index: number; part: 'pose' | 'heading' } | null = null, bestPx = 16;
     list.forEach((h, index) => {
-      if (h.heading !== undefined) { const d = px(h.x + KNOB * Math.cos(h.heading), h.z - KNOB * Math.sin(h.heading)); if (d <= bestPx) { bestPx = d; best = { index, part: 'heading' }; } }
-      const d = px(h.x, h.z); if (d < bestPx) { bestPx = d; best = { index, part: 'pose' }; }
+      // A knob beats a disc of the same handle at the same distance; an earlier handle beats a later one.
+      const knob = h.heading !== undefined ? px(h.x + KNOB * Math.cos(h.heading), h.z - KNOB * Math.sin(h.heading)) : Infinity, disc = px(h.x, h.z);
+      if (knob <= disc && knob < bestPx) { bestPx = knob; best = { index, part: 'heading' }; }
+      else if (disc < bestPx) { bestPx = disc; best = { index, part: 'pose' }; }
     });
     return best;
   }
@@ -231,7 +234,9 @@ export class View {
     const key = `${cfg.length}:${cfg.width}:${cfg.height}:${cfg.intake.width}:${!!cfg.intake.dualSided}`;
     if (key !== this.ghostCfg) { for (const g of [this.ghost, this.runner]) if (g) this.scene.remove(g); this.ghost = this.buildGhost(cfg); this.runner = this.buildGhost(cfg); this.ghostCfg = key; }
     this.ghost!.position.set(at.x, 0, at.z); this.ghost!.rotation.y = at.heading; this.setOpacity(this.ghost!, 0.5);
-    const same = this.run && this.run.into.length === into.length && this.run.out.length === out.length && this.run.into.every((q, i) => q.x === into[i].x && q.z === into[i].z) && this.run.out.every((q, i) => q.x === out[i].x && q.z === out[i].z);
+    // A turn changes only headings, so the check compares them too: an edited pose restarts the run, a second later.
+    const eq = (a: Pose2[], b: Pose2[]) => a.length === b.length && a.every((q, i) => q.x === b[i].x && q.z === b[i].z && q.heading === b[i].heading);
+    const same = this.run && eq(this.run.into, into) && eq(this.run.out, out);
     if (!same) this.run = into.length > 1 || out.length > 1 ? { into, out, at: performance.now() + 1000 } : null;
   }
 
