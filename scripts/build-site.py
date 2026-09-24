@@ -57,8 +57,11 @@ loop = {}
 for l in open('experiments/policy-loop.jsonl'):
     d = json.loads(l); loop[d['label']] = d
 pick = lambda k: {q: loop[k].get(q) for q in ('combined', 'se', 'red', 'blue', 'margin', 'marginSe')}
-data = {'configs': configs, 'loop': {k: pick(k) for k in loop}, 'matches': {'design': len(rows), 'loop': sum(d['n'] for d in loop.values()), 'first': 1524}}
-lab = open('scripts/results-page.template.html').read().replace('/*DATA*/', json.dumps(data, separators=(',', ':')))
+# The page gets only the runs that it names, so that a run in the log isn't published until the page shows it.
+template = open('scripts/results-page.template.html').read()
+shown = [k for k in loop if f"'{k}'" in template]
+data = {'configs': configs, 'loop': {k: pick(k) for k in shown}, 'matches': {'design': len(rows), 'loop': sum(d['n'] for d in loop.values()), 'first': 1524}}
+lab = template.replace('/*DATA*/', json.dumps(data, separators=(',', ':')))
 open('docs/results.html', 'w').write(lab.replace('<!--NAV-->', '').replace('<!--FOOT-->', ''))
 os.makedirs('public/lab', exist_ok=True)
 open('public/lab/index.html', 'w').write('<!doctype html>\n<html lang="en">\n' + lab.replace('<!--NAV-->', f'<style>{STYLE}</style>{nav("/lab/")}').replace('<!--FOOT-->', FOOT) + '\n</html>\n')
