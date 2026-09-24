@@ -53,7 +53,8 @@ export class FieldEditor {
       if (this.robot < 0 || e.button !== 0) return;
       const hit = this.handleAt(e); if (!hit) return;
       // Grabbing a handle selects its step; only a plan that you're editing lets it move.
-      const h = this.handles[hit.index]; this.select(h.path, hit.index); if (!this.editing) return;
+      // A click on a handle is the editor's: the click that follows mustn't also pick the robot under the handle.
+      const h = this.handles[hit.index]; this.select(h.path, hit.index); this.swallowClick = true; if (!this.editing) return;
       e.preventDefault(); c.setPointerCapture(e.pointerId);
       // The drag keeps the offset between the pointer and the handle, so that the handle doesn't jump to the pointer.
       const q = this.pointer(e);
@@ -103,7 +104,7 @@ export class FieldEditor {
 
   get active() { return this.robot >= 0; }
 
-  /** Checks whether the canvas click that just happened ended a drag, and forgets it. The page ignores such a click. */
+  /** Checks whether the canvas click that just happened was on a handle, or ended a drag, and forgets it. The page ignores such a click. */
   takeClick() { const s = this.swallowClick; this.swallowClick = false; return s; }
 
   /** Gets the id of the AUTO tree that robot `i` runs, or null for none. */

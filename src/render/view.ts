@@ -37,7 +37,6 @@ export class View {
   private pathLine = new THREE.Line(new THREE.BufferGeometry(), new THREE.LineBasicMaterial({ color: 0x3ab7ff }));
   private autoLine = new THREE.Line(new THREE.BufferGeometry(), new THREE.LineDashedMaterial({ color: 0xffa726, dashSize: 0.08, gapSize: 0.05 }));
   private autoPoses = new THREE.Group(); private autoKey = '';
-  private otherLine = new THREE.Line(new THREE.BufferGeometry(), new THREE.LineDashedMaterial({ color: 0xffa726, dashSize: 0.05, gapSize: 0.06, transparent: true, opacity: 0.35 })); private otherKey = '';
   private arc: THREE.Line; private arcMat = new THREE.LineBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.85 });
   private staticKey = ''; private chaseAngle: number | null = null;
 
@@ -51,7 +50,7 @@ export class View {
     for (const k of Object.keys(COLOR) as BallKind[]) this.ballMat.set(k, new THREE.MeshStandardMaterial({ color: COLOR[k], roughness: 0.45, side: THREE.DoubleSide }));
     this.buildFloor(); this.buildAxisLabels();
     this.scene.add(this.staticBalls);
-    this.arc = new THREE.Line(new THREE.BufferGeometry(), this.arcMat); this.arc.frustumCulled = false; this.pathLine.frustumCulled = false; this.autoLine.frustumCulled = false; this.otherLine.frustumCulled = false; this.scene.add(this.arc, this.pathLine, this.autoLine, this.autoPoses, this.otherLine);
+    this.arc = new THREE.Line(new THREE.BufferGeometry(), this.arcMat); this.arc.frustumCulled = false; this.pathLine.frustumCulled = false; this.autoLine.frustumCulled = false; this.scene.add(this.arc, this.pathLine, this.autoLine, this.autoPoses);
     this.loadField(); this.loadBalls();
     addEventListener('resize', () => this.resize()); this.resize();
   }
@@ -205,14 +204,6 @@ export class View {
     return best;
   }
 
-  /** Draws the partner's AUTO trajectory, dimmed, beside the plan that `showAutoPlan` draws. Null hides it. */
-  showOtherPlan(plan: { path: { x: number; z: number }[] } | null, key: string) {
-    this.otherLine.visible = !!plan; if (!plan || key === this.otherKey) return; this.otherKey = key; this.otherPath = plan.path;
-    this.otherLine.geometry.dispose(); this.otherLine.geometry = new THREE.BufferGeometry().setFromPoints(plan.path.map(q => new THREE.Vector3(q.x, 0.007, q.z))); this.otherLine.computeLineDistances();
-  }
-
-  private otherPath: { x: number; z: number }[] = [];
-
   // ---- Ghost robots: a see-through robot at the selected pose, and one that runs the path into it and out of it. ----
   private ghost: THREE.Group | null = null; private runner: THREE.Group | null = null; private ghostCfg = '';
   private run: { into: Pose2[]; out: Pose2[]; at: number } | null = null;
@@ -256,17 +247,6 @@ export class View {
     if (!pose) { g.visible = false; return; }
     g.position.set(pose.x, 0, pose.z); g.rotation.y = pose.heading; this.setOpacity(g, a);
   }
-  /** Checks whether a screen point is within 10 pixels of the dimmed path that `showOtherPlan` draws. */
-  nearOtherPlan(clientX: number, clientY: number): boolean {
-    if (!this.otherLine.visible) return false;
-    const px = this.otherPath.map(q => { const v = new THREE.Vector3(q.x, 0.007, q.z).project(this.camera); return { x: ((v.x + 1) / 2) * innerWidth, y: ((1 - v.y) / 2) * innerHeight }; });
-    for (let i = 1; i < px.length; i++) {
-      const a = px[i - 1], b = px[i], dx = b.x - a.x, dy = b.y - a.y, l2 = dx * dx + dy * dy, t = l2 ? Math.max(0, Math.min(1, ((clientX - a.x) * dx + (clientY - a.y) * dy) / l2)) : 0;
-      if (Math.hypot(a.x + t * dx - clientX, a.y + t * dy - clientY) <= 10) return true;
-    }
-    return false;
-  }
-
   private debugLines = new THREE.Group();
   /** Draws each robot's planned path, for the review mode. An empty list clears them. */
   showDebugPaths(list: { pts: [number, number][]; color: number }[]) {
@@ -276,13 +256,14 @@ export class View {
 
   /**
    * Gets the index of the robot at a screen point, for click-to-annotate. A click that misses every robot mesh selects
-   * the robot whose projected center is within 70 pixels, because a robot at the far side of the FIELD is a small target.
+   * the robot whose projected center is within `nearPx` pixels, because a robot at the far side of the FIELD is a small
+   * target. Default: 70. With 0, only a click on the robot itself counts.
    */
-  pickRobot(clientX: number, clientY: number): number | null {
+  pickRobot(clientX: number, clientY: number, nearPx = 70): number | null {
     const ray = new THREE.Raycaster(); ray.setFromCamera(new THREE.Vector2((clientX / innerWidth) * 2 - 1, 1 - (clientY / innerHeight) * 2), this.camera);
     const shown = this.robotGroups.filter(g => g.visible), hit = ray.intersectObjects(shown, true)[0];
     if (hit) { let o: THREE.Object3D = hit.object; while (o.parent && !shown.includes(o as THREE.Group)) o = o.parent; return this.robotGroups.indexOf(o as THREE.Group); }
-    let best: number | null = null, bestPx = 70;
+    let best: number | null = null, bestPx = nearPx;
     shown.forEach(g => { const q = g.position.clone().setY(0.15).project(this.camera), d = Math.hypot(((q.x + 1) / 2) * innerWidth - clientX, ((1 - q.y) / 2) * innerHeight - clientY); if (q.z < 1 && d < bestPx) { bestPx = d; best = this.robotGroups.indexOf(g); } });
     return best;
   }

@@ -505,7 +505,8 @@ Chain values aren't recorded yet: the page's recorders don't store node inputs a
 The AUTO editor in `src/field-editor.ts` shows the red robots' AUTO plans on the FIELD before a MATCH, and edits the
 poses of plans that you created. To open it, click **Edit AUTO paths** in the right-hand panel, or in a red robot's
 config. The camera changes to **Overhead**, with the FIELD beside the tree view, and the buttons above the tree pick
-either red robot. The other robot's path draws dimmed. Plans are written in red's frame, and a blue robot runs them
+either red robot, and so does a click on the other robot. Only the selected robot's plan shows, so that a click on
+the FIELD can't pick the other plan where they overlap. Plans are written in red's frame, and a blue robot runs them
 rotated 180°, so the editor works on the red robots. A step with handles has a dot after its leaf name, and clicking a
 step or a handle selects the other.
 
@@ -756,8 +757,8 @@ tree in the page. Each increment is one pull request.
    - **`waitUntil`:** `e77-wait-until` is -7.3 ± 11.2 against e76, which is noise. The camera and clock waits lost
      their idle step. Against e73, before this increment, the total is +3.5 ± 8.4.
 
-8. **The editor flow. Done.** **Edit AUTO paths** in the right-hand panel opens the editor on the red robots, and
-   the other robot's path draws dimmed. **Create new** copies a plan under a name and a description, **Edit** edits a
+8. **The editor flow. Done.** **Edit AUTO paths** in the right-hand panel opens the editor on the red robots, one at
+   a time. **Create new** copies a plan under a name and a description, **Edit** edits a
    plan that you created, and system plans are read-only. `meta.partner` is gone. See
    [Editing AUTO poses](#editing-auto-poses). The scores don't change: `e94-editor-flow` equals `e90-aimed-check` on
    every seed. Two follow-ups extend the editor:

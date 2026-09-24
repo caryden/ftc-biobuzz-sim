@@ -115,10 +115,10 @@ $('bcdefault').onclick = () => applyPreset(metaBot); $('bcbaseline').onclick = (
 // In the review, a click on a robot adds a note instead, and the position goes to the review bar.
 canvas.addEventListener('click', e => {
   if (editor.takeClick()) return;
-  // In the editor, a click on the other red robot, or near its dimmed path, shows that robot's plan.
+  // In the editor, a click on the other red robot shows that robot's plan. A click on a handle never gets here.
   if (editor.active) {
-    const k = view.pickRobot(e.clientX, e.clientY), other = 1 - editor.robot;
-    if (k === other || (k === null && view.nearOtherPlan(e.clientX, e.clientY))) { editor.showRobot(other); return; }
+    // Only a click on the robot itself counts: in the overhead view a robot is a large target, and its path passes near it.
+    const other = 1 - editor.robot; if (view.pickRobot(e.clientX, e.clientY, 0) === other) { editor.showRobot(other); return; }
   }
   if (review.active && view.pickRobot(e.clientX, e.clientY) !== null) return; const q = view.pickFloor(e.clientX, e.clientY); if (!q) return;
   const text = `Field position: ${fmtPos(q.x, q.y, units)}`;
@@ -290,7 +290,7 @@ function paintGhost(me: Sim, plan: ReturnType<typeof previewAuto> | null) {
   view.showGhost({ x: at.x, z: at.z, heading: at.heading }, me.cfg, into, out);
 }
 
-let last = performance.now(), acc = 0, frame = 0, autoPlan: ReturnType<typeof previewAuto> | null = null, autoPlanKey = '', otherPlan: ReturnType<typeof previewAuto> | null = null, otherPlanKey = '';
+let last = performance.now(), acc = 0, frame = 0, autoPlan: ReturnType<typeof previewAuto> | null = null, autoPlanKey = '';
 function tick(now: number) {
   const frameDt = (now - last) / 1000; acc = Math.min(acc + frameDt, 0.05); last = now;
   const inF = readInput();
@@ -324,10 +324,6 @@ function tick(now: number) {
   if (showPlan && sim.phase === 'pre') { const key = `${name}:${pi}:${seed}:${editor.rev}`; if (key !== autoPlanKey) { const p = pv.robot.translation(); autoPlan = previewAuto(tree, pv, { x: p.x, z: p.z }); autoPlanKey = key; } }
   view.showAutoPlan(showPlan ? autoPlan : null, autoPlanKey);
   paintGhost(pv, showPlan ? autoPlan : null);
-  // In the editor, the other red robot's plan draws dimmed, so that you see where the partners go.
-  const oi = editor.active ? 1 - editor.robot : -1, ov = oi >= 0 ? sim.view(oi) : null, oName = ov ? (bots[oi].auto === 'default' ? autoFor(ov, SOLO_AUTO) : bots[oi].auto) : '', oTree = ov ? AUTO_TREES[oName] : undefined;
-  if (ov && oTree && sim.phase === 'pre') { const key = `${oName}:${oi}:${seed}:${editor.rev}`; if (key !== otherPlanKey) { const p = ov.robot.translation(); otherPlan = previewAuto(oTree, ov, { x: p.x, z: p.z }); otherPlanKey = key; } }
-  view.showOtherPlan(ov && oTree ? otherPlan : null, otherPlanKey);
   if (frame++ % 6 === 0) hud(inF.pads);
   requestAnimationFrame(tick);
 }

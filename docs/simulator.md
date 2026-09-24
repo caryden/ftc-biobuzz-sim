@@ -126,7 +126,7 @@ a wall, where the robot faces the wall and strafes.
 To change an AUTO plan, follow these steps:
 
 1. Before the MATCH, click **Edit AUTO paths** in the **Game setup** panel. The camera changes to **Overhead**, and the
-   tree view shows R0's AUTO plan. The buttons above the tree switch to the other red robot, whose path draws dimmed.
+   tree view shows R0's AUTO plan. The buttons above the tree, or a click on the other red robot, switch to its plan.
    Plans are written in red's frame, and blue robots run them rotated 180°.
 2. Click **Create new**, pick the plan to copy, and give the new plan a name and a description. The new plan becomes the
    robot's plan, and editing starts. System plans are read-only. To edit a plan that you made earlier, click **Edit**.
