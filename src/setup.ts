@@ -15,7 +15,9 @@ export interface BotSetup {
   /** The robot mass, in pounds. Default: 22. R102 allows 42. */ massLb: number;
   /** If true, the robot has an intake on the rear face too. Default: false. */ dualIntake: boolean;
   /** If true, the robot can launch out of either end. Default: false. */ dualShooter: boolean;
-  /** If true, the shooter is on a turret that aims at the raised CELL whatever the robot's heading. It overrides `dualShooter`. Default: false. */ turret?: boolean;
+  /** If true, the shooter is on a turret that tracks the raised CELL. It overrides `dualShooter`. Default: false. */ turret?: boolean;
+  /** The turret's range of motion in degrees, from 30 to 360. Default: 360. */ turretRangeDeg?: number;
+  /** The turret's top turn rate in degrees per second, or null for an instant slew. Default: null. */ turretSlewDegPerSec?: number | null;
   /**
    * The launcher's shot-to-shot error, as one standard deviation: elevation and azimuth in degrees, and launch speed in
    * meters per second. The values are for POLLEN. NECTAR scales by the same ratios from its own reference errors.
@@ -80,7 +82,8 @@ export function sanitize(b: BotSetup, i: number): BotSetup {
   const num = (v: number, lo: number, hi: number, d: number) => (Number.isFinite(v) ? Math.min(hi, Math.max(lo, v)) : d);
   return { ...b, auto: RENAMED[b.auto] ?? b.auto, plate: (b.plate || BOT_IDS[i]).trim().slice(0, 6) || BOT_IDS[i], driver: i < 2 ? b.driver : 'planner', driveRpm: Math.round(num(b.driveRpm, 100, 1200, DEFAULT_SETUP.driveRpm)), sizeIn: Math.round(num(b.sizeIn, 10, 18, DEFAULT_SETUP.sizeIn) * 10) / 10, massLb: Math.round(num(b.massLb, 10, 42, DEFAULT_SETUP.massLb) * 10) / 10,
     errElevDeg: Math.round(num(b.errElevDeg, 0, 15, REF_ERR.errElevDeg) * 100) / 100, errAzimDeg: Math.round(num(b.errAzimDeg, 0, 15, REF_ERR.errAzimDeg) * 100) / 100, errSpeed: Math.round(num(b.errSpeed, 0, 1.5, REF_ERR.errSpeed) * 1000) / 1000,
-    intakeP: Math.round(num(b.intakeP, 0.2, 1, DEFAULT_ROBOT.intake.successP) * 100) / 100 };
+    intakeP: Math.round(num(b.intakeP, 0.2, 1, DEFAULT_ROBOT.intake.successP) * 100) / 100,
+    turretRangeDeg: Math.round(num(b.turretRangeDeg ?? 360, 30, 360, 360)), turretSlewDegPerSec: b.turretSlewDegPerSec && b.turretSlewDegPerSec > 0 ? Math.round(num(b.turretSlewDegPerSec, 10, 3600, 360)) : null };
 }
 
 /** Assigns a driver to robot `i`. A controller drives one robot, so the robot that had it goes back to the planner. */
@@ -91,7 +94,7 @@ export function assignDriver(bots: BotSetup[], i: number, driver: DriverKind) {
 
 /** Builds the simulator's robot configuration from a setup. */
 export function robotConfig(b: BotSetup): RobotConfig {
-  const c = structuredClone(DEFAULT_ROBOT); c.shooter.type = b.shooter; setDriveRpm(c, b.driveRpm); setSquareSize(c, b.sizeIn * IN); setMass(c, b.massLb * LB); c.intake.dualSided = !!b.dualIntake; c.shooter.dualSided = !!b.dualShooter; c.shooter.turret = !!b.turret;
+  const c = structuredClone(DEFAULT_ROBOT); c.shooter.type = b.shooter; setDriveRpm(c, b.driveRpm); setSquareSize(c, b.sizeIn * IN); setMass(c, b.massLb * LB); c.intake.dualSided = !!b.dualIntake; c.shooter.dualSided = !!b.dualShooter; c.shooter.turret = !!b.turret; c.shooter.turretRangeDeg = b.turretRangeDeg ?? 360; c.shooter.turretSlewDegPerSec = b.turretSlewDegPerSec ?? Infinity;
   for (const lp of [c.shooter.pollen, c.shooter.nectar]) { lp.elevationDeg.std *= b.errElevDeg / REF_ERR.errElevDeg; lp.yawStdDeg *= b.errAzimDeg / REF_ERR.errAzimDeg; lp.speed.std *= b.errSpeed / REF_ERR.errSpeed; }
   c.intake.successP = b.intakeP;
   return c;
@@ -100,5 +103,5 @@ export function robotConfig(b: BotSetup): RobotConfig {
 /** Describes a setup in one line, for the setup panel and the trace. The trace always uses metric units. */
 export function describe(b: BotSetup, units: Units = 'metric'): string {
   const driver = b.driver === 'planner' ? 'Planner' : `Controller ${b.driver === 'pad1' ? 1 : 2}, ${b.stickFrame}-centric`;
-  return `${driver} · ${b.shooter} · AUTO ${b.auto.replace(/[_-]/g, ' ')} · ${b.flowerStartSec ? `FLOWERS from ${b.flowerStartSec} s` : 'tips only'} · ${b.driveRpm} rpm · ${fmtSize(b.sizeIn, units)} · ${fmtMass(b.massLb, units)}${b.dualIntake ? ' · dual intake' : ''}${b.turret ? ' · turret' : b.dualShooter ? ' · launches from both ends' : ''}${b.defense !== 'none' ? ` · ${b.defense} defense` : ''}${b.errElevDeg !== REF_ERR.errElevDeg || b.errAzimDeg !== REF_ERR.errAzimDeg || b.errSpeed !== REF_ERR.errSpeed ? ` · launch error ${b.errElevDeg}°, ${b.errAzimDeg}°, ${fmtSpeed(b.errSpeed, units === 'us' ? 'usft' : units)}` : ''}${b.intakeP !== DEFAULT_ROBOT.intake.successP ? ` · intake ${Math.round(100 * b.intakeP)}%` : ''}`;
+  return `${driver} · ${b.shooter} · AUTO ${b.auto.replace(/[_-]/g, ' ')} · ${b.flowerStartSec ? `FLOWERS from ${b.flowerStartSec} s` : 'tips only'} · ${b.driveRpm} rpm · ${fmtSize(b.sizeIn, units)} · ${fmtMass(b.massLb, units)}${b.dualIntake ? ' · dual intake' : ''}${b.turret ? ` · turret${(b.turretRangeDeg ?? 360) < 360 || b.turretSlewDegPerSec ? ` ${b.turretRangeDeg ?? 360}°${b.turretSlewDegPerSec ? `, ${b.turretSlewDegPerSec}°/s` : ''}` : ''}` : b.dualShooter ? ' · launches from both ends' : ''}${b.defense !== 'none' ? ` · ${b.defense} defense` : ''}${b.errElevDeg !== REF_ERR.errElevDeg || b.errAzimDeg !== REF_ERR.errAzimDeg || b.errSpeed !== REF_ERR.errSpeed ? ` · launch error ${b.errElevDeg}°, ${b.errAzimDeg}°, ${fmtSpeed(b.errSpeed, units === 'us' ? 'usft' : units)}` : ''}${b.intakeP !== DEFAULT_ROBOT.intake.successP ? ` · intake ${Math.round(100 * b.intakeP)}%` : ''}`;
 }

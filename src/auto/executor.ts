@@ -19,13 +19,7 @@ const ownNectar = (a: Alliance): BallKind => (a === 'red' ? 'nectar_red' : 'nect
 export const FILL_TARGET = 4;
 /** Executor tuning. `standoff` picks the launch distance within the scoring range: 0 is the closest spot, 1 the farthest. */
 /** `tipByMotion`: if true, a TIP counts as under way only when the HIVE is past level or turning away from its stop. See `tipTarget`. */
-/**
- * `turretFireEnRoute`: if true, a robot with a turret fires as soon as `Shooter.canShoot` passes in its `moving` mode, on
- * the way to its launch spot. If false, it fires from the spot, still, like a fixed shooter. It lost 58.1 ± 9.3 combined
- * points in e82. `turretIntakeHeading`: if true, a robot with a turret turns its intakes toward the most balls on its
- * way to launch. See `intakeHeading`. It lost 13.0 ± 7.8 more in e83. Default: both false.
- */
-export const EXEC = { standoff: 0.4, tipByMotion: true, turretFireEnRoute: false, turretIntakeHeading: false };
+export const EXEC = { standoff: 0.4, tipByMotion: true };
 
 /**
  * How alliance partners divide the FIELD. With `sides`, the robot that starts on the left of its drivers (the second
@@ -230,7 +224,7 @@ export class Executor {
   }
   private endgame = false; private stagedReverse = { key: '', rev: false };
   private mateLoad = 0; private mateDecidedAt = -9; private launchSide: 'rear' | 'audience' | null = null; private launchCount = 0;
-  private readonly shooter = new Shooter(); private intakeAim: { at: number; heading: number | null } = { at: -1, heading: null };
+  private readonly shooter = new Shooter();
   private pickup: Source[] = []; private pickupAt = -1; private pickupCost = Infinity; private pickupEnd: Pt | null = null; private staged = ''; private tipPhase: 'collect' | 'launch' = 'collect';
 
   setTactic(t: Tactic, flower: FlowerId | null) {
@@ -299,40 +293,6 @@ export class Executor {
   private R(sim: Sim) { return Math.hypot(sim.cfg.length, sim.cfg.width) / 2; }
 
   /**
-   * Gets the heading that points the robot's intakes at the most floor elements that the planner collects: POLLEN and
-   * own NECTAR, still, and outside the own GARDEN. Each element in an intake's corridor, as wide as the intake and up
-   * to 1.2 m ahead of it, counts more the nearer it is. A dual-sided intake counts both ends. The heading is chosen
-   * again every 0.25 s, and it changes only for one that scores 25% more, so that the robot doesn't swing between two
-   * groups. Null means no element is in reach: the robot keeps its heading.
-   */
-  private intakeHeading(sim: Sim): number | null {
-    if (this.intakeAim.at >= 0 && this.t - this.intakeAim.at < 0.25) return this.intakeAim.heading;
-    const p = sim.robot.translation(), c = sim.cfg, own = ownNectar(sim.alliance), g = FIELD.garden[sim.alliance], half = c.length / 2, reach = 1.2;
-    const balls: Pt[] = [];
-    for (const b of sim.balls.values()) {
-      const q = b.body.translation(), v = b.body.linvel();
-      if ((b.kind !== 'pollen' && b.kind !== own) || q.y > 0.13 || Math.hypot(v.x, v.z) > 1.2) continue;
-      if (q.x > g[0] - 0.05 && q.x < g[1] + 0.05 && q.z > g[2] - 0.05 && q.z < g[3] + 0.05) continue;
-      balls.push({ x: q.x - p.x, z: q.z - p.z });
-    }
-    const score = (h: number) => {
-      const fx = Math.cos(h), fz = -Math.sin(h); let sum = 0;
-      for (const b of balls) {
-        const along = b.x * fx + b.z * fz, lateral = Math.abs(-b.x * Math.sin(h) - b.z * Math.cos(h)); if (lateral > c.intake.width / 2 + 0.05) continue;
-        if (along - half >= 0 && along - half <= reach) sum += 1 / (0.25 + along - half);
-        else if (c.intake.dualSided && -along - half >= 0 && -along - half <= reach) sum += 1 / (0.25 - along - half);
-      }
-      return sum;
-    };
-    let best: number | null = null, bestScore = 0;
-    for (let k = 0; k < 24; k++) { const h = wrap((k * Math.PI) / 12), sc = score(h); if (sc > bestScore) { bestScore = sc; best = h; } }
-    const prev = this.intakeAim.heading;
-    const heading = prev !== null && best !== null && score(prev) * 1.25 >= bestScore ? prev : best;
-    this.intakeAim = { at: this.t, heading };
-    return heading;
-  }
-
-  /**
    * Gets the launch pose for the raised CELL. A fixed shooter aims with the robot's heading. A turret aims itself, so
    * its launch pose has no heading, and the robot doesn't turn to launch.
    * The first robot of an alliance launches from straight in front of the CELL. Its partner launches from 0.62 m
@@ -352,7 +312,19 @@ export class Executor {
     const z = side * (this.spot[key] ?? 1.3);
     // A dual-sided shooter launches out of either end, so the robot takes whichever heading needs the smaller turn.
     const h = headingAt(z), flipIt = !!sim.cfg.shooter.dualSided && Math.abs(wrap(h - sim.heading)) > Math.PI / 2;
-    return { x, z, heading: sim.cfg.shooter.turret ? null : flipIt ? wrap(h + Math.PI) : h, key: `launch:${cell}` };
+    return { x, z, heading: sim.cfg.shooter.turret ? this.turretSpotHeading(sim, h) : flipIt ? wrap(h + Math.PI) : h, key: `launch:${cell}` };
+  }
+
+  /**
+   * Gets the heading of a turret robot's launch spot. `aimed` is the heading that would point the shooter's mount at the
+   * CELL. If the turret can reach the CELL from the robot's heading now, within its range of motion less 0.1 rad, the
+   * spot has no heading and the robot doesn't turn. Otherwise it turns only as far as the range needs.
+   */
+  private turretSpotHeading(sim: Sim, aimed: number): number | null {
+    const half = ((sim.cfg.shooter.turretRangeDeg ?? 360) * Math.PI) / 360 - 0.1;
+    if (half >= Math.PI - 0.1) return null;
+    const off = wrap(sim.heading - aimed);
+    return Math.abs(off) <= half ? null : wrap(aimed + Math.sign(off) * half);
   }
 
   /**
@@ -512,11 +484,8 @@ export class Executor {
       // 10 cm off its spot still launches if the predicted path enters the CELL.
       const at = Math.hypot(goal.x - p.x, goal.z - p.z) < 0.22 && (goal.heading === null || Math.abs(wrap(goal.heading - sim.heading)) < 0.08);
       const dual = sim.cfg.shooter.type === 'dual', next = dual ? (carriedPollen > 0 ? 'pollen' : 'nectar') : sim.carried[0] === 'pollen' ? 'pollen' : 'nectar';
-      // Fire control is the shooter's: see `Shooter.canShoot`. The robot launches from its spot, still. A turret aims
-      // itself, so its spot has no heading, and two experiments can change it: see `EXEC`.
-      const turret = !!sim.cfg.shooter.turret, enRoute = turret && EXEC.turretFireEnRoute;
-      if (turret && EXEC.turretIntakeHeading) goal = { ...goal, heading: this.intakeHeading(sim) };
-      if ((enRoute || at) && this.shooter.canShoot(sim, next, EXEC.tipByMotion, enRoute ? 'moving' : 'still')) {
+      // Fire control is the shooter's: see `Shooter.canShoot`. The robot launches from its spot, still.
+      if (at && this.shooter.canShoot(sim, next, EXEC.tipByMotion)) {
         buttons.shootNectar = !dual || carriedNectar > keepNectar; buttons.shootPollen = true;
         if (onlyWhatTips && dual) {
           // The dual shooter can fire both types at once. Fire only what the TIP still needs, counting balls in

@@ -99,11 +99,14 @@ export interface RobotConfig {
   /**
    * `dualSided` lets the robot launch out of either end, for example with a two-position turret or two catapults. It
    * launches out of the end that faces its own HIVE. Default: false.
-   * `turret` mounts the shooter on a turret with full range of motion and an instant slew: each launch aims at the
-   * raised CELL's mouth of the robot's own HIVE, whatever the robot's heading. It's an upper bound: a real turret has
-   * limits, so it can only do worse. It overrides `dualSided` and `facing`. Default: false.
+   * `turret` mounts the shooter on a turret that tracks the raised CELL's mouth of the robot's own HIVE. With the
+   * default limits, full range of motion and an instant slew, each launch aims at the mouth whatever the robot's
+   * heading: an upper bound. It overrides `dualSided`. Default: false.
+   * `turretRangeDeg` is the turret's range of motion, centered on the direction that `facing` gives. Default: 360.
+   * `turretSlewDegPerSec` is its top turn rate. Default: Infinity. A limited turret turns toward the mouth on every
+   * step, from the start of the MATCH, and launches where it points, aimed or not.
    */
-  shooter: { type: ShooterType; facing: 'front' | 'rear'; cycleSec: number; pollen: LaunchParams; nectar: LaunchParams; dualSided?: boolean; turret?: boolean };
+  shooter: { type: ShooterType; facing: 'front' | 'rear'; cycleSec: number; pollen: LaunchParams; nectar: LaunchParams; dualSided?: boolean; turret?: boolean; turretRangeDeg?: number; turretSlewDegPerSec?: number };
   place: { range: number; maxBearingDeg: number; durationSec: number; successP: number };
   /**
    * The AprilTag camera. It faces the same side as the shooter and looks up at the underside of the raised CELL.

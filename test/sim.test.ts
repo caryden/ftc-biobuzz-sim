@@ -4,7 +4,6 @@ import { DEFAULT_ROBOT, HIVE } from '../src/sim/config';
 import { mecanumForces } from '../src/sim/drivetrain';
 import { cameraSightings, seesRaisedCell } from '../src/sim/camera';
 import { DT, NO_INPUT, Sim } from '../src/sim/world';
-import { Shooter } from '../src/auto/shooter';
 
 beforeAll(async () => { await RAPIER.init(); });
 const run = (s: Sim, sec: number, inp = NO_INPUT) => { for (let i = 0; i < sec / DT; i++) s.step(inp); };
@@ -75,14 +74,19 @@ describe('shooting and HIVE TIP', () => {
     while (t.hives.red.tips === 0 && shots < 16) { t.carried = ['pollen']; run(t, 0.05, { ...NO_INPUT, shootPollen: true }); run(t, 1.2); shots++; }
     expect(t.hives.red.tips).toBe(1); expect(shots).toBeLessThanOrEqual(6);
   });
-  it("gives the moving fire check a margin: the shots one standard deviation off must score too", () => {
-    const turret = () => { const c = structuredClone(DEFAULT_ROBOT); c.shooter.turret = true; return c; };
-    const s = new Sim(RAPIER, undefined, 'practice', 7, { configFor: turret }), y = s.robot.translation().y, side = s.hives.red.upCell === 'audience' ? 1 : -1;
-    const at = (d: number) => s.robot.setTranslation({ x: HIVE.pivotX.red, y, z: side * d }, true);
-    let mean = 0, robust = 0;
-    for (let d = 0.6; d <= 2; d += 0.01) { at(d); if (s.previewShot('pollen').scores) mean++; if (new Shooter().canShoot(s, 'pollen', false, 'moving')) robust++; }
-    // The robust window lies inside the mean window, and it's narrower.
-    expect(robust).toBeGreaterThan(20); expect(robust).toBeLessThan(mean);
+  it('turns a limited turret at its slew rate and stops it at the end of its range', () => {
+    const limited = (rangeDeg: number, slew: number) => () => { const c = structuredClone(DEFAULT_ROBOT); c.shooter.turret = true; c.shooter.turretRangeDeg = rangeDeg; c.shooter.turretSlewDegPerSec = slew; return c; };
+    const face = (s: Sim, heading: number) => s.robot.setRotation({ x: 0, y: Math.sin(heading / 2), z: 0, w: Math.cos(heading / 2) }, true);
+    // A full-range turret at 90°/s, aimed at the start. Then the robot turns half a turn, and the turret needs 2 s.
+    const s = new Sim(RAPIER, undefined, 'practice', 7, { configFor: limited(360, 90) }), y = s.robot.translation().y;
+    s.robot.setTranslation({ x: HIVE.pivotX.red, y, z: 1.4 }, true); face(s, -Math.PI / 2); run(s, 0.1);
+    expect(s.previewShot('pollen').scores).toBe(true);
+    face(s, Math.PI / 2); run(s, 0.5); expect(s.previewShot('pollen').scores).toBe(false);
+    run(s, 2); expect(s.previewShot('pollen').scores).toBe(true);
+    // A 90° turret can't reach a CELL half a turn away from its mount.
+    const n = new Sim(RAPIER, undefined, 'practice', 7, { configFor: limited(90, 3600) });
+    n.robot.setTranslation({ x: HIVE.pivotX.red, y, z: 1.4 }, true); face(n, Math.PI / 2); run(n, 1);
+    expect(n.previewShot('pollen').scores).toBe(false);
   });
 });
 

@@ -61,6 +61,8 @@ export interface RobotState {
   plan: { phase: 'collect' | 'launch' | 'park' | 'other'; side: 'rear' | 'audience' | null; load: number; claims: string[]; goal: { x: number; z: number } | null; /** The half of the FIELD that this robot keeps to under the sides convention, or null. */ zone: 'rear' | 'audience' | null };
   placing: { until: number; kind: 'pollen' | 'nectar'; flower: Flower } | null;
   shotReadyAt: { nectar: number; pollen: number }; flowerReadyAt: number; lastForward: number; autoLeave: boolean; autoPark: boolean;
+  /** A limited turret's angle from the shooter's mount direction, in radians, or NaN before its first step. */
+  turretAngle: number;
   /** The drive command of the last step, for the referee: what the robot was trying to do. */
   lastCmd: DriveCommand;
 }
@@ -254,7 +256,7 @@ export class Sim {
       .setCollisionGroups(groups(GROUP.robot, GROUP.struct | GROUP.ball | GROUP.robot)), body);
     // G304.G: four pre-loaded POLLEN.
     return { alliance, slot, intent: '', plan: { phase: 'other', side: null, load: 0, claims: [], goal: null, zone: null }, cfg: c, body, carried: ['pollen', 'pollen', 'pollen', 'pollen'], telemetry: { busVoltage: 12.8, speed: 0 }, placing: null,
-      shotReadyAt: { nectar: 0, pollen: 0 }, flowerReadyAt: 0, lastForward: 0, autoLeave: false, autoPark: false, lastCmd: { forward: 0, strafeRight: 0, turnRight: 0 } };
+      shotReadyAt: { nectar: 0, pollen: 0 }, flowerReadyAt: 0, lastForward: 0, autoLeave: false, autoPark: false, turretAngle: Number.NaN, lastCmd: { forward: 0, strafeRight: 0, turnRight: 0 } };
   }
 
   spawn(kind: BallKind, x: number, y: number, z: number, vel?: { x: number; y: number; z: number }, spin?: { x: number; y: number; z: number }): Ball {
@@ -340,7 +342,7 @@ export class Sim {
       if (this.hives[a].pollTip()) { this.say(`${a.toUpperCase()} HIVE TIP (${this.hives[a].tips})`); this.owed[a].push({ at: this.simTime + 2 }); }
     }
     this.humanPlayers();
-    for (const r of per) { r.v.intake(r.inp.intake ?? 'all'); if (r.active) { r.v.shoot(r.inp); r.v.place(r.inp); } }
+    for (const r of per) { r.v.aimTurret(); r.v.intake(r.inp.intake ?? 'all'); if (r.active) { r.v.shoot(r.inp); r.v.place(r.inp); } }
     this.housekeeping(); this.touch();
   }
 
@@ -434,6 +436,33 @@ export class Sim {
     return Math.atan2(-(m.z - p.z), m.x - p.x);
   }
 
+  /** True for a turret with a limited range of motion or slew rate: it has an angle that `aimTurret` turns. */
+  get turretLimited(): boolean {
+    const s = this.cfg.shooter; return !!s.turret && ((s.turretRangeDeg ?? 360) < 360 || Number.isFinite(s.turretSlewDegPerSec ?? Infinity));
+  }
+
+  /** Gets the direction that the shooter's mount faces, in radians: the robot's heading, turned 180° for a rear shooter. */
+  mountHeading(heading = this.heading): number { return heading + (this.cfg.shooter.facing === 'rear' ? Math.PI : 0); }
+
+  /**
+   * Turns a limited turret toward the raised CELL's mouth by at most its slew rate for one step, within its range of
+   * motion. A turret with less than a full turn of range can't pass its stops, so it takes the long way around.
+   */
+  private aimTurret() {
+    if (!this.turretLimited) return;
+    const s = this.cfg.shooter, st = this.robots[this.me], half = ((s.turretRangeDeg ?? 360) * Math.PI) / 360, wrap = (a: number) => Math.atan2(Math.sin(a), Math.cos(a));
+    const want = Math.max(-half, Math.min(half, wrap(this.turretHeading() - this.mountHeading())));
+    if (!Number.isFinite(st.turretAngle)) { st.turretAngle = want; return; } // Aimed before the MATCH starts.
+    const step = (((s.turretSlewDegPerSec ?? Infinity) * Math.PI) / 180) * DT, d = half >= Math.PI ? wrap(want - st.turretAngle) : want - st.turretAngle;
+    st.turretAngle += Math.max(-step, Math.min(step, d)); if (half >= Math.PI) st.turretAngle = wrap(st.turretAngle);
+  }
+
+  /** Gets where a launch goes now, as a heading in radians before launch error: a turret's aim, or the shooter's facing. */
+  private launchAim(pose?: { x: number; z: number; heading: number }): number {
+    if (this.cfg.shooter.turret) return this.turretLimited && !pose ? this.mountHeading() + this.robots[this.me].turretAngle : this.turretHeading(pose);
+    return (pose?.heading ?? this.heading) + (this.launchesRear(pose) ? Math.PI : 0);
+  }
+
   private launch(kind: BallKind, lateral = 0) {
     const lp: LaunchParams = kind === 'pollen' ? this.cfg.shooter.pollen : this.cfg.shooter.nectar;
     const el = (this.rng.gauss(lp.elevationDeg.mean, lp.elevationDeg.std) * Math.PI) / 180;
@@ -441,7 +470,7 @@ export class Sim {
     const spin = (this.rng.gauss(lp.backspinRpm.mean, lp.backspinRpm.std) * 2 * Math.PI) / 60;
     if (this.cfg.shooter.turret) {
       // The turret sits at the robot's center and turns the whole shooter, so the offsets are along the launch heading.
-      const aim = this.turretHeading(), th = aim + yaw, fx = Math.cos(th), fz = -Math.sin(th), lx = -Math.sin(th), lz = -Math.cos(th), p = this.robot.translation(), rv = this.robot.linvel();
+      const aim = this.launchAim(), th = aim + yaw, fx = Math.cos(th), fz = -Math.sin(th), lx = -Math.sin(th), lz = -Math.cos(th), p = this.robot.translation(), rv = this.robot.linvel();
       const side = lp.offset[1] + lateral, o = { x: p.x + Math.cos(aim) * lp.offset[0] - Math.sin(aim) * side, z: p.z - Math.sin(aim) * lp.offset[0] - Math.cos(aim) * side };
       const b = this.spawn(kind, o.x, 0.02 + lp.offset[2], o.z,
         { x: rv.x + sp * Math.cos(el) * fx, y: sp * Math.sin(el), z: rv.z + sp * Math.cos(el) * fz },
@@ -588,18 +617,13 @@ export class Sim {
     return { ...s, total, rp: { swarm: s.leave + s.autoPark + s.park >= RP.swarm, pollinator1: tips >= RP.pollinator1, pollinator2: tips >= RP.pollinator2 } };
   }
 
-  /**
-   * Predicts the mean shot path for the next ball, for the aiming overlay and fire control. Points are world
-   * coordinates. `off` shifts the launch from its mean, in degrees of elevation and azimuth and m/s of speed, so that
-   * fire control can check the shots that are one standard deviation off.
-   */
-  previewShot(kind: 'pollen' | 'nectar', pose?: { x: number; z: number; heading: number }, off?: { elevationDeg?: number; speed?: number; yawDeg?: number }): { points: number[][]; scores: boolean } {
+  /** Predicts the mean shot path for the next ball, for the aiming overlay and fire control. Points are world coordinates. */
+  previewShot(kind: 'pollen' | 'nectar', pose?: { x: number; z: number; heading: number }): { points: number[][]; scores: boolean } {
     const lp = kind === 'pollen' ? this.cfg.shooter.pollen : this.cfg.shooter.nectar, r = kind === 'pollen' ? FIELD.pollenRadius : FIELD.nectarRadius;
-    const m = kind === 'pollen' ? BALL.pollenMass : BALL.nectarMass, el = ((off?.elevationDeg ? lp.elevationDeg.mean + off.elevationDeg : lp.elevationDeg.mean) * Math.PI) / 180;
-    const speed = off?.speed ? lp.speed.mean + off.speed : lp.speed.mean;
+    const m = kind === 'pollen' ? BALL.pollenMass : BALL.nectarMass, el = (lp.elevationDeg.mean * Math.PI) / 180, speed = lp.speed.mean;
     // The launch direction is the robot heading, or the opposite direction for a rear-facing shooter, or a turret's aim.
-    const aim = this.cfg.shooter.turret ? this.turretHeading(pose) : (pose?.heading ?? this.heading) + (this.launchesRear(pose) ? Math.PI : 0), base = pose ?? { x: this.robot.translation().x, z: this.robot.translation().z };
-    const th = off?.yawDeg ? aim + (off.yawDeg * Math.PI) / 180 : aim;
+    // A pose is a hypothetical spot, where a turret would have had time to aim. Without one, a limited turret aims where it points now.
+    const th = this.launchAim(pose), base = pose ?? { x: this.robot.translation().x, z: this.robot.translation().z };
     const o = { x: base.x + Math.cos(th) * lp.offset[0], z: base.z - Math.sin(th) * lp.offset[0] };
     const rv = pose ? { x: 0, y: 0, z: 0 } : this.robot.linvel();
     const p = [o.x, 0.02 + lp.offset[2], o.z], v = [rv.x + speed * Math.cos(el) * Math.cos(th), speed * Math.sin(el), rv.z - speed * Math.cos(el) * Math.sin(th)];
