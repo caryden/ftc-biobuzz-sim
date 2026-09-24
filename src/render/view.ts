@@ -207,6 +207,93 @@ export class View {
     return best;
   }
 
+  // ---- Reference points, offset lines, and the snap grid of the AUTO editor. ----
+  private refGroup = new THREE.Group(); private linkGroup = new THREE.Group(); private gridGroup = new THREE.Group();
+
+  private clearGroup(g: THREE.Group) {
+    if (!g.parent) { g.renderOrder = 11; this.scene.add(g); }
+    g.traverse(o => { const m = o as THREE.Mesh; if (m.isMesh || (o as THREE.Line).isLine) { m.geometry.dispose(); (m.material as THREE.Material).dispose(); } });
+    g.clear();
+  }
+
+  /**
+   * Draws the reference points: small purple discs, over the step handles. A selected one is larger and has a heading
+   * knob, an edited one has a green ring, and `lit` has a yellow ring: a dragged pose that will refer to it on release.
+   */
+  showRefs(list: readonly { x: number; z: number; heading: number; selected: boolean; edited: boolean; lit: boolean }[], editable = true) {
+    this.clearGroup(this.refGroup);
+    const flat = (geo: THREE.BufferGeometry, color: number, x: number, z: number, y: number) => {
+      const m = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ color, depthTest: false, transparent: true, opacity: editable ? 1 : 0.7, side: THREE.DoubleSide }));
+      m.rotation.x = -Math.PI / 2; m.position.set(x, y, z); m.renderOrder = 11; this.refGroup.add(m);
+    };
+    for (const r of list) {
+      const rad = r.selected ? 0.05 : 0.035, color = r.selected ? 0xe1bee7 : 0xb388ff;
+      if (r.lit) flat(new THREE.RingGeometry(rad + 0.015, rad + 0.04, 32), 0xffee58, r.x, r.z, 0.024);
+      else if (r.edited) flat(new THREE.RingGeometry(rad + 0.01, rad + 0.025, 32), 0x41e07f, r.x, r.z, 0.024);
+      flat(new THREE.CircleGeometry(rad, 24), color, r.x, r.z, 0.025);
+      if (!r.selected) continue;
+      const kx = r.x + KNOB * Math.cos(r.heading), kz = r.z - KNOB * Math.sin(r.heading);
+      const line = new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(r.x, 0.025, r.z), new THREE.Vector3(kx, 0.025, kz)]), new THREE.LineBasicMaterial({ color, depthTest: false, transparent: true }));
+      line.renderOrder = 11; this.refGroup.add(line); flat(new THREE.CircleGeometry(0.03, 20), color, kx, kz, 0.026);
+    }
+  }
+
+  /** Gets the reference point under a screen point: its index, and whether the point is on the selected one's knob. A disc counts within 7 pixels only, so that a step handle around it stays easy to grab. */
+  refAt(clientX: number, clientY: number, list: readonly { x: number; z: number; heading: number; selected: boolean }[]): { index: number; part: 'pose' | 'heading' } | null {
+    // The selected point's knob first, within 10 pixels; then the nearest disc, within 7.
+    const sel = list.findIndex(r => r.selected), r = list[sel];
+    if (r && this.screenDist(clientX, clientY, r.x + KNOB * Math.cos(r.heading), r.z - KNOB * Math.sin(r.heading)) < 10) return { index: sel, part: 'heading' };
+    let best: number | null = null, bestPx = 7;
+    list.forEach((q, i) => { const d = this.screenDist(clientX, clientY, q.x, q.z); if (d < bestPx) { bestPx = d; best = i; } });
+    return best === null ? null : { index: best, part: 'pose' };
+  }
+
+  /** Checks whether a screen point is within `px` pixels of a point on the floor. */
+  nearPoint(clientX: number, clientY: number, p: { x: number; z: number }, px: number) { return this.screenDist(clientX, clientY, p.x, p.z) <= px; }
+
+  private screenDist(clientX: number, clientY: number, x: number, z: number) {
+    const q = new THREE.Vector3(x, 0.022, z).project(this.camera); return Math.hypot(((q.x + 1) / 2) * innerWidth - clientX, ((1 - q.y) / 2) * innerHeight - clientY);
+  }
+
+  /** Draws dotted white lines from offset poses to their reference points. A selected line is yellow. */
+  showLinks(list: readonly { from: { x: number; z: number }; to: { x: number; z: number }; selected: boolean }[]) {
+    this.clearGroup(this.linkGroup);
+    for (const l of list) {
+      const line = new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(l.from.x, 0.023, l.from.z), new THREE.Vector3(l.to.x, 0.023, l.to.z)]),
+        new THREE.LineDashedMaterial({ color: l.selected ? 0xffee58 : 0xffffff, dashSize: 0.03, gapSize: 0.025, depthTest: false, transparent: true, opacity: l.selected ? 1 : 0.8 }));
+      line.computeLineDistances(); line.renderOrder = 11; line.frustumCulled = false; this.linkGroup.add(line);
+    }
+  }
+
+  /**
+   * Gets the line under a screen point, from the same list as `showLinks`, within 6 pixels. A line counts where it
+   * shows: outside the step disc at its start, 0.085 m, and the reference point disc at its end, 0.05 m.
+   */
+  linkAt(clientX: number, clientY: number, list: readonly { from: { x: number; z: number }; to: { x: number; z: number } }[]): number | null {
+    const px = (p: { x: number; z: number }) => { const q = new THREE.Vector3(p.x, 0.023, p.z).project(this.camera); return { x: ((q.x + 1) / 2) * innerWidth, y: ((1 - q.y) / 2) * innerHeight }; };
+    let best: number | null = null, bestPx = 6;
+    list.forEach((l, i) => {
+      const len = Math.hypot(l.to.x - l.from.x, l.to.z - l.from.z), a = px(l.from), b = px(l.to), dx = b.x - a.x, dy = b.y - a.y, l2 = dx * dx + dy * dy;
+      if (len <= 0.135 || l2 < 1) return;
+      const t = ((clientX - a.x) * dx + (clientY - a.y) * dy) / l2; if (t < 0.085 / len || t > 1 - 0.05 / len) return;
+      const d = Math.hypot(a.x + t * dx - clientX, a.y + t * dy - clientY); if (d < bestPx) { bestPx = d; best = i; }
+    });
+    return best;
+  }
+
+  /** Draws the snap grid, 1 in apart, in a 12 in square around a point, so that it doesn't cover the FIELD. Null hides it. */
+  showGrid(at: { x: number; z: number } | null) {
+    this.clearGroup(this.gridGroup); if (!at) return;
+    const step = 0.0254, n = 6, cx = Math.round(at.x / step) * step, cz = Math.round(at.z / step) * step, pts: number[] = [];
+    for (let k = -n; k <= n; k++) {
+      pts.push(cx + k * step, 0.021, cz - n * step, cx + k * step, 0.021, cz + n * step);
+      pts.push(cx - n * step, 0.021, cz + k * step, cx + n * step, 0.021, cz + k * step);
+    }
+    const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pts, 3));
+    const lines = new THREE.LineSegments(g, new THREE.LineBasicMaterial({ color: 0xffffff, depthTest: false, transparent: true, opacity: 0.18 }));
+    lines.renderOrder = 9; lines.frustumCulled = false; this.gridGroup.add(lines);
+  }
+
   // ---- Ghost robots: a see-through robot at the selected pose, and one that runs the path into it and out of it. ----
   private ghost: THREE.Group | null = null; private runner: THREE.Group | null = null; private ghostCfg = '';
   private run: { into: Pose2[]; out: Pose2[]; at: number } | null = null;

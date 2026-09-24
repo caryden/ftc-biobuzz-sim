@@ -58,6 +58,9 @@ export class TreeRunner<E = unknown> {
     return out;
   }
 
+  /** Evaluates definition `i`, in the order of `TreeDef.defNames`, as it is now. Tools use it, for example to draw the definitions that are poses. */
+  defValue(i: number): unknown { return this.rt.def(i); }
+
   /** Stops the tree. Every running node's cleanup runs. */
   halt() {
     if (this.status.state !== 'running') return;

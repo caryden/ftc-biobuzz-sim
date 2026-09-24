@@ -124,7 +124,37 @@ canvas.addEventListener('click', e => {
   const text = `Field position: ${fmtPos(q.x, q.y, units)}`;
   if (review.active) $('nsaved').textContent = text; else sim.say(text);
 });
-canvas.addEventListener('contextmenu', e => { e.preventDefault(); const i = view.pickRobot(e.clientX, e.clientY); if (i !== null) openConfig(i); });
+canvas.addEventListener('contextmenu', e => {
+  e.preventDefault();
+  // In the editor, a right-click on the FIELD floor offers a reference point there.
+  if (editor.active) {
+    // It always offers a new reference point. On a reference point it also offers to delete the point, and on a step
+    // built on one, to make the step absolute.
+    const q = view.pickFloor(e.clientX, e.clientY); if (!q) return; refAt = q; menuFor = editor.menuAt(e.clientX, e.clientY);
+    const menu = $('aemenu'); menu.style.left = `${e.clientX}px`; menu.style.top = `${e.clientY}px`; menu.classList.remove('hidden');
+    const readOnly = editor.editing ? '' : 'Edit a plan that you made to change it.';
+    const add = $<HTMLButtonElement>('aeaddref'), abs = $<HTMLButtonElement>('aeabs'), del = $<HTMLButtonElement>('aedelref');
+    add.disabled = !editor.editing; abs.classList.toggle('hidden', !menuFor || !('step' in menuFor)); del.classList.toggle('hidden', !menuFor || !('ref' in menuFor) || 'step' in menuFor);
+    if (menuFor && 'step' in menuFor) { abs.textContent = menuFor.ref ? `Make ${menuFor.id} absolute (stop following ${menuFor.ref})` : `${menuFor.id} is already absolute`; abs.disabled = !editor.editing || !menuFor.ref; }
+    if (menuFor && !('step' in menuFor)) { del.textContent = `Delete reference point ${menuFor.ref}`; del.disabled = !editor.editing; }
+    for (const b of [add, abs, del]) b.title = readOnly;
+    // Keep the menu in the window: near the right or bottom edge it opens to the left of or above the pointer.
+    const box = menu.getBoundingClientRect();
+    if (box.right > innerWidth - 4) menu.style.left = `${Math.max(4, e.clientX - box.width)}px`;
+    if (box.bottom > innerHeight - 4) menu.style.top = `${Math.max(4, e.clientY - box.height)}px`;
+    return;
+  }
+  const i = view.pickRobot(e.clientX, e.clientY); if (i !== null) openConfig(i);
+});
+// The reference-point menu and its name dialog.
+let refAt: { x: number; y: number } | null = null, menuFor: ReturnType<typeof editor.menuAt> = null;
+addEventListener('pointerdown', e => { if (!(e.target as HTMLElement).closest?.('#aemenu')) $('aemenu').classList.add('hidden'); }, true);
+$('aeaddref').onclick = () => { $('aemenu').classList.add('hidden'); $<HTMLInputElement>('aerefinput').value = ''; $('aereferr').textContent = ''; $('aerefname').classList.remove('hidden'); $('aerefinput').focus(); };
+$('aeabs').onclick = () => { $('aemenu').classList.add('hidden'); if (menuFor && 'step' in menuFor) editor.makeStepAbsolute(menuFor.step); };
+$('aedelref').onclick = () => { $('aemenu').classList.add('hidden'); if (menuFor && !('step' in menuFor)) editor.deleteRef(menuFor.ref); };
+$('aerefcancel').onclick = () => $('aerefname').classList.add('hidden');
+$('aerefadd').onclick = () => { if (!refAt) return; const err = editor.addReferenceAt($<HTMLInputElement>('aerefinput').value, refAt); $('aereferr').textContent = err ?? ''; if (!err) $('aerefname').classList.add('hidden'); };
+for (const ev of ['keydown', 'keyup']) $('aerefinput').addEventListener(ev, e => { e.stopPropagation(); if (ev === 'keydown' && (e as KeyboardEvent).key === 'Enter') $('aerefadd').click(); });
 
 reset();
 // Entering the review saves the trace first, so that annotations always have their trace on disk.
@@ -159,9 +189,17 @@ function scoreRows(r: AllianceScore | null, b: AllianceScore | null, totals: { r
 }
 // ---------- field editor ----------
 $('aedone').onclick = () => { closeNewPlan(); editor.close(); }; $('aeundo').onclick = () => editor.undo(); $('aeredo').onclick = () => editor.redo();
-// Undo and redo keys, while you edit a plan. They leave the dialog's text fields to the browser.
+// The snap checkbox is a convenience that this browser keeps. The reference point under the pointer shows its name.
+const snapBox = $<HTMLInputElement>('aesnap');
+try { snapBox.checked = localStorage.getItem('biobuzz.snap') === 'on'; } catch { /* Storage is a convenience. */ }
+editor.snapGrid = snapBox.checked;
+snapBox.onchange = () => { editor.snapGrid = snapBox.checked; try { localStorage.setItem('biobuzz.snap', snapBox.checked ? 'on' : 'off'); } catch { /* Storage is a convenience. */ } snapBox.blur(); };
+editor.hoverRef = (ref, x, y) => { const tip = $('aehover'); tip.classList.toggle('hidden', !ref); if (ref) { tip.textContent = ref.name; tip.style.left = `${x + 12}px`; tip.style.top = `${y + 10}px`; } };
+// Undo and redo keys, and Delete for a selected offset line or reference point, while you edit a plan. They leave text fields to the browser.
 addEventListener('keydown', e => {
   if (!editor.active || !editor.editing || (e.target as HTMLElement).closest?.('input, textarea, select')) return;
+  if ((e.key === 'Delete' || e.key === 'Backspace') && editor.selectedLink) { e.preventDefault(); editor.deleteLink(); return; }
+  if ((e.key === 'Delete' || e.key === 'Backspace') && editor.selectedRef) { e.preventDefault(); editor.deleteRef(); return; }
   const z = e.key === 'z' || e.key === 'Z';
   if ((e.metaKey || e.ctrlKey) && z) { e.preventDefault(); if (e.shiftKey) editor.redo(); else editor.undo(); }
   else if (e.ctrlKey && e.key === 'y') { e.preventDefault(); editor.redo(); }
@@ -186,7 +224,8 @@ function paintEditor() {
   const def = editor.def, plate = bots[editor.robot].plate, wrong = editor.wrongStart;
   $('aehead').textContent = `${plate} · ${def?.name ?? 'No AUTO plan'}`;
   const status = $('aestatus'); status.classList.toggle('warn', !!wrong);
-  const n = editor.changed.size, changes = n ? ` · ${n} step${n === 1 ? '' : 's'} changed` : '';
+  const n = editor.changed.size, r = editor.changedRefs.size, parts = [n ? `${n} step${n === 1 ? '' : 's'}` : '', r ? `${r} reference point${r === 1 ? '' : 's'}` : ''].filter(Boolean);
+  const changes = parts.length ? ` · ${parts.join(' and ')} changed` : '';
   status.textContent = !def ? '' : wrong ? `This plan is for the ${wrong} start position.` : editor.isUserPlan ? `${editor.editing ? 'Your plan · editing' : 'Your plan'}${changes}` : 'System plan · read-only';
   $<HTMLButtonElement>('aeundo').disabled = !editor.canUndo; $<HTMLButtonElement>('aeredo').disabled = !editor.canRedo;
   $('aeframe').textContent = 'Red alliance frame: +x toward the blue wall, +y toward the rear wall. Blue robots run this tree rotated 180°.';
