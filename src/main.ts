@@ -128,15 +128,16 @@ canvas.addEventListener('contextmenu', e => {
   e.preventDefault();
   // In the editor, a right-click on the FIELD floor offers a reference point there.
   if (editor.active) {
-    // On a reference point it offers to delete the point, and on a step built on one, to make the step absolute.
+    // It always offers a new reference point. On a reference point it also offers to delete the point, and on a step
+    // built on one, to make the step absolute.
     const q = view.pickFloor(e.clientX, e.clientY); if (!q) return; refAt = q; menuFor = editor.menuAt(e.clientX, e.clientY);
     const menu = $('aemenu'); menu.style.left = `${e.clientX}px`; menu.style.top = `${e.clientY}px`; menu.classList.remove('hidden');
     const readOnly = editor.editing ? '' : 'Edit a plan that you made to change it.';
     const add = $<HTMLButtonElement>('aeaddref'), abs = $<HTMLButtonElement>('aeabs'), del = $<HTMLButtonElement>('aedelref');
-    add.classList.toggle('hidden', !!menuFor); abs.classList.toggle('hidden', !menuFor || !('step' in menuFor)); del.classList.toggle('hidden', !menuFor || !('ref' in menuFor) || 'step' in menuFor);
+    add.disabled = !editor.editing; abs.classList.toggle('hidden', !menuFor || !('step' in menuFor)); del.classList.toggle('hidden', !menuFor || !('ref' in menuFor) || 'step' in menuFor);
     if (menuFor && 'step' in menuFor) { abs.textContent = menuFor.ref ? `Make ${menuFor.id} absolute (stop following ${menuFor.ref})` : `${menuFor.id} is already absolute`; abs.disabled = !editor.editing || !menuFor.ref; }
     if (menuFor && !('step' in menuFor)) { del.textContent = `Delete reference point ${menuFor.ref}`; del.disabled = !editor.editing; }
-    for (const b of [add, abs, del]) { b.title = readOnly; if (readOnly) b.disabled = true; }
+    for (const b of [add, abs, del]) b.title = readOnly;
     // Keep the menu in the window: near the right or bottom edge it opens to the left of or above the pointer.
     const box = menu.getBoundingClientRect();
     if (box.right > innerWidth - 4) menu.style.left = `${Math.max(4, e.clientX - box.width)}px`;
