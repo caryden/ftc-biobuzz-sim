@@ -1,6 +1,6 @@
 import RAPIER from '@dimforge/rapier3d-compat';
 import { readInput, type Frame } from './input';
-import { AUTO_TREES, SOLO_AUTO, autoFor, autoStart, previewAuto } from './auto/onboard';
+import { AUTO_PROBLEMS, AUTO_TREES, SOLO_AUTO, autoFor, autoStart, previewAuto } from './auto/onboard';
 import { FieldEditor } from './field-editor';
 import { loadUserTrees } from './user-trees';
 import { BOT_IDS, REF_ERR, startSide, assignDriver, defaultBot, metaBot, describe, loadBots, robotConfig, sanitize, saveBots, type BotSetup, type DriverKind } from './setup';
@@ -9,6 +9,7 @@ import { Coach } from './auto/coach';
 import { Referee } from './ref/referee';
 import { Review, clockText } from './review';
 import { TraceRecorder } from './trace';
+import { Inspector } from './render/inspector';
 import { LiveTreeState, TreePanel, treeStateAt } from './render/tree-view';
 import { TELEOP_TREES } from './auto/driver';
 import { CAMERAS, View, type CameraMode } from './render/view';
@@ -76,7 +77,7 @@ let editing = -1; const EDIT_TIP = $('bcedit').title;
 const bc = { plate: $<HTMLInputElement>('bcplate'), driver: $<HTMLSelectElement>('bcdriver'), drive: $<HTMLSelectElement>('bcdrive'), shooter: $<HTMLSelectElement>('bcshooter'), auto: $<HTMLSelectElement>('bcauto'), plan: $<HTMLSelectElement>('bcplan'), rpm: $<HTMLInputElement>('bcrpm'), size: $<HTMLInputElement>('bcsize'), mass: $<HTMLInputElement>('bcmass'), intake: $<HTMLSelectElement>('bcintake'), ends: $<HTMLSelectElement>('bcends'), turretRange: $<HTMLInputElement>('bcturretrange'), turretSlew: $<HTMLInputElement>('bcturretslew'), defense: $<HTMLSelectElement>('bcdefense'), elev: $<HTMLInputElement>('bcelev'), azim: $<HTMLInputElement>('bcazim'), speed: $<HTMLInputElement>('bcspeed'), intakeP: $<HTMLInputElement>('bcintakep') };
 /** Lists the AUTO plans for one start position. A plan named for the other position starts from the wrong wall, so the list leaves it out. */
 const autoOptions = (i: number) => { const side = startSide(i);
-  return `<option value="default">Default: wall-sweep pair, ${side} robot</option>` + Object.entries(AUTO_TREES).filter(([, d]) => autoStart(d) !== (side === 'right' ? 'left' : 'right')).map(([k, d]) => `<option value="${k}" title="${d.description ?? ''}">${d.name}</option>`).join('') + `<option value="none">None</option>`; };
+  return `<option value="default">Default: wall-sweep pair, ${side} robot</option>` + Object.entries(AUTO_TREES).filter(([, d]) => autoStart(d) !== (side === 'right' ? 'left' : 'right')).map(([k, d]) => `<option value="${k}" title="${d.description ?? ''}">${d.name}${AUTO_PROBLEMS[k] ? ' (has problems, doesn\'t run)' : ''}</option>`).join('') + `<option value="none">None</option>`; };
 const gear = (i: number) => `<button class="gear" data-bot="${i}" title="Robot config for ${bots[i].plate}">&#9881;</button>`;
 /** Draws the robot rows in the scoreboard and in the setup panel. Called when a setup changes, not on every frame, so that the gear buttons stay clickable. */
 function paintBots() {
@@ -217,16 +218,38 @@ $('aecreate').onclick = () => {
 $('aecancel').onclick = closeNewPlan;
 $('aemake').onclick = () => { const err = editor.create(newPlan.from.value, newPlan.name.value, newPlan.desc.value); $('aeerr').textContent = err ?? ''; if (!err) closeNewPlan(); };
 // In the editor, a click on a step in the tree view selects it, and its handles on the FIELD light up.
-$('treebody').addEventListener('click', e => { if (!editor.active) return; const row = (e.target as HTMLElement).closest<HTMLElement>('.tv[data-path]'); if (row) editor.select(row.dataset.path!); });
+// The definitions and constants at the root are groups that open and close. A click on a definition selects it.
+$('treebody').addEventListener('click', e => {
+  if (!editor.active) return; const t = e.target as HTMLElement;
+  const grp = t.closest<HTMLElement>('.tv[data-grp]'); if (grp) { const k = grp.dataset.grp as 'defs' | 'constants'; treePanel.open[k] = !treePanel.open[k]; paintTree(); return; }
+  const d = t.closest<HTMLElement>('.tv[data-def]'); if (d) { editor.selectRef(d.dataset.def!); return; }
+  if (t.closest('.tv[data-adddef]')) { editor.startAddDef(); return; }
+  const row = t.closest<HTMLElement>('.tv[data-path]'); if (row) editor.select(row.dataset.path!);
+});
+// The settings panel: the plan's problems, the selected step's parameters, and the definitions.
+const inspector = new Inspector($('aeinsp'), {
+  setParam: (path, key, text) => editor.setParamText(path, key, text),
+  setDef: (name, text) => editor.setDefText(name, text),
+  addDef: (name, text) => editor.addDefinition(name, text),
+  cancelAdd: () => editor.cancelAddDef(),
+  deleteDef: name => editor.deleteRef(name),
+  selectNode: path => editor.select(path),
+  selectDef: name => editor.selectRef(name),
+});
 /** Draws the editor bar: the tree, the selected step's pose, and the buttons. */
 function paintEditor() {
   document.body.classList.toggle('editing', editor.active); $('autoedit').classList.toggle('hidden', !editor.active); if (!editor.active) return;
   const def = editor.def, plate = bots[editor.robot].plate, wrong = editor.wrongStart;
   $('aehead').textContent = `${plate} · ${def?.name ?? 'No AUTO plan'}`;
   const status = $('aestatus'); status.classList.toggle('warn', !!wrong);
-  const n = editor.changed.size, r = editor.changedRefs.size, parts = [n ? `${n} step${n === 1 ? '' : 's'}` : '', r ? `${r} reference point${r === 1 ? '' : 's'}` : ''].filter(Boolean);
+  const n = editor.changed.size, r = editor.changedRefs.size, parts = [n ? `${n} step${n === 1 ? '' : 's'}` : '', r ? `${r} definition${r === 1 ? '' : 's'}` : ''].filter(Boolean);
   const changes = parts.length ? ` · ${parts.join(' and ')} changed` : '';
-  status.textContent = !def ? '' : wrong ? `This plan is for the ${wrong} start position.` : editor.isUserPlan ? `${editor.editing ? 'Your plan · editing' : 'Your plan'}${changes}` : 'System plan · read-only';
+  const bad = editor.problems.count, problems = bad ? ` · ${bad} problem${bad === 1 ? '' : 's'}: it doesn't run` : '';
+  status.classList.toggle('warn', !!wrong || bad > 0);
+  status.textContent = !def ? '' : wrong ? `This plan is for the ${wrong} start position.` : editor.isUserPlan ? `${editor.editing ? 'Your plan · editing' : 'Your plan'}${changes}${problems}` : 'System plan · read-only';
+  const insp = $('aeinsp'); insp.classList.toggle('hidden', !def);
+  if (def) inspector.paint({ editing: editor.editing, problems: editor.problems, path: editor.selected, node: editor.selectedNode(), fields: editor.fields(), def: editor.selectedDef(), adding: editor.addingDef },
+    `${def.id}:${editor.robot}|${editor.rev}|${editor.selected}|${editor.editing}|${editor.selectedRef}|${editor.addingDef}`);
   $<HTMLButtonElement>('aeundo').disabled = !editor.canUndo; $<HTMLButtonElement>('aeredo').disabled = !editor.canRedo;
   $('aeframe').textContent = 'Red alliance frame: +x toward the blue wall, +y toward the rear wall. Blue robots run this tree rotated 180°.';
   // The bar cuts long lines short, so each line's tooltip holds the whole text.
@@ -240,7 +263,7 @@ function paintEditor() {
 /** Draws the tree view for the chosen robot: live during a match, and at the cursor in the review. */
 function paintTree() {
   const el = $('tree'), on = treeSel.value === 'on' || editor.active; el.classList.toggle('hidden', !on);
-  if (!editor.active) view.insetLeft = 0;
+  if (!editor.active) { view.insetLeft = 0; view.insetRight = 0; }
   if (!on) return;
   const i = treeRobot >= 0 ? treeRobot : focus(), plate = bots[i].plate;
   // The buttons are built in one place and only when they change: a button that is replaced between the press and the
@@ -258,6 +281,7 @@ function paintTree() {
   if (editor.active) {
     // The overhead view keeps the FIELD clear of this panel, because the rear-side plans run under it.
     view.insetLeft = el.getBoundingClientRect().right + 8;
+    const insp = $('aeinsp'); view.insetRight = insp.classList.contains('hidden') ? 0 : innerWidth - insp.getBoundingClientRect().left + 8;
     treePanel.paint(`${bots[editor.robot].plate} · AUTO plan`, editor.def, { running: new Set(), last: new Map() }, 'This robot runs no AUTO plan.', editor.treeEdit());
     return;
   }

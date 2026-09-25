@@ -56,6 +56,23 @@
   #aestatus { color: var(--dim); font-size: 11px; } #aestatus.warn { color: #ffb74d; }
   #aesnaprow { margin: 0; gap: 4px; white-space: nowrap; color: var(--fg); } #aesnaprow input { margin: 0; }
   #aehover { position: fixed; z-index: 7; pointer-events: none; background: #2a2340; color: #e1bee7; border: 1px solid #7e57c2; border-radius: 4px; padding: 1px 6px; font: 11px ui-monospace, SFMono-Regular, Menlo, monospace; }
+  #aeinsp { top: 12px; right: 12px; width: 310px; bottom: 70px; overflow-y: auto; z-index: 5; font-size: 12px; padding: 8px 10px; }
+  #aeinsp h3 { font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: var(--dim); margin: 10px 0 4px; } #aeinsp section:first-child h3 { margin-top: 0; }
+  #aeinsp p { margin: 0 0 6px; } #aeinsp code { font: 11.5px ui-monospace, SFMono-Regular, Menlo, monospace; }
+  #aeinsp input, #aeinsp select { width: 100%; box-sizing: border-box; margin: 2px 0 0; padding: 3px 6px; font-size: 12px; }
+  #aeinsp input.mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; } #aeinsp .bad { border-color: #ff8a80; }
+  #aeinsp input:disabled, #aeinsp select:disabled { opacity: .75; }
+  #aeinsp .ai-hint, #aeinsp .ai-meta, #aeinsp .ai-doc { color: var(--dim); font-size: 11px; } #aeinsp .ai-doc { margin-top: 2px; }
+  #aeinsp .ai-node { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; margin-bottom: 4px; } #aeinsp .ai-node b { color: #ffd54f; }
+  #aeinsp .ai-field { margin: 8px 0; } #aeinsp .ai-req { color: #ffb74d; font-size: 10.5px; } #aeinsp .ai-ro { padding: 3px 0; color: var(--dim); }
+  #aeinsp .ai-err { color: #ff8a80; font-size: 11.5px; margin-top: 2px; }
+  #aeinsp .ai-problems { border: 1px solid #ff8a80; border-radius: 8px; padding: 6px 8px; } #aeinsp .ai-problems h3 { color: #ff8a80; }
+  #aeinsp .ai-problems ul { margin: 0; padding-left: 16px; } #aeinsp .ai-problems li[data-go] { cursor: pointer; } #aeinsp .ai-problems li[data-go]:hover { text-decoration: underline; }
+  #aeinsp .ai-node b.pose::before { content: '●'; color: #b388ff; margin-right: 4px; } #treebody .tv.def .pd { color: #b388ff; margin-right: 4px; }
+  #aeinsp button { width: auto; margin: 0; padding: 2px 10px; font-size: 11.5px; } #aeinsp .ai-btns { display: flex; gap: 6px; margin-top: 8px; }
+  #treebody .tv.grp b { color: var(--dim); font-weight: 600; } #treebody .tv.const { color: var(--dim); cursor: default; } #treebody .tv.add { cursor: pointer; }
+  #treebody .tv.def b { font-weight: 500; }
+  .tv.bad { box-shadow: inset 3px 0 #ff8a80; } body.editing #treebody .tv { cursor: pointer; }
   #aemenu { z-index: 7; padding: 4px; } #aemenu button { display: block; margin: 0; width: 100%; text-align: left; white-space: nowrap; } #aemenu button + button { margin-top: 4px; } #aemenu button.hidden { display: none; }
   #aerefname { top: 84px; left: 50%; transform: translateX(-50%); width: 300px; z-index: 7; } #aerefname h2 { color: var(--fg); } #aerefname input { width: 180px; }
   #aerefname .btns { display: flex; gap: 6px; margin-top: 8px; } #aerefname .btns button { margin: 0; } #aereferr { color: #ff8a80; font-size: 12px; min-height: 16px; margin-top: 4px; }
@@ -147,6 +164,7 @@
 <div id="autoedit" class="panel hidden"><div class="aeinfo"><div><span id="aehead"></span> <span id="aestatus"></span> <span id="aeframe"></span></div><div id="aesel"></div></div>
   <button id="aeedit" title="Lets you drag the poses of this plan.">Edit</button><button id="aecreate" title="Makes a new plan from a copy of any plan for this robot's start position. The new plan becomes this robot's plan.">Create new</button> <label id="aesnaprow" title="Snaps a drag to a 1 in grid and a turn to 5°. Hold Alt, or Option on a Mac, while you drag to do the opposite."><input type="checkbox" id="aesnap"> Snap</label><button id="aeundo" title="Takes back the last edit (Cmd+Z or Ctrl+Z).">Undo</button><button id="aeredo" title="Makes the edit again (Shift+Cmd+Z or Shift+Ctrl+Z).">Redo</button><button id="aereset" title="Moves the selected step's poses back to where the plan that this one was copied from has them.">Reset this step</button><button id="aedelete" title="Deletes this plan. Every robot that ran it goes back to the plan that it was copied from.">Delete plan</button><button id="aedone" class="primary">Done</button></div>
 <div id="aehover" class="hidden"></div>
+<div id="aeinsp" class="panel hidden"></div>
 <div id="aemenu" class="panel hidden"><button id="aeaddref">Add reference point here</button><button id="aeabs"></button><button id="aedelref"></button></div>
 <div id="aerefname" class="panel hidden"><h2>New reference point</h2>
   <label>Name <input id="aerefinput" type="text" maxlength="40" placeholder="For example, rearSpot"></label>

@@ -14,7 +14,7 @@
  */
 import { literalNumber, splitCall, type TreeDef } from '../bt';
 import type { Sim } from '../sim/world';
-import { definedPoses, leafParams, simHeading, simPoint, type Pose } from './onboard';
+import { definedPoses, isPose, leafParams, simHeading, simPoint, type Pose } from './onboard';
 
 type Json = Record<string, unknown>;
 type Waypoint = { x: number; y: number; headingDeg: number | null };
@@ -42,11 +42,11 @@ const num = (v: number) => String(Object.is(v, -0) ? 0 : v);
 export function editHandles(def: TreeDef, sim: Sim): Handle[] {
   const rotate = sim.alliance === 'blue', out: Handle[] = [];
   for (const { node, params: p } of leafParams(def, sim)) {
-    if (node.label === 'drive.driveTo') {
-      const pose = p.pose as Pose;
+    if (node.label === 'drive.driveTo' && isPose(p.pose)) {
+      const pose = p.pose;
       out.push({ path: node.path, kind: 'drive', pose, sim: { ...simPoint(pose, rotate), heading: simHeading(pose.headingDeg, rotate) } });
     }
-    if (node.label === 'drive.followPath') (p.waypoints as Waypoint[]).forEach((w, i) => out.push({ path: node.path, kind: 'waypoint', index: i, pose: { x: w.x, y: w.y, headingDeg: w.headingDeg ?? 0 }, sim: simPoint(w, rotate) }));
+    if (node.label === 'drive.followPath' && Array.isArray(p.waypoints)) (p.waypoints as Waypoint[]).forEach((w, i) => w && Number.isFinite(w.x) && Number.isFinite(w.y) && out.push({ path: node.path, kind: 'waypoint', index: i, pose: { x: w.x, y: w.y, headingDeg: w.headingDeg ?? 0 }, sim: simPoint(w, rotate) }));
   }
   return out;
 }
@@ -274,21 +274,21 @@ export function addReference(tree: Json, name: string, at: { x: number; y: numbe
 
 /** Gets the names of the definitions whose source in `tree` differs from `original`'s, including new ones. */
 /**
- * Deletes a reference point. Every drive step whose pose is the point or an offset from it becomes absolute first, so
- * those steps keep their places. Returns the tree and the ids of the steps made absolute, or the problem if another
- * definition or step still uses the name, for example `parkRight`, which is `pose(park.x, …)`.
+ * Deletes a definition, such as a reference point. Every drive step whose pose is the definition or an offset from it
+ * becomes absolute first, so those steps keep their places. Returns the tree and the ids of the steps made absolute, or
+ * the problem if another definition or step still uses the name, for example `parkRight`, which is `pose(park.x, …)`.
  */
-export function deleteReference(tree: Json, handles: readonly Handle[], name: string): { tree: Json; madeAbsolute: string[] } | { error: string } {
+export function deleteDef(tree: Json, handles: readonly Handle[], name: string): { tree: Json; madeAbsolute: string[] } | { error: string } {
   if (typeof (tree.defs as Json | undefined)?.[name] !== 'string') return { error: `The plan has no definition named ${name}.` };
   let out = tree; const madeAbsolute: string[] = [];
   for (const h of handles) if (h.kind === 'drive' && stepReference(out, h) === name) { out = makeAbsolute(out, h); madeAbsolute.push(h.path.split('/').pop()!); }
   out = structuredClone(out); delete (out.defs as Json)[name];
-  const users = usersOf(out, name);
+  const users = defUsers(out, name);
   return users.length ? { error: `${users.join(', ')} still ${users.length === 1 ? 'uses' : 'use'} ${name}. Change ${users.length === 1 ? 'it' : 'them'} first.` } : { tree: out, madeAbsolute };
 }
 
 /** Gets the definitions and step ids whose expressions name `name`. A quoted string, such as `'rear'`, or a field, such as `park.x`'s `x`, doesn't count. */
-function usersOf(tree: Json, name: string): string[] {
+export function defUsers(tree: Json, name: string): string[] {
   const word = new RegExp(`(?<![\\w.'"])${name}(?![\\w'"])`), out: string[] = [];
   for (const [k, v] of Object.entries((tree.defs ?? {}) as Json)) if (typeof v === 'string' && word.test(v)) out.push(k);
   const names = (v: unknown): boolean => typeof v === 'string' ? word.test(v) : !!v && typeof v === 'object' && Object.values(v).some(names);

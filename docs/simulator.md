@@ -141,6 +141,11 @@ names it. Right-click the floor to add one, and right-click a point to delete it
 grid. For all the tools, see
 [Reference points and snapping](behavior-trees.md#reference-points-and-snapping).
 
+The tree view lists the plan's definitions above its steps, and the panel on the right shows what you select: a step's
+settings, such as `timeoutSec`, or a definition. To change one, type in its field and press Enter. A plan with problems lists them in red at the top of the panel, and its robot
+stays still in AUTO until you fix them. For more information, see
+[Settings, definitions, and problems](behavior-trees.md#settings-definitions-and-problems).
+
 This browser keeps your plans, and the **AUTO plan** list in the robot config shows them. An edited step has a green
 ring on the FIELD and a green dot in the tree view. **Reset this step** moves the selected step back to where the source plan has it, and **Delete plan** deletes the
 plan. The bar shows the selected step's pose in FIELD x and y, and the pose as the plan writes it, for example

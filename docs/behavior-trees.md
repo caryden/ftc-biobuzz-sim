@@ -441,10 +441,9 @@ the drive ends or the transfer is full:
     "full": "bots.me.transfer.full",
     "len": "bots.me.dimensions.length",
     "flip": "if(bots.me.shooter.facing == 'front', 180, 0)",
-    "hiveX": "-0.3237",
     "stand": "len / 2 + field.flowerHalfSize + 0.02",
-    "launchAudience": "pose(hiveX, -1.32, -90 + flip)",
-    "ownFlower": "pose(-1.7282 + stand, -0.5942, 180)",
+    "launchAudience": "pose(field.hiveX, -1.32, -90 + flip)",
+    "ownFlower": "pose(-field.flowerFar + stand, -field.flowerNear, 180)",
     "park": "pose(-(field.half - len / 2 - 0.09), 0.8954, 180)",
     "parkRight": "pose(park.x, 0.8954 - 0.33, park.headingDeg)"
   },
@@ -544,6 +543,12 @@ direction. A drag changes the expression by one rule, in `shiftPose` in `src/aut
 - **Otherwise,** the drag wraps the expression in `offset()`: `launchAudience` becomes `offset(launchAudience, 0.2,
   -0.1)`. A turn adds a fourth value, in degrees.
 
+So a step keeps following the robot's size, and the other steps that use the same definition don't move. The bar names
+them, for example "also used by s6, s11". An offset that comes back to zero goes away, so a drag back to the start
+restores the step as it was written. Positions round to 1 mm and headings to 0.5°. A path's waypoints are numbers,
+which `scripts/plan-sweeps.ts` writes for the sweeps, so a drag changes a waypoint itself. `src/auto/auto-edit.ts` has
+no DOM, so `test/auto-edit.test.ts` runs it.
+
 ### Reference points and snapping
 
 The definitions whose value is a pose, such as `launchAudience`, are *reference points*: small purple dots with their
@@ -573,11 +578,37 @@ What's selected wins a click: the selected step or reference point takes the pre
 reference point can be dragged. Otherwise a reference point wins within 7 pixels of its center, and a step handle
 within 16. **Reset this step** also resets a selected reference point to the source plan's definition.
 
-So a step keeps following the robot's size, and the other steps that use the same definition don't move. The bar names
-them, for example "also used by s6, s11". An offset that comes back to zero goes away, so a drag back to the start
-restores the step as it was written. Positions round to 1 mm and headings to 0.5°. A path's waypoints are numbers,
-which `scripts/plan-sweeps.ts` writes for the sweeps, so a drag changes a waypoint itself. `src/auto/auto-edit.ts` has
-no DOM, so `test/auto-edit.test.ts` runs it.
+### Settings, definitions, and problems
+
+The tree view lists the plan's definitions at the root, above the steps, because a tree file keeps them there. The
+panel on the right shows the plan's problems and then the selection: a step, a definition, or the form that adds a
+definition. For a system plan, it shows them read-only.
+
+- **Definitions.** The **definitions** group lists the reference points first, with a purple dot, and then the other
+  values, each with its value before the MATCH for the selected robot, such as `len = 0.305`. Click one to edit its
+  expression, see which steps and definitions use it, and delete it by the rule of
+  [Reference points and snapping](#reference-points-and-snapping). **+ add a definition** opens a form for a name and
+  an expression. The group opens and closes.
+- **Constants.** The **constants** group, closed at first, lists the environment's read-only FIELD values, such as
+  `field.hiveX = -0.3237`. A plan uses them in expressions, and it can't change them. They come from the CAD values in
+  `src/sim/config.ts`: `field.hiveX` is the own HIVE's pivot, and every FLOWER center is at
+  (±`field.flowerFar`, ±`field.flowerNear`) or (±`field.flowerNear`, ±`field.flowerFar`) in the alliance frame.
+- **Step settings.** Click a step in the tree or on the FIELD. The panel draws a field for each of the leaf's
+  parameters, from the leaf type's parameter specs in `src/auto/onboard.ts`: its type and unit, its limits, whether it
+  is required, its default, and its doc. A number field takes a number, or an expression such as `backOff * 10`. A
+  choice, such as a CELL, is a drop-down list. A path's waypoints show as a count, because you drag them on the FIELD.
+  An empty field removes the parameter, so the leaf gets its default. A field saves on Enter or when it loses focus,
+  and each save is one step of undo. Escape puts the field back.
+- **Problems.** Every edit loads the draft again with `checkTree` in `src/bt/load.ts`, which returns the tree and every
+  problem that the loader finds. Each problem shows under its field or definition, the row of the step or definition
+  gets a red bar, and the panel lists them all: click one to select it. A draft with problems saves, and it loads
+  again with its problems after a reload, but it doesn't run. A robot whose plan has problems stays still in AUTO, and
+  the robot config's plan list marks the plan.
+
+In a draft with problems, a node that didn't compile is a placeholder that fails if it runs, and an expression that
+didn't compile gives null. A step whose pose doesn't evaluate, for example because it uses a broken definition, has no
+handle on the FIELD until the problem is fixed. `src/auto/draft.ts` builds the form fields and sorts the problems, with
+no DOM, and `test/draft.test.ts` runs it.
 
 ## Code leaves in a sandbox
 
@@ -798,12 +829,15 @@ tree in the page. Each increment is one pull request.
      a checkbox, to a 1 in grid. Alt, or Option on a Mac, inverts the checkbox. A right-click adds a reference point.
      Holding a dragged pose on a reference point makes it reference that point. A right-click on a step, or Delete on
      its offset line, makes the pose absolute, and a right-click or Delete removes a reference point.
-9. **Forms, definitions, and validation.** A leaf's parameter schema drives a form: types, units, limits, enums,
-   and doc strings. An expression field uses CodeMirror 6, which loads only with the editor: highlighting, completion
-   from the environment schema and the tree's definitions, and errors from `src/bt/expr.ts`. A panel edits the
-   definitions, and the definitions that are poses get handles on the FIELD, so a drag can move a shared spot.
-   Every edit loads the draft again, and each problem that the loader reports shows on its row and field. A draft with
-   problems can be saved but can't run. Undo and redo came earlier, with the editor's pose tools.
+9. **Forms, definitions, and validation.** Two pull requests:
+   - **Forms and problems. Done.** A leaf's parameter specs drive a form: types, units, limits, choices, and docs. The
+     tree view lists the definitions at the root, and the FIELD constants, such as `field.hiveX`, which moved out of
+     the plans into the environment. Every edit loads the draft again, and each problem that the loader reports shows
+     on its field and its row. A draft with problems saves but doesn't run. See
+     [Settings, definitions, and problems](#settings-definitions-and-problems). `e96-field-constants` equals
+     `e94-editor-flow` on every seed.
+   - **Expression fields.** An expression field uses CodeMirror 6, which loads only with the editor: highlighting,
+     completion from the environment schema and the tree's definitions, and errors from `src/bt/expr.ts` as you type.
 10. **Structure editing.** Insert a node from a palette of the node types and the AUTO leaves, with templates such as
     the sweep. Delete a node and its subtree, reorder by drag-and-drop, and wrap a node in a sequence, a parallel, or a
     fallback.
