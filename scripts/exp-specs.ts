@@ -1,4 +1,5 @@
 import { setDriveRpm, setMass, setSquareSize, type RobotConfig } from '../src/sim/config';
+import { metaBot, robotConfig } from '../src/setup';
 
 /** One side of an experiment: how both robots of an alliance are built and what they do. */
 export interface Side {
@@ -17,6 +18,8 @@ const size = (m: number) => (c: RobotConfig) => { const kg = c.mass; setSquareSi
 const mass = (kg: number) => (c: RobotConfig) => setMass(c, kg);
 const spread = (k: number) => (c: RobotConfig) => { for (const lp of [c.shooter.pollen, c.shooter.nectar]) { lp.speed.std *= k; lp.elevationDeg.std *= k; lp.yawStdDeg *= k; } };
 const both = (...fs: ((c: RobotConfig) => void)[]) => (c: RobotConfig) => fs.forEach(f => f(c));
+const meta = (c: RobotConfig) => { Object.assign(c, robotConfig(metaBot(0))); };
+const turret = (rangeDeg: number, slewDegPerSec: number) => (c: RobotConfig) => { c.shooter.turret = true; c.shooter.turretRangeDeg = rangeDeg; c.shooter.turretSlewDegPerSec = slewDegPerSec; };
 
 // The base robot is the default setup in src/setup.ts: 15 in. (0.381 m), 22 lb (10 kg), 600 rpm, a dual shooter, and a
 // front intake. The opponent in every experiment is two base robots that keep tipping, with the default AUTO pair.
@@ -68,6 +71,26 @@ export const SPECS: Record<string, Spec> = {
   'shooter-both-ends': { group: 'intake', label: 'Front intake, launches from both ends', red: { cfg: c => { c.shooter.dualSided = true; } } },
   'intake-dual-shooter-both-ends': { group: 'intake', label: 'Front and rear intakes, launches from both ends', red: { cfg: c => { c.intake.dualSided = true; c.shooter.dualSided = true; } } },
   'intake-dual-wide': { group: 'intake', label: 'Front and rear intakes, full width', red: { cfg: c => { c.intake.dualSided = true; c.intake.width = c.width; } } },
+
+  // Turret: the shooter turns to the mouth of the raised CELL. Its range of motion is centered on the direction that
+  // `facing` gives, the rear unless a row says otherwise. The first row turns a full turn instantly: an upper bound.
+  'turret-ideal': { group: 'turret', label: 'Turret, full turn, instant slew (upper bound)', red: { cfg: turret(360, Infinity) } },
+  'turret-360-360': { group: 'turret', label: 'Turret, 360° range, 360°/s', red: { cfg: turret(360, 360) } },
+  'turret-270-360': { group: 'turret', label: 'Turret, 270° range, 360°/s', red: { cfg: turret(270, 360) } },
+  'turret-180-360': { group: 'turret', label: 'Turret, 180° range, 360°/s', red: { cfg: turret(180, 360) } },
+  'turret-90-360': { group: 'turret', label: 'Turret, 90° range, 360°/s', red: { cfg: turret(90, 360) } },
+  'turret-360-180': { group: 'turret', label: 'Turret, 360° range, 180°/s', red: { cfg: turret(360, 180) } },
+  'turret-180-180': { group: 'turret', label: 'Turret, 180° range, 180°/s', red: { cfg: turret(180, 180) } },
+  'turret-360-90': { group: 'turret', label: 'Turret, 360° range, 90°/s', red: { cfg: turret(360, 90) } },
+  'turret-180-360-front': { group: 'turret', label: 'Turret, 180° range, 360°/s, centered on the intake side', red: { cfg: both(turret(180, 360), c => { c.shooter.facing = 'front'; }) } },
+  'turret-270-360-dual-intake': { group: 'turret', label: 'Turret, 270° range, 360°/s, front and rear intakes', red: { cfg: both(turret(270, 360), c => { c.intake.dualSided = true; }) } },
+  'turret-270-360-front': { group: 'turret', label: 'Turret, 270° range, 360°/s, centered on the intake side', red: { cfg: both(turret(270, 360), c => { c.shooter.facing = 'front'; }) } },
+  'turret-90-360-front': { group: 'turret', label: 'Turret, 90° range, 360°/s, centered on the intake side', red: { cfg: both(turret(90, 360), c => { c.shooter.facing = 'front'; }) } },
+
+  // The combined build of `metaBot` in src/setup.ts, which the simulator opens with. The Match Lab fits how gains
+  // stack to its score.
+  'meta-build': { group: 'combined', label: 'Combined build: catapult, 500 rpm, 12 in., 15.4 lb, front and rear intakes', red: { cfg: meta } },
+  'meta-build-turret': { group: 'combined', label: 'Combined build with a turret, 270° range, 360°/s', red: { cfg: both(meta, turret(270, 360)) } },
 
   // Launch accuracy and intake reliability.
   'acc-x1': { group: 'accuracy', label: 'Launch spread x1 (baseline)' },
