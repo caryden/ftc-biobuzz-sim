@@ -44,8 +44,9 @@ comes with a measurement:
 One match varies by about 20 points, and the standard error over 24 seeds is 6 to 10 points. Treat a difference under
 20 combined points as unproven, and say so in the row.
 
-To compare robot designs, add a row to `scripts/exp-specs.ts`, run `npx tsx scripts/exp-run.ts GROUP 12 11 101 TAG`,
-and then run `npx tsx scripts/exp-report.ts`.
+To compare robot designs, add a row to `scripts/exp-specs.ts`, run `npx tsx scripts/exp-run.ts GROUP 96 10 101 TAG`,
+and then run `npx tsx scripts/exp-report.ts`. Its Change column compares each design with the baseline seed by
+seed.
 
 ## Report a behavior that looks wrong
 

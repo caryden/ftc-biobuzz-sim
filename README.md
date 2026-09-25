@@ -1,6 +1,6 @@
 # BIOBUZZ simulator
 
-A browser physics simulator for BIOBUZZ, the 2026-2027 *FIRST* Tech Challenge game, with the results of about 3,600
+A browser physics simulator for BIOBUZZ, the 2026-2027 *FIRST* Tech Challenge game, with the results of about 12,000
 simulated matches. It is a project of the students and mentors of NCSSM FTC teams 5064, 8569, and 22377.
 
 [![CI](https://github.com/caryden/ftc-biobuzz-sim/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/caryden/ftc-biobuzz-sim/actions/workflows/ci.yml)
@@ -55,7 +55,7 @@ full scripted matches, without a browser.
 | `npx tsx scripts/match.ts` | Plays one four-robot match and prints a timeline and the final score |
 | `npx tsx scripts/eval.ts LABEL` | Plays 24 fixed seeds and reports the combined score and where TELEOP time goes |
 | `python3 scripts/eval-compare.py BASE NEW` | Compares two evaluation runs |
-| `npx tsx scripts/exp-run.ts GROUP 12 11 101 TAG` | Runs a group of robot designs from `scripts/exp-specs.ts` against the baseline |
+| `npx tsx scripts/exp-run.ts GROUP 96 10 101 TAG` | Runs a group of robot designs from `scripts/exp-specs.ts` against the baseline |
 | `npx tsx scripts/exp-report.ts` | Pools the design runs into tables |
 | `npx tsx scripts/auto-timeline.ts 1001` | Prints the AUTO timeline of the red robots |
 

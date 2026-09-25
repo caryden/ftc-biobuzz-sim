@@ -22,7 +22,7 @@ apply(u);document.addEventListener('click',function(e){var b=e.target.closest('[
 # ---------- both unit systems in the post ----------
 def num(v, small=1): return ('%d' % round(v)) if abs(v) >= 10 else (('%.' + str(small) + 'f') % v).rstrip('0').rstrip('.')
 def both(si, us): return f'<span class="u-si">{si}</span><span class="u-us">{us}</span>'
-UNIT_RE = re.compile(r'(?P<lb2>\d[\d.]*) lb \((?P<kg2>\d[\d.]*) kg(?P<base>, baseline)?\)|(?P<acc>\d[\d.]*) m/s²|(?P<spd>\d[\d.]*) m/s\b|(?P<inch>\d[\d.]*) in\.|(?P<inches>\d[\d.]*)[ -]inch(?:es)?\b|(?P<lb>\d[\d.]*) lb\b|(?P<ft>\d[\d.]*) ft\b|(?P<cm>\d[\d.]*) cm\b|(?P<kg>\d[\d.]*) kg\b|(?P<m>\d[\d.]*) m\b(?!/)|about 5 points per kilogram')
+UNIT_RE = re.compile(r'(?P<lb2>\d[\d.]*) lb \((?P<kg2>\d[\d.]*) kg(?P<base>, baseline)?\)|(?P<acc>\d[\d.]*) m/s²|(?P<spd>\d[\d.]*) m/s\b|(?P<inch>\d[\d.]*) in\.|(?P<inches>\d[\d.]*)[ -]inch(?:es)?\b|(?P<lb>\d[\d.]*) lb\b|(?P<ft>\d[\d.]*) ft\b|(?P<cm>\d[\d.]*) cm\b|(?P<kg>\d[\d.]*) kg\b|(?P<m>\d[\d.]*) m\b(?!/)|about (?P<ppk>\d+) points per kilogram')
 def unit_sub(m):
     g = m.groupdict(); f = lambda k: float(g[k])
     if g['lb2']: tail = ' (baseline)' if g['base'] else ''; return both(f"{g['kg2']} kg{tail}", f"{g['lb2']} lb{tail}")
@@ -36,7 +36,7 @@ def unit_sub(m):
     if g['cm']: return both(m.group(0), f"{num(f('cm') / 2.54)} in.")
     if g['kg']: return both(m.group(0), f"{num(f('kg') / 0.45359237)} lb")
     if g['m']: v = f('m'); return both(m.group(0), f"{num(v * 3.28084)} ft" if v >= 3 else f"{num(v / 0.0254)} in.")
-    return both('about 5 points per kilogram', 'about 2.4 points per pound')
+    return both(m.group(0), f"about {num(f('ppk') * 0.45359237)} points per pound")
 def dual_units(page):
     out, in_code = [], False
     for part in re.split(r'(<[^>]+>)', page):
@@ -47,7 +47,10 @@ def dual_units(page):
 FOOT = '<footer class="sitefoot"><p>A project of the students and mentors of the NCSSM FTC teams 5064, 8569, and 22377. This site isn\'t affiliated with or endorsed by <i>FIRST</i>. <i>FIRST</i> and <i>FIRST</i> Tech Challenge are trademarks of For Inspiration and Recognition of Science and Technology.</p></footer>'
 
 # ---------- the Match Lab ----------
-rows = [json.loads(l) for l in open('experiments/results.jsonl') if '"tag":"v2"' in l]
+# The Match Lab shows the current round of design runs. Earlier rounds count only toward the number of matches.
+ROUND = 'v3'
+every = [json.loads(l) for l in open('experiments/results.jsonl')]
+rows = [r for r in every if r.get('tag') == ROUND]
 specs = re.findall(r"^  '([a-z0-9-]+)': \{ group: '([a-z]+)', label: '([^']*)'", open('scripts/exp-specs.ts').read(), re.M)
 configs = []
 for cid, group, label in specs:
@@ -60,7 +63,7 @@ pick = lambda k: {q: loop[k].get(q) for q in ('combined', 'se', 'red', 'blue', '
 # The page gets only the runs that it names, so that a run in the log isn't published until the page shows it.
 template = open('scripts/results-page.template.html').read()
 shown = [k for k in loop if f"'{k}'" in template]
-data = {'configs': configs, 'loop': {k: pick(k) for k in shown}, 'matches': {'design': len(rows), 'loop': sum(d['n'] for d in loop.values()), 'first': 1524}}
+data = {'configs': configs, 'loop': {k: pick(k) for k in shown}, 'matches': {'design': len(rows), 'loop': sum(d['n'] for d in loop.values()), 'earlier': len(every) - len(rows)}}
 lab = template.replace('/*DATA*/', json.dumps(data, separators=(',', ':')))
 open('docs/results.html', 'w').write(lab.replace('<!--NAV-->', '').replace('<!--FOOT-->', ''))
 os.makedirs('public/lab', exist_ok=True)
