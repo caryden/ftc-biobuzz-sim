@@ -314,7 +314,7 @@ lessons 6 to 8 played 96 matches against two baseline robots.
 | Trait | The combined build | Baseline |
 | --- | --- | --- |
 | Release | All four at once | Two at a time |
-| Shooter | Opposite the intake | Opposite the intake |
+| Shooter | Rear, on the same face as the second intake | Rear, opposite the intake |
 | Mass | 15.4 lb | 22 lb |
 | Chassis | 12 in. square | 15 in. square |
 | Gearing | 500 rpm | 600 rpm |
