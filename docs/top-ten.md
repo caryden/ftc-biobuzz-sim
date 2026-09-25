@@ -1,9 +1,9 @@
-# Ten lessons for an FTC team, from 3,600 simulated matches
+# Ten lessons for an FTC team, from 12,000 simulated matches
 
-We are the students and mentors of the three FTC teams at NCSSM: 5064, 8569, and 22377. This post is for a team that
-is deciding what to build, what to practice, and how to plan a match. We simulated BIOBUZZ,
-the 2026-2027 FIRST Tech Challenge game, about 3,600 times and changed one thing at a time. The game details are
-BIOBUZZ, but most of the lessons carry to any season in which robots collect, launch, and race a clock.
+We are the students and mentors of the three FTC teams at NCSSM: 5064, 8569, and 22377. This post is for a team that is
+deciding what to build, what to practice, and how to plan a match. We simulated BIOBUZZ, the 2026-2027 FIRST Tech
+Challenge game, about 12,000 times and changed one thing at a time. The game details are BIOBUZZ, but most of the
+lessons carry to any season in which robots collect, launch, and race a clock.
 
 The [Match Lab](results.html) page shows the same results as charts, and it estimates the score of a robot that you
 configure.
@@ -16,8 +16,8 @@ Each lesson starts with the advice. The numbers follow, and then something to tr
 ## How to read the numbers
 
 - **Points are per alliance, per match.** A typical alliance in these matches scores about 410 points.
-- **One match varies by about 20 points.** Most rows are 12 matches, so a difference under 25 points is unproven. We say
-  so where it applies.
+- **One match varies by about 23 points.** Each design row is 96 matches, compared with the baseline seed by seed, so a
+  change has a standard error of about 3 points and a difference under 7 points is unproven. We say so where it applies.
 - **The baseline robot** is 15 in. square, 22 lb, and geared for 600 rpm at the wheel, with a rear-facing shooter that
   releases two elements at a time and a 95% reliable intake.
 
@@ -32,17 +32,17 @@ second objective. PARK is 5 points at the end.
 ### 1. Make your launcher repeatable before anything else
 
 Nothing else comes close. The baseline launcher varies by 0.08 m/s in speed, 1° in elevation, and 1.2° in yaw. Three
-times that spread costs a third of the score.
+times that spread costs more than a third of the score.
 
 | Launch spread | Score | Change |
 | --- | --- | --- |
-| Baseline | 412 | |
-| 3 times the baseline | 270 | -142 |
-| 5 times the baseline | 162 | -250 |
-| 8 times the baseline | 98 | -314 |
+| Baseline | 409 | |
+| 3 times the baseline | 259 | -150 |
+| 5 times the baseline | 160 | -249 |
+| 8 times the baseline | 95 | -314 |
 
 A miss isn't one lost point. It delays a 20-point TIP, and the element has to be collected again. AUTO suffers most,
-because an open-loop AUTO can't correct: AUTO points fall from 88 to 42 at 3 times the spread.
+because an open-loop AUTO can't correct: AUTO points fall from 90 to 43 at 3 times the spread.
 
 Stop before you shoot, too. Letting the robot launch while it still moved at 0.35 m/s cost about 18 points and saved no
 time.
@@ -65,9 +65,9 @@ how each element seats, battery voltage, and worn wheels.
 <!-- id: scoring-window -->
 ### 2. Find your scoring window, and launch from the middle of it
 
-The window is a distance, not an angle. The baseline shot scores from any standoff between about 1.16 m and 1.58 m
-along the line of the shot. Launching from either edge of that window costs 96 to 98 points. A robot never stops
-exactly on its spot, and at the edge of the window a few centimeters off is a miss.
+The window is a distance, not an angle. The baseline shot scores from any standoff between about 1.16 m and 1.58 m along
+the line of the shot. Launching from the far edge of that window costs 73 points, and from the near edge 117. A robot
+never stops exactly on its spot, and at the edge of the window a few centimeters off is a miss.
 
 Angled launches are fine. In every match here, the second robot of each alliance launches from a spot 0.62 m to the
 side, about 40° off the HIVE's axis, and it scores as well as the robot in front. Two launch spots are also what lets
@@ -81,14 +81,14 @@ mark the middle of each on your practice field. Teach your drivers those spots, 
 
 | AUTO plan | AUTO points | Score | Change |
 | --- | --- | --- | --- |
-| A planned pair | 88 | 412 | |
-| Both robots run a good solo routine | 34 | 363 | -49 |
-| One solo routine, the partner only parks | 49 | 375 | -37 |
-| Both robots only LEAVE and PARK | 16 | 345 | -67 |
-| No AUTO | 0 | 331 | -81 |
+| A planned pair | 90 | 409 | |
+| Both robots run a good solo routine | 30 | 357 | -52 |
+| One solo routine, the partner only parks | 47 | 369 | -40 |
+| Both robots only LEAVE and PARK | 16 | 341 | -68 |
+| No AUTO | 0 | 327 | -82 |
 
-Two good solo routines collide at the same launch spot and score less than half of a planned pair. The value of AUTO
-is also more than its points: a planned pair starts TELEOP with full hoppers and a loaded CELL.
+Two good solo routines collide at the same launch spot and score 30 AUTO points, where a planned pair scores 90. The
+value of AUTO is also more than its points: a planned pair starts TELEOP with full hoppers and a loaded CELL.
 
 What made the pair work:
 
@@ -107,19 +107,19 @@ goes where.
 
 | TELEOP plan for the two robots | Score | Change |
 | --- | --- | --- |
-| Both keep tipping | 412 | |
-| One tips, the partner works FLOWERS from 30 s | 414 | +2 |
-| One tips, the partner works FLOWERS from 45 s | 401 | -10 |
-| Both work FLOWERS from 30 s | 388 | -24 |
-| Both work FLOWERS from 45 s | 367 | -45 |
-| Both work FLOWERS from 66 s | 332 | -80 |
+| Both keep tipping | 409 | |
+| One tips, the partner works FLOWERS from 30 s | 406 | -3 |
+| One tips, the partner works FLOWERS from 45 s | 400 | -8 |
+| Both work FLOWERS from 30 s | 383 | -26 |
+| Both work FLOWERS from 45 s | 363 | -46 |
+| Both work FLOWERS from 66 s | 341 | -68 |
 
 A TIP is 20 points for 6 to 8 elements. A finished FLOWER is 17 points for 6 elements, and it takes longer. One robot
 on FLOWERS for the last 30 s costs nothing and takes those FLOWERS away from the opponent. Two robots on FLOWERS for
 the last minute is the worst plan tested.
 
-The answer changes if your launcher is poor. At 8 times the launch spread, FLOWER work from 45 s adds 33 points,
-because placing doesn't depend on aim.
+The answer changes if your launcher is poor. At 8 times the launch spread, FLOWER work from 45 s adds 36 points, because
+placing doesn't depend on aim.
 
 **In general:** work out the points per element and per second for every way to score, and check it against how well
 your robot does each one.
@@ -157,52 +157,85 @@ something, or drives past an element with room in the hopper.
 
 | Shooter | Score | Change |
 | --- | --- | --- |
-| Two at a time, 0.3 s between releases (baseline) | 412 | |
-| All four at once | 465 | +53 |
-| Two at a time, 0.15 s between releases | 446 | +34 |
-| One at a time, in intake order | 434 | +22 |
-| Two at a time, 0.6 s between releases | 375 | -37 |
-| Shooter on the same side as the intake | 373 | -39 |
+| Two at a time, 0.3 s between releases (baseline) | 409 | |
+| All four at once | 469 | +60 |
+| Two at a time, 0.15 s between releases | 430 | +21 |
+| One at a time, in intake order | 430 | +21 |
+| Two at a time, 0.6 s between releases | 386 | -23 |
+| Shooter on the same side as the intake | 377 | -32 |
 
-The one-at-a-time row is within the noise. Time at the launch spot is paid on every cycle, about 14 times per match.
-The HIVE also tips faster under a heavy overload: 1.2 s, against 1.7 s when the load barely crosses the threshold.
+Time at the launch spot is paid on every cycle, about 14 times per match. The HIVE also tips faster under a heavy
+overload: 1.2 s, against 1.7 s when the load barely crosses the threshold.
 
 The shooter's side matters for a reason that carries to other games. With the shooter opposite the intake, the robot
 arrives at the launch spot from a pickup without turning around, and its intake faces the wall where the dumped
 elements land.
+
+A turret takes the same idea further, if it turns fast and its range faces away from the intake. We put the shooter on a
+turret that turns to the raised CELL:
+
+| Turret | Score | Change |
+| --- | --- | --- |
+| None (baseline) | 409 | |
+| A full turn, instantly: an upper bound | 426 | +17 |
+| 360° of range, 360°/s | 423 | +14 |
+| 270° of range, 360°/s | 422 | +13 |
+| 180° of range, 360°/s | 423 | +14 |
+| 90° of range, 360°/s | 423 | +14 |
+| 360° of range, 180°/s | 424 | +15 |
+| 180° of range, 180°/s | 422 | +13 |
+| 360° of range, 90°/s | 403 | -6 |
+| 270° of range, 360°/s, centered on the intake side | 414 | +5 |
+| 180° of range, 360°/s, centered on the intake side | 413 | +4 |
+| 90° of range, 360°/s, centered on the intake side | 407 | -2 |
+
+Every range except the last three is centered on the rear, away from the intake. There, range didn't matter: from 90° to
+a full turn, a turret that turns 360°/s gained 13 to 14 points. Centered on the intake side, the same turrets changed
+the score by -2 to +5. Speed matters once the turret is slower than the robot: at 90°/s the robot waits for the turret
+at the spot, and the score falls below the baseline.
+
+The turret helps because the robot no longer has to face the CELL when it arrives. With all four robots on the ideal
+turret, the time to reach the launch spot fell from 38 s to 34 s per robot. It also stacks with an intake on both ends:
+both together gained 42 points, where the 270° turret alone gained 13 and the second intake alone 17.
+
+The simulator's turret points exactly where it aims. A real turret adds its own aim error, so read lesson 1 before you
+build one.
 
 <!-- id: chassis -->
 ### 7. Build light, stay small, and don't chase top speed
 
 | Robot mass | Score | Change |
 | --- | --- | --- |
-| 15 lb (7 kg) | 434 | +22 |
-| 22 lb (10 kg, baseline) | 412 | |
-| 29 lb (13 kg) | 394 | -18 |
-| 37 lb (17 kg) | 381 | -31 |
+| 15 lb (7 kg) | 428 | +20 |
+| 22 lb (10 kg, baseline) | 409 | |
+| 29 lb (13 kg) | 389 | -20 |
+| 37 lb (17 kg) | 368 | -41 |
 
 | Chassis, square | Score | Change |
 | --- | --- | --- |
-| 18 in., the legal maximum | 404 | -8 |
-| 15 in. (baseline) | 412 | |
-| 13.4 in. | 419 | +7 |
-| 11.8 in. | 438 | +27 |
+| 18 in., the legal maximum | 397 | -12 |
+| 16.9 in. | 395 | -14 |
+| 15 in. (baseline) | 409 | |
+| 13.4 in. | 412 | +3 |
+| 11.8 in. | 413 | +4 |
 
 | Drive gearing, at the wheel | Score | Change |
 | --- | --- | --- |
-| 312 rpm | 404 | -8 |
-| 435 rpm | 428 | +16 |
-| 500 rpm | 429 | +17 |
-| 600 rpm (baseline) | 412 | |
-| 700 rpm | 404 | -8 |
-| 850 rpm | 382 | -30 |
+| 312 rpm | 405 | -3 |
+| 435 rpm | 423 | +14 |
+| 500 rpm | 419 | +11 |
+| 600 rpm (baseline) | 409 | |
+| 700 rpm | 400 | -8 |
+| 850 rpm | 376 | -32 |
 
-Mass is the clear one: about 5 points per kilogram, in a straight line. The field is 12 ft across and crowded, so a
+Mass is the clear one: about 6 points per kilogram, in a straight line. The field is 12 ft across and crowded, so a
 robot spends its time speeding up and stopping, and traction limits how fast any robot speeds up. A light robot stops
 sooner, and a robot that settles sooner launches sooner.
 
-Size pays only at the extreme, where a robot slips past its partner and through the HIVE frame. Gearing between 312 rpm
-and 700 rpm makes no measurable difference, and 850 rpm hurts.
+Size pays one way only. A chassis bigger than 15 in. cost 14 points at 16.9 in. and 12 at 18 in., and a smaller one
+gained 3 to 4, within the noise. Gearing down pays: 435 rpm and 500 rpm gained 14 and 11 over 600 rpm. 312 rpm is within
+the noise, 700 rpm cost 8, and 850 rpm cost 32. A heavy robot needs the torque most: at 37 lb, 435 rpm cost 14 points,
+where 600 rpm cost 41.
 
 **The simulator doesn't check** whether your mechanisms fit in 12 inches or weigh 15 lb. Treat the tables as the price
 of every pound and every inch.
@@ -216,21 +249,21 @@ elements by 1 cm to 2 cm.
 
 | Intake | Score | Change |
 | --- | --- | --- |
-| Front, 3.5 in. narrower than the chassis (baseline) | 412 | |
-| Front, full width | 425 | +13 |
-| Front and rear | 438 | +26 |
-| Front and rear, full width | 444 | +32 |
-| Succeeds 80% of the time | 405 | -7 |
-| Succeeds 60% of the time | 356 | -56 |
+| Front, 3.5 in. narrower than the chassis (baseline) | 409 | |
+| Front, full width | 424 | +16 |
+| Front and rear | 425 | +17 |
+| Front and rear, full width | 437 | +28 |
+| Succeeds 80% of the time | 394 | -15 |
+| Succeeds 60% of the time | 362 | -47 |
 
 An idea from one of our mentors fixed the wall problem without a new mechanism: turn the robot 30° toward the wall, put the front
 corner on the wall, and drive to the field corner. At that angle the wall crosses the mouth of the intake. One such
 sweep filled a hopper in 0.8 s, where a straight pass took 6 s to find two elements.
 
-An intake on both ends lets the robot take an element with whichever end is nearer, so it turns less. It was worth 26
-points in one test and about 10 in another. With intakes on both ends, the shooter's side stops mattering: 434 with the
-shooter at the front, and 438 at the rear. A rear intake has to share a face with a rear shooter, which is a packaging
-problem that the simulator ignores.
+An intake on both ends lets the robot take an element with whichever end is nearer, so it turns less. It was worth 17
+points here, and about 9 per alliance in a test in which all four robots had it. With intakes on both ends, the
+shooter's side stops mattering: 429 with the shooter at the front, and 425 at the rear. A rear intake has to share a
+face with a rear shooter, which is a packaging problem that the simulator ignores.
 
 **At practice:** put elements against a wall and in a corner, and find out how your robot gets them.
 
@@ -276,7 +309,7 @@ AUTO PARK. In a playoff match, only points count, so take the TIP.
 ## The build that these lessons point to
 
 The tables change one thing at a time, so we tested whether the traits stack. Two robots with every design choice from
-lessons 6 to 8 played 24 matches against two baseline robots.
+lessons 6 to 8 played 96 matches against two baseline robots.
 
 | Trait | The combined build | Baseline |
 | --- | --- | --- |
@@ -288,9 +321,11 @@ lessons 6 to 8 played 24 matches against two baseline robots.
 | Intake | Front and rear | Front |
 | Launcher spread | Baseline | Baseline |
 
-The combined build scored 508, and its baseline opponents scored 412. The margin is 96 points, with a standard error
-of 9. With baseline robots on both sides, the same seeds give 417 to 416. So the traits stack: the build is worth about
-90 points per alliance, which is close to the sum of its parts.
+The combined build scored 520, and its baseline opponents scored 411. The margin is 109 points, with a standard error of
+4. With baseline robots on both sides, the same seeds give 409 to 404. So the traits stack: the build is worth 111
+points per alliance, and its parts, measured one at a time, add up to 111. A 270° turret at 360°/s on top of the build
+changed its score by +2, with a standard error of 4.4, within the noise. The turret's gain on the baseline robot didn't
+carry over to this build.
 
 How that alliance plays is lessons 2 to 5, 9, and 10: a planned AUTO pair, launches from the middle of the scoring
 window, both robots on the main cycle, routes that end where the dumps land, and a last launch over a PARK when the
@@ -322,9 +357,9 @@ no PIN was called in any match.
 | A strong robot with a partner at 5 times the spread | Nothing: the score rises by 21 | 70 | -97 to -5 | 0 to 15 of 24 |
 
 Defense rarely wins a match, for the reason that experienced teams give: the best defense against defense is a lead
-after AUTO. A robot with a poor TELEOP has a poor AUTO too. At 3 times the launch spread, AUTO points fall from 88 to
-about 43. A weak alliance that defends improves its margin and still loses every match, with a lower score for both
-sides. Between equal alliances, defense is a wash.
+after AUTO. A robot with a poor TELEOP has a poor AUTO too. At 3 times the launch spread, AUTO points fall from 90 to
+43. A weak alliance that defends improves its margin and still loses every match, with a lower score for both sides.
+Between equal alliances, defense is a wash.
 
 The exception is a mixed alliance, which is what a qualification schedule deals you. A strong robot with a weak partner
 lost all 24 matches while both scored, and won 15 of 24 with the weak partner on defense, from about 47 points behind
@@ -344,16 +379,17 @@ theirs.
 <!-- id: what-didnt-help -->
 ## What didn't help
 
-- **A shooter that launches from both ends.** A two-position turret or a double catapult scored 412, where the
-  baseline scored 417. A mecanum robot turns while it drives to the launch spot, or while it waits for the CELL, so
-  the turn is already free. The dual intake helps because pickups come quickly and at any heading.
+- **A shooter that launches from both ends.** A two-position shooter or a double catapult changed the score by -3,
+  within the noise. A mecanum robot turns while it drives to the launch spot, or while it waits for the CELL, so a
+  second fixed direction saves little. The dual intake helps because pickups come quickly and at any heading, and a
+  turret helps because it aims at any heading: see lesson 6.
 
 - **Top speed.** See lesson 7.
-- **Harder braking.** Planning to stop at 5.0 m/s², where the baseline plans 3.0, left the combined score of both
-  alliances unchanged. At 4.0 m/s², robots overshot the launch spot in one test.
-- **Wider or tighter lines around obstacles.** A 4 cm and a 12 cm clearance, where the baseline is 8 cm, both scored
-  a little higher than the baseline, so there is no pattern. An earlier round of matches said that tight lines paid,
-  and this round doesn't confirm it.
+- **Harder braking.** Planning to stop at 5.0 m/s², where the baseline plans 3.0, cost about 7 points per alliance. At
+  4.0 m/s², robots overshot the launch spot in one test.
+- **Wider or tighter lines around obstacles.** A 4 cm and a 12 cm clearance, where the baseline is 8 cm, changed the
+  combined score by +7 and +4, within the noise. An earlier round of matches said that tight lines paid, and this round
+  doesn't confirm it.
 - **Clever partner rules.** "The nearer robot takes the better launch spot" lost 30 points per alliance, because the
   spot changed while a robot drove to it. Fixed roles with one narrow exception did better.
 - **Five AUTO TIPS.** About half of each dump lands across the field center line, where G402 keeps you out in AUTO.
@@ -376,7 +412,8 @@ theirs.
   build them is outside the model.
 - **The intake is a box.** An element is collected when its center enters a box in front of the robot. The 30° wall
   sweep works because of that geometry. Test it on a real intake.
-- **The baseline moves.** Twelve matches per row put a standard error of 5 to 12 points on every score in the tables.
+- **The baseline moves.** With 96 matches per row, every score in the design tables has a standard error of 2 to 3
+  points, and every change 2 to 4 points.
 
 <!-- id: method -->
 ## How the matches were run
@@ -386,13 +423,16 @@ AUTO is a fixed script per robot that reads only its own pose, its hopper count,
 TELEOP, a planner picks pickups, plans paths around the field elements and the other robots, and launches only when
 the predicted shot scores.
 
-- **780 matches** tested the designs and strategies in lessons 1 to 4 and 6 to 8: red gets the change, and blue is two
-  baseline robots. The pooled tables are in `experiments/run-v2-report.md`.
-- **1,284 matches** in runs of 24 fixed seeds tested one decision change at a time, for lessons 5, 9, and 10, and
-  also the combined build, the launcher errors one at a time, and defense. The log is `experiments/policy-loop.md`.
-- **1,524 earlier matches** used an older planner and a heavier robot. This round replaces them. Two of their results
-  changed: gearing for speed no longer hurts up to 700 rpm, and the shooter's side now matters.
+- **7,584 matches**, 96 for each of 79 setups, tested the designs and strategies in lessons 1 to 4 and 6 to 8, the
+  turret, and the combined build: red gets the change, and blue is two baseline robots. The pooled tables are in
+  `experiments/run-v3-report.md`.
+- **2,460 matches** in runs of 24 fixed seeds tested one decision change at a time, for lessons 5, 9, and 10, and also
+  the combined build, the launcher errors one at a time, and defense. The log is `experiments/policy-loop.md`.
+- **2,304 earlier matches** used older planners. The first 1,524 used a heavier robot, and 780 more used 12 matches per
+  setup. This round replaces them. Against the first round, gearing for speed no longer hurts up to 700 rpm, and the
+  shooter's side now matters. Against the 12-match round, gearing down to 435 rpm or 500 rpm now measurably helps, and
+  the far edge of the scoring window costs less than the near one.
 
-To rerun the design tables, run `npx tsx scripts/exp-run.ts all 12 11 101 TAG` with a tag of your own, and then run
-`npx tsx scripts/exp-report.ts`. To watch a match, run `npm run dev`. To configure a robot, click the gear icon next to
-its number.
+To rerun the design tables, run `npx tsx scripts/exp-run.ts all 96 10 101 TAG` with a tag of your own, and then run
+`npx tsx scripts/exp-report.ts`. It is 7,584 matches, about 8 hours on a 10-core laptop. To watch a match, run
+`npm run dev`. To configure a robot, click the gear icon next to its number.
