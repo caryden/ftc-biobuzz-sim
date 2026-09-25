@@ -80,11 +80,11 @@ describe('forms', () => {
   it('lists, sets, and adds definitions', () => {
     const t = copy('wall-sweep-pair-right'), def = AUTO_TREES['wall-sweep-pair-right'];
     const rows = defRows(t, def);
-    expect(rows.find(r => r.name === 'launchAudience')).toMatchObject({ pose: true, text: 'pose(hiveX, -1.32, -90 + flip)' });
-    expect(rows.find(r => r.name === 'hiveX')).toMatchObject({ pose: false, typeText: 'number' });
-    expect((setDef(t, 'hiveX', ' -0.3 ').defs as Json).hiveX).toBe('-0.3');
+    expect(rows.find(r => r.name === 'launchAudience')).toMatchObject({ pose: true, text: 'pose(field.hiveX, -1.32, -90 + flip)' });
+    expect(rows.find(r => r.name === 'stand')).toMatchObject({ pose: false, typeText: 'number' });
+    expect((setDef(t, 'stand', ' len / 2 ').defs as Json).stand).toBe('len / 2');
     expect(setDef(t, 'nothing', '1')).toBe(t);
-    expect(addDef(t, 'hiveX', '1')).toEqual({ error: expect.stringMatching(/already/) });
+    expect(addDef(t, 'stand', '1')).toEqual({ error: expect.stringMatching(/already/) });
     expect(addDef(t, 'x y', '1')).toEqual({ error: expect.stringMatching(/letters/) });
     expect(addDef(t, 'backOff', '')).toEqual({ error: expect.stringMatching(/expression/) });
     const r = addDef(t, 'backOff', '0.25'); if (!('tree' in r)) throw new Error(r.error);

@@ -6,8 +6,8 @@
  * browser keeps your plans (`user-trees.ts`). See `auto/auto-edit.ts` for how a drag changes a tree.
  */
 import type { TreeDef } from './bt';
-import { addReference, deleteDef, changedDefs, changedSteps, clonePlan, editHandles, isEdited, makeAbsolute, moveHandle, moveReference, planId, poseText, referencePoints, referTo, resetHandle, sharedWith, sourceOf, stepReference, toAlliance, turnHandle, turnReference, type Handle, type RefPoint } from './auto/auto-edit';
-import { AUTO_PROBLEMS, AUTO_REGISTRY, AUTO_SOURCES, AUTO_TREES, BUILT_IN_AUTO, SOLO_AUTO, addAutoTree, autoFor, autoStart, defValues } from './auto/onboard';
+import { addReference, defUsers, deleteDef, changedDefs, changedSteps, clonePlan, editHandles, isEdited, makeAbsolute, moveHandle, moveReference, planId, poseText, referencePoints, referTo, resetHandle, sharedWith, sourceOf, stepReference, toAlliance, turnHandle, turnReference, type Handle, type RefPoint } from './auto/auto-edit';
+import { AUTO_FIELD, AUTO_PROBLEMS, AUTO_REGISTRY, AUTO_SOURCES, AUTO_TREES, BUILT_IN_AUTO, SOLO_AUTO, addAutoTree, autoFor, autoStart, defValues } from './auto/onboard';
 import { addDef, defRows, paramFields, readField, setDef, setParam, sortProblems, type DefRow, type ParamField, type Problems } from './auto/draft';
 import type { View, CameraMode } from './render/view';
 import type { TreeEdit } from './render/tree-view';
@@ -210,7 +210,7 @@ export class FieldEditor {
   showRobot(i: number) {
     const id = this.treeOf(i);
     this.robot = i; this.editing = false; this.selected = null; this.point = -1; this.drag = null; this.past = []; this.future = [];
-    this.selectedRef = null; this.selectedLink = null; this.dwell = null;
+    this.selectedRef = null; this.selectedLink = null; this.dwell = null; this.addingDef = false;
     this.tree = id ? (AUTO_SOURCES[id] as Json) : {}; this.original = this.originalOf(this.tree);
     this.rev++; this.refresh(); this.host.changed();
   }
@@ -274,16 +274,20 @@ export class FieldEditor {
   }
 
   /** The tree view's options: the selection, and the nodes with handles. */
-  treeEdit(): TreeEdit { return { selected: this.selected, editable: new Set(this.handles.map(h => h.path)), changed: this.changed, problems: new Set(this.problems.nodes.keys()) }; }
+  treeEdit(): TreeEdit {
+    const defs = this.defs().map(d => ({ name: d.name, pose: d.pose, value: d.value, bad: this.problems.defs.has(d.name), changed: this.isUserPlan && this.changedRefs.has(d.name) }));
+    const constants = Object.entries(AUTO_FIELD).map(([k, v]) => ({ name: `field.${k}`, value: String(v) })); // A constant shows its CAD value in full.
+    return { selected: this.selected, editable: new Set(this.handles.map(h => h.path)), changed: this.changed, problems: new Set(this.problems.nodes.keys()), defs, selectedDef: this.selectedRef, constants, canAdd: this.editing };
+  }
 
   /** Selects a step, and the point of it that the ghost robot shows: `point`, or the step's first handle. */
   select(path: string | null, point?: number) {
-    this.selected = path; this.point = point ?? this.handles.findIndex(h => h.path === path); this.selectedRef = null; this.selectedLink = null; this.notice = null;
+    this.selected = path; this.point = point ?? this.handles.findIndex(h => h.path === path); this.selectedRef = null; this.selectedLink = null; this.notice = null; this.addingDef = false;
     this.paint(); this.host.changed();
   }
 
   /** Selects a reference point. The steps that name it show their offset lines to it. */
-  selectRef(name: string) { this.notice = null; this.selected = null; this.point = -1; this.selectedRef = name; this.selectedLink = null; this.paint(); this.host.changed(); }
+  selectRef(name: string) { this.notice = null; this.addingDef = false; this.selected = null; this.point = -1; this.selectedRef = name; this.selectedLink = null; this.paint(); this.host.changed(); }
 
   /** Selects the offset line of a step, and the step. **Delete** then makes the step absolute. */
   selectLink(path: string) { this.select(path); this.selectedLink = path; this.paint(); this.host.changed(); }
@@ -363,14 +367,32 @@ export class FieldEditor {
     this.remember(this.tree); this.apply(next, true);
   }
 
-  /** Gets the rows of the definitions panel, each with its value before the match, as text. */
+  /**
+   * Gets the plan's definitions, each with its value before the match for the robot shown, as text. The list is kept
+   * until the plan or the robot changes, because the page redraws the tree view often.
+   */
   defs(): (DefRow & { value: string | null })[] {
+    const key = `${this.rev}:${this.robot}`; if (this.defsCache?.key === key) return this.defsCache.rows;
     const def = this.def, values = def ? defValues(def, this.host.sim().view(this.robot)) : [];
-    return defRows(this.tree, def).map(r => {
+    const rows = defRows(this.tree, def).map(r => {
       const i = def?.defNames.indexOf(r.name) ?? -1;
       return { ...r, value: i >= 0 ? valueText(values[i]) : null };
     });
+    this.defsCache = { key, rows }; return rows;
   }
+  private defsCache: { key: string; rows: (DefRow & { value: string | null })[] } | null = null;
+
+  /** Gets the selected definition, with the steps and definitions that use it, or null. */
+  selectedDef(): (DefRow & { value: string | null; users: string[] }) | null {
+    const d = this.selectedRef ? this.defs().find(r => r.name === this.selectedRef) : undefined;
+    return d ? { ...d, users: defUsers(this.tree, d.name) } : null;
+  }
+
+  /** True while the settings panel shows the form that adds a definition. */
+  addingDef = false;
+  /** Shows the form that adds a definition, in place of the selection. */
+  startAddDef() { if (!this.editing) return; this.selected = null; this.point = -1; this.selectedRef = null; this.selectedLink = null; this.addingDef = true; this.paint(); this.host.changed(); }
+  cancelAddDef() { this.addingDef = false; this.host.changed(); }
 
   /** Sets a definition's expression. */
   setDefText(name: string, text: string) {
@@ -383,7 +405,7 @@ export class FieldEditor {
   addDefinition(name: string, text: string): string | null {
     if (!this.editing) return 'Edit a plan that you made to add definitions.';
     const r = addDef(this.tree, name, text); if ('error' in r) return r.error;
-    this.remember(this.tree); this.apply(r.tree, true); return null;
+    this.remember(this.tree); this.apply(r.tree, true); this.selectRef(name.trim()); return null;
   }
 
   private refDrawList() { return this.refs.map(r => ({ ...r.sim, selected: r.name === this.selectedRef })); }

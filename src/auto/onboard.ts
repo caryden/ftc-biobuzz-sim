@@ -13,7 +13,7 @@
  */
 import { checkTree, defineLeaf, loadTree, t, TreeLoadError, type LoadIssue, TreeRunner, type Behavior, type CNode, type FnSpec, type Recorder, type Registry, type TreeDef } from '../bt';
 import { seesRaisedCell } from '../sim/camera';
-import { FIELD } from '../sim/config';
+import { FIELD, HIVE } from '../sim/config';
 import { NO_INPUT, type Inputs, type IntakeFilter, type Sim } from '../sim/world';
 import { pursue } from './follow';
 import wallSweepRight from './trees/auto/wall-sweep-pair-right.json';
@@ -25,6 +25,14 @@ import soloSweep from './trees/auto/solo-two-tip-sweep.json';
 import soloSweepNoPark from './trees/auto/solo-two-tip-sweep-no-park.json';
 import leaveAndPark from './trees/auto/leave-and-park.json';
 import { fieldObstacles, planPath, type Capsule, type Pt } from './planner';
+
+/** Red's own FLOWER, which gives the FLOWER offsets of the `field` constants. */
+const OWN_FLOWER = FIELD.flowers.find(f => f.id === 'red')!;
+/**
+ * The onboard environment's `field` constants, the same for every robot. Both alliances use red's HIVE pivot, as the
+ * rotated scripts did: blue's own pivot is 0.4 mm farther out. See `ONBOARD_SCHEMA`.
+ */
+export const AUTO_FIELD: Readonly<OnboardEnv['field']> = { half: FIELD.half, flowerHalfSize: FIELD.flowerHalfSize, hiveX: HIVE.pivotX.red, flowerNear: Math.abs(OWN_FLOWER.z), flowerFar: Math.abs(OWN_FLOWER.x) };
 
 /**
  * A pose in the alliance frame: red's FIELD coordinates. x runs from the red wall (negative) to the blue wall, y from the
@@ -44,7 +52,13 @@ export const ONBOARD_SCHEMA = t.object({
     /** The physics step count, and the step length in seconds. AUTO leaves time their steps with them. */
     step: t.number(), dt: t.number('s'),
   }),
-  field: t.object({ half: t.number('m'), flowerHalfSize: t.number('m') }),
+  /**
+   * FIELD constants in the alliance frame. `hiveX` is the x of the own HIVE's pivot, from `HIVE.pivotX.red`. Every FLOWER
+   * center is at (±flowerFar, ±flowerNear) or (±flowerNear, ±flowerFar), from `FIELD.flowers`: the own FLOWER is at
+   * (-flowerFar, -flowerNear). For red, (-flowerNear, flowerFar) is the rear FLOWER. A blue robot's frame is rotated
+   * 180°, so for blue that spot is the audience FLOWER. The CAD values are in `cad/field-manifest.json`.
+   */
+  field: t.object({ half: t.number('m'), flowerHalfSize: t.number('m'), hiveX: t.number('m'), flowerNear: t.number('m'), flowerFar: t.number('m') }),
   bots: t.object({ me: t.object({
     dimensions: t.object({ length: t.number('m'), width: t.number('m') }),
     slot: t.number(),
@@ -73,7 +87,7 @@ export interface AutoOutput {
 /** The onboard environment: the schema's fields, plus the subsystems that only leaves can use. */
 export interface OnboardEnv {
   clock: { remaining: number; step: number; dt: number };
-  field: { half: number; flowerHalfSize: number };
+  field: { half: number; flowerHalfSize: number; hiveX: number; flowerNear: number; flowerFar: number };
   bots: { me: {
     dimensions: { length: number; width: number };
     slot: number;
@@ -133,7 +147,7 @@ class OnboardAdapter implements OnboardEnv {
   /** The intake's default command: what it runs in a step that no command runs it. Undefined leaves it unset, which the simulator runs as `all`. */
   intakeDefault: IntakeFilter | undefined = 'none';
   clock!: OnboardEnv['clock']; bots!: OnboardEnv['bots'];
-  readonly field = { half: FIELD.half, flowerHalfSize: FIELD.flowerHalfSize };
+  readonly field = AUTO_FIELD;
 
   use(s: Sim, n: number, dt: number) {
     const out = this.out, rotate = s.alliance === 'blue';

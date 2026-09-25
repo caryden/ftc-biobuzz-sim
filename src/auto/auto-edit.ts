@@ -283,12 +283,12 @@ export function deleteDef(tree: Json, handles: readonly Handle[], name: string):
   let out = tree; const madeAbsolute: string[] = [];
   for (const h of handles) if (h.kind === 'drive' && stepReference(out, h) === name) { out = makeAbsolute(out, h); madeAbsolute.push(h.path.split('/').pop()!); }
   out = structuredClone(out); delete (out.defs as Json)[name];
-  const users = usersOf(out, name);
+  const users = defUsers(out, name);
   return users.length ? { error: `${users.join(', ')} still ${users.length === 1 ? 'uses' : 'use'} ${name}. Change ${users.length === 1 ? 'it' : 'them'} first.` } : { tree: out, madeAbsolute };
 }
 
 /** Gets the definitions and step ids whose expressions name `name`. A quoted string, such as `'rear'`, or a field, such as `park.x`'s `x`, doesn't count. */
-function usersOf(tree: Json, name: string): string[] {
+export function defUsers(tree: Json, name: string): string[] {
   const word = new RegExp(`(?<![\\w.'"])${name}(?![\\w'"])`), out: string[] = [];
   for (const [k, v] of Object.entries((tree.defs ?? {}) as Json)) if (typeof v === 'string' && word.test(v)) out.push(k);
   const names = (v: unknown): boolean => typeof v === 'string' ? word.test(v) : !!v && typeof v === 'object' && Object.values(v).some(names);

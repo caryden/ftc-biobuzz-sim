@@ -68,11 +68,10 @@
   #aeinsp .ai-err { color: #ff8a80; font-size: 11.5px; margin-top: 2px; }
   #aeinsp .ai-problems { border: 1px solid #ff8a80; border-radius: 8px; padding: 6px 8px; } #aeinsp .ai-problems h3 { color: #ff8a80; }
   #aeinsp .ai-problems ul { margin: 0; padding-left: 16px; } #aeinsp .ai-problems li[data-go] { cursor: pointer; } #aeinsp .ai-problems li[data-go]:hover { text-decoration: underline; }
-  #aeinsp .ai-def { margin: 6px 0; padding: 4px 6px; border-radius: 6px; } #aeinsp .ai-def.sel { background: rgba(179, 136, 255, .15); }
-  #aeinsp .ai-defhead { display: flex; align-items: baseline; gap: 6px; } #aeinsp .ai-defhead code { cursor: pointer; } #aeinsp .ai-defhead code.pose::before { content: '●'; color: #b388ff; margin-right: 4px; }
-  #aeinsp .ai-val { flex: 1; color: var(--dim); font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  #aeinsp button { width: auto; margin: 0; padding: 1px 8px; font-size: 11px; }
-  #aeinsp .ai-add { display: flex; gap: 4px; margin-top: 8px; } #aeinsp .ai-add input:first-child { width: 90px; flex: none; } #aeinsp .ai-add button { flex: none; }
+  #aeinsp .ai-node b.pose::before { content: '●'; color: #b388ff; margin-right: 4px; } #treebody .tv.def .pd { color: #b388ff; margin-right: 4px; }
+  #aeinsp button { width: auto; margin: 0; padding: 2px 10px; font-size: 11.5px; } #aeinsp .ai-btns { display: flex; gap: 6px; margin-top: 8px; }
+  #treebody .tv.grp b { color: var(--dim); font-weight: 600; } #treebody .tv.const { color: var(--dim); cursor: default; } #treebody .tv.add { cursor: pointer; }
+  #treebody .tv.def b { font-weight: 500; }
   .tv.bad { box-shadow: inset 3px 0 #ff8a80; } body.editing #treebody .tv { cursor: pointer; }
   #aemenu { z-index: 7; padding: 4px; } #aemenu button { display: block; margin: 0; width: 100%; text-align: left; white-space: nowrap; } #aemenu button + button { margin-top: 4px; } #aemenu button.hidden { display: none; }
   #aerefname { top: 84px; left: 50%; transform: translateX(-50%); width: 300px; z-index: 7; } #aerefname h2 { color: var(--fg); } #aerefname input { width: 180px; }

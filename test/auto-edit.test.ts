@@ -104,7 +104,7 @@ describe('reference points', () => {
   it('lists the definitions that are poses, and names the one that a pose is built on', () => {
     const refs = referencePoints(AUTO_TREES['wall-sweep-pair-right'], newSim().view(0)).map(r => r.name);
     expect(refs).toEqual(expect.arrayContaining(['launchAudience', 'launchRear', 'ownFlower', 'park', 'parkRight']));
-    expect(refs).not.toContain('hiveX');
+    expect(refs).not.toContain('stand');
     expect([referenceOf('launchAudience'), referenceOf('offset(ownFlower, 0.2, 0)'), referenceOf('pose(park.x, 1, 0)')]).toEqual(['launchAudience', 'ownFlower', null]);
   });
   it('moves every step that names a reference point, and keeps a step in place when it changes reference or goes absolute', () => {

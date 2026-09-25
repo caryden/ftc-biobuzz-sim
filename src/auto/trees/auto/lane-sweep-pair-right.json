@@ -11,10 +11,9 @@
   "full": "bots.me.transfer.full",
   "len": "bots.me.dimensions.length",
   "flip": "if(bots.me.shooter.facing == 'front', 180, 0)",
-  "hiveX": "-0.3237",
   "stand": "len / 2 + field.flowerHalfSize + 0.02",
-  "launchAudience": "pose(hiveX, -1.32, -90 + flip)",
-  "ownFlower": "pose(-1.7282 + stand, -0.5942, 180)",
+  "launchAudience": "pose(field.hiveX, -1.32, -90 + flip)",
+  "ownFlower": "pose(-field.flowerFar + stand, -field.flowerNear, 180)",
   "park": "pose(-(field.half - len / 2 - 0.09), 0.8954, 180)",
   "parkRight": "pose(park.x, 0.8954 - 0.33, park.headingDeg)"
  },

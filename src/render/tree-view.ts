@@ -37,14 +37,26 @@ export class LiveTreeState {
   }
 }
 
+/** One definition of a tree, as a row of the tree view: its value before the MATCH, as text, or null if it doesn't evaluate. */
+export interface DefItem { name: string; pose: boolean; value: string | null; bad: boolean; changed: boolean }
+
 /**
- * Options of the tree view in the field editor: the selected node, the nodes that have handles on the FIELD, and the
- * steps that differ from the plan that this one was copied from, and the nodes that have problems.
+ * Options of the tree view in the field editor: the selected node, the nodes that have handles on the FIELD, the steps
+ * that differ from the plan that this one was copied from, and the nodes that have problems. `defs` are the tree's
+ * definitions, which the view lists at the root, with the reference points first, and `constants` are the
+ * environment's read-only values, such as `field.hiveX`.
  */
-export interface TreeEdit { selected: string | null; editable: ReadonlySet<string>; changed?: ReadonlySet<string>; problems?: ReadonlySet<string> }
+export interface TreeEdit {
+  selected: string | null; editable: ReadonlySet<string>; changed?: ReadonlySet<string>; problems?: ReadonlySet<string>;
+  defs?: readonly DefItem[]; selectedDef?: string | null; constants?: readonly { name: string; value: string }[];
+  /** True while you edit the plan: the definitions end with a row that adds one. */
+  canAdd?: boolean;
+}
 
 export class TreePanel {
   private lastLeaf = ''; private lastHtml = ''; private lastSel: string | null = null;
+  /** Which groups at the root are open: the definitions start open, and the constants closed. */
+  readonly open = { defs: true, constants: false };
   constructor(private readonly body: HTMLElement, private readonly head: HTMLElement) {}
 
   /**
@@ -72,14 +84,36 @@ export class TreePanel {
         + `${n.detail ? ` <span class="d">${esc(n.detail)}</span>` : ''}</div>`);
       n.children.forEach(c => walk(c, depth + 1));
     };
+    if (edit?.defs) rows.push(...this.groups(edit));
     walk(def.root, 0);
     this.set(rows.join(''));
     // Keep the running leaf in view when it changes, without fighting a reader who scrolls.
     if (deepest && deepest !== this.lastLeaf) this.body.querySelector(`[data-path="${CSS.escape(deepest)}"]`)?.scrollIntoView({ block: 'nearest' });
     this.lastLeaf = deepest;
-    const sel = edit?.selected ?? null;
-    if (sel && sel !== this.lastSel) this.body.querySelector(`[data-path="${CSS.escape(sel)}"]`)?.scrollIntoView({ block: 'nearest' });
+    const sel = edit?.selected ?? (edit?.selectedDef ? `def:${edit.selectedDef}` : null);
+    if (sel && sel !== this.lastSel) this.body.querySelector(sel.startsWith('def:') ? `[data-def="${CSS.escape(sel.slice(4))}"]` : `[data-path="${CSS.escape(sel)}"]`)?.scrollIntoView({ block: 'nearest' });
     this.lastSel = sel;
+  }
+
+  /** The rows of the root's groups: the definitions, with a row that adds one, and the environment's constants. */
+  private groups(edit: TreeEdit): string[] {
+    const rows: string[] = [], defs = [...(edit.defs ?? [])].sort((a, b) => Number(b.pose) - Number(a.pose));
+    const head = (key: 'defs' | 'constants', name: string, n: number, tip: string) =>
+      `<div class="tv grp" data-grp="${key}" title="${esc(tip)}" style="padding-left:6px"><b>${this.open[key] ? '▾' : '▸'} ${name}</b> <span class="d">${n}</span></div>`;
+    rows.push(head('defs', 'definitions', defs.length, 'Names that the steps use. A purple dot is a pose, which is also a reference point on the FIELD.'));
+    if (this.open.defs) {
+      for (const d of defs) {
+        const cls = `tv def${d.name === edit.selectedDef ? ' sel' : ''}${d.bad ? ' bad' : ''}${d.changed ? ' chg' : ''}`;
+        rows.push(`<div class="${cls}" data-def="${esc(d.name)}" style="padding-left:18px"><b>${d.pose ? '<span class="pd">●</span>' : ''}${esc(d.name)}</b>${d.value === null ? '' : ` <span class="d">= ${esc(d.value)}</span>`}</div>`);
+      }
+      if (edit.canAdd) rows.push('<div class="tv add" data-adddef style="padding-left:18px"><span class="d">+ add a definition</span></div>');
+    }
+    const consts = edit.constants ?? [];
+    if (consts.length) {
+      rows.push(head('constants', 'constants', consts.length, 'Read-only FIELD values that every plan can use, such as field.hiveX.'));
+      if (this.open.constants) for (const c of consts) rows.push(`<div class="tv const" title="Read-only" style="padding-left:18px">${esc(c.name)} <span class="d">= ${esc(c.value)}</span></div>`);
+    }
+    return rows;
   }
 
   /** Replaces the outline only when it changed, so that a tooltip under the pointer stays open and a click lands. */

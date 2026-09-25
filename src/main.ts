@@ -218,12 +218,20 @@ $('aecreate').onclick = () => {
 $('aecancel').onclick = closeNewPlan;
 $('aemake').onclick = () => { const err = editor.create(newPlan.from.value, newPlan.name.value, newPlan.desc.value); $('aeerr').textContent = err ?? ''; if (!err) closeNewPlan(); };
 // In the editor, a click on a step in the tree view selects it, and its handles on the FIELD light up.
-$('treebody').addEventListener('click', e => { if (!editor.active) return; const row = (e.target as HTMLElement).closest<HTMLElement>('.tv[data-path]'); if (row) editor.select(row.dataset.path!); });
+// The definitions and constants at the root are groups that open and close. A click on a definition selects it.
+$('treebody').addEventListener('click', e => {
+  if (!editor.active) return; const t = e.target as HTMLElement;
+  const grp = t.closest<HTMLElement>('.tv[data-grp]'); if (grp) { const k = grp.dataset.grp as 'defs' | 'constants'; treePanel.open[k] = !treePanel.open[k]; paintTree(); return; }
+  const d = t.closest<HTMLElement>('.tv[data-def]'); if (d) { editor.selectRef(d.dataset.def!); return; }
+  if (t.closest('.tv[data-adddef]')) { editor.startAddDef(); return; }
+  const row = t.closest<HTMLElement>('.tv[data-path]'); if (row) editor.select(row.dataset.path!);
+});
 // The settings panel: the plan's problems, the selected step's parameters, and the definitions.
 const inspector = new Inspector($('aeinsp'), {
   setParam: (path, key, text) => editor.setParamText(path, key, text),
   setDef: (name, text) => editor.setDefText(name, text),
   addDef: (name, text) => editor.addDefinition(name, text),
+  cancelAdd: () => editor.cancelAddDef(),
   deleteDef: name => editor.deleteRef(name),
   selectNode: path => editor.select(path),
   selectDef: name => editor.selectRef(name),
@@ -240,8 +248,8 @@ function paintEditor() {
   status.classList.toggle('warn', !!wrong || bad > 0);
   status.textContent = !def ? '' : wrong ? `This plan is for the ${wrong} start position.` : editor.isUserPlan ? `${editor.editing ? 'Your plan · editing' : 'Your plan'}${changes}${problems}` : 'System plan · read-only';
   const insp = $('aeinsp'); insp.classList.toggle('hidden', !def);
-  if (def) inspector.paint({ editing: editor.editing, problems: editor.problems, path: editor.selected, node: editor.selectedNode(), fields: editor.fields(), defs: editor.defs(), selectedDef: editor.selectedRef },
-    `${def.id}:${editor.robot}|${editor.rev}|${editor.selected}|${editor.editing}|${editor.selectedRef}`);
+  if (def) inspector.paint({ editing: editor.editing, problems: editor.problems, path: editor.selected, node: editor.selectedNode(), fields: editor.fields(), def: editor.selectedDef(), adding: editor.addingDef },
+    `${def.id}:${editor.robot}|${editor.rev}|${editor.selected}|${editor.editing}|${editor.selectedRef}|${editor.addingDef}`);
   $<HTMLButtonElement>('aeundo').disabled = !editor.canUndo; $<HTMLButtonElement>('aeredo').disabled = !editor.canRedo;
   $('aeframe').textContent = 'Red alliance frame: +x toward the blue wall, +y toward the rear wall. Blue robots run this tree rotated 180°.';
   // The bar cuts long lines short, so each line's tooltip holds the whole text.
