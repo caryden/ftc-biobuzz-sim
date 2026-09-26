@@ -301,7 +301,7 @@ export class Sim {
     this.time += DT; this.clock -= DT;
     if (this.phase === 'transition' && !this.pickupCued) { this.pickupCued = true; this.events.push('pick_up_controllers'); }
     if (this.phase === 'transition' && this.clock <= 3 && !this.countCued) { this.countCued = true; this.events.push('countdown'); }
-    if (this.phase === 'teleop' && this.clock <= 20 && !this.endgameCued) { this.endgameCued = true; this.events.push('endgame'); }
+    if (this.phase === 'teleop' && this.clock <= MATCH.endgame && !this.endgameCued) { this.endgameCued = true; this.events.push('endgame'); }
     if (this.clock > 0) return;
     if (this.phase === 'auto') {
       this.robots.forEach((r, i) => {

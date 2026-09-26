@@ -58,7 +58,7 @@ default TELEOP tree in TELEOP. For how the trees work, see [Behavior-tree polici
 ### Robot config
 
 Every MATCH has four robots: R0, R1, B0, and B1. To configure a robot before a MATCH, click the gear icon next to
-its number in the scoreboard or in the **Game setup** panel, or right-click the robot. The popup sets the following:
+its number in the scoreboard, click its card in the game setup, or right-click the robot. The popup sets the following:
 
 - The number plate, the driver, and the stick frame for a human driver, which is field-centric by default.
 - The shooter's release, where it launches from, and the intake layout: front, or front and rear. A shooter
@@ -71,7 +71,7 @@ its number in the scoreboard or in the **Game setup** panel, or right-click the 
 - The intake success probability, the AUTO plan, the TELEOP plan, and the defense policy.
 - The drive motor's free speed in rpm, the side of the square chassis, and the mass.
 
-**Units** in the options switches the popup, the telemetry, and the field position readout between metric, which is
+**Units** in the options switches the popup, the robot cards, and the field position readout between metric, which is
 the default, and US units. A controller drives
 one robot: if you give a robot the controller that another robot has, that other robot goes back to the planner.
 The simulator opens with the meta build on all four robots: a four-element catapult, 12 in., 15.4 lb, 500 rpm, and
@@ -125,9 +125,9 @@ a wall, where the robot faces the wall and strafes.
 
 To change an AUTO plan, follow these steps:
 
-1. Before the MATCH, click **Edit AUTO paths** in the **Game setup** panel. The camera changes to **Overhead**, and the
-   tree view shows R0's AUTO plan. The buttons above the tree, or a click on the other red robot, switch to its plan.
-   Plans are written in red's frame, and blue robots run them rotated 180°.
+1. Before the MATCH, click the gear icon in the control bar, and then click **Edit AUTO paths**. The camera changes to
+   **Overhead**, and the tree view shows R0's AUTO plan. The buttons above the tree, or a click on the other red robot,
+   switch to its plan. Plans are written in red's frame, and blue robots run them rotated 180°.
 2. Click **Create new**, pick the plan to copy, and give the new plan a name and a description. The new plan becomes the
    robot's plan, and editing starts. System plans are read-only. To edit a plan that you made earlier, click **Edit**.
 3. Drag an orange disc to move a drive step's pose, or drag the knob at the end of its line to turn its heading. A cyan
@@ -223,10 +223,16 @@ The comment at the start of `scripts/match.ts` lists them.
 ## Review and annotate a match
 
 The page records every match at 10 Hz, with each frame's full score breakdown, so that the scoreboard scrubs too.
+The control bar at the upper left plays the MATCH the way a media player plays a recording. Its timeline covers the
+whole MATCH, and the recorded part fills in as the MATCH runs. Gray ticks mark the MATCH start, the TELEOP start,
+FLOWERS open (1:00), the endgame (0:20), and the MATCH end, and dots mark notes.
 
-1. During a match, press **M** to mark a moment that looks wrong.
-2. Press **V**, or click **Review match**, to open the timeline at the bottom edge.
-3. Drag the scrub bar, press **Play**, or type a match clock time such as `0:50` and press Enter.
+1. During a match, press **M** to mark a moment that looks wrong. When the referee calls a FOUL, the page adds a note
+   on the robot that the FOUL is called on.
+2. Drag the thumb back, press **V**, or click the previous-mark button to open the review. A live MATCH waits while
+   the review is open. **Go live**, or playback that reaches the newest frame, returns to the MATCH.
+3. Drag the thumb, click **Play**, or step between marks with the previous-mark and next-mark buttons. The speed list
+   applies to the recording. A live MATCH always runs at 1x.
 4. Click a robot, type what went wrong, and press Enter. The note attaches to that robot at the cursor time, and a dot
    marks it on the timeline.
 
@@ -235,13 +241,18 @@ with the running nodes highlighted and every other node's last result, live duri
 review. The buttons at the top of the panel pick the robot.
 
 With the dev server, the trace saves to `traces/<name>.json` and the notes to `traces/<name>.annotations.md` and
-`.json`. On the deployed site there is no server, so notes stay in the browser's storage, and **Export** downloads the
-notes and the trace as files. The Markdown file repeats every robot's position, tactic, goal, stall, and running tree
-leaf at each note, in field coordinates, so it can be read without the trace. To summarize a trace, run `npx tsx
-scripts/trace-report.ts`.
+`.json`. On the deployed site there is no server, so notes stay in the browser's storage, and **Export** in the game
+setup downloads the notes and the trace as files. The Markdown file repeats every robot's position, tactic, goal,
+stall, and running tree leaf at each note, in field coordinates, so it can be read without the trace. To summarize a
+trace, run `npx tsx scripts/trace-report.ts`.
 
 Field coordinates: the origin is the FIELD center, +x is the blue wall, +y is the rear wall, and the unit is the meter.
-Field y is the negative of the z axis in the code. A click on the FIELD floor reports the position.
+Field y is the negative of the z axis in the code. A click on the FIELD floor shows the position in a toast at the
+bottom edge. Referee calls and rule messages, such as G410, show there too.
+
+**AUTO paths** in the options draws the AUTO plan of the robot that the view follows, as a dashed orange line, and the
+path that the planner drives, in blue. Turn it off to see the FIELD clearly. The AUTO editor draws the paths whatever
+the setting.
 
 ## Watching a match without a screen
 

@@ -3,18 +3,17 @@ import { readInput, type Frame } from './input';
 import { AUTO_TREES, SOLO_AUTO, autoFor, autoStart, previewAuto } from './auto/onboard';
 import { FieldEditor } from './field-editor';
 import { loadUserTrees } from './user-trees';
-import { BOT_IDS, REF_ERR, startSide, assignDriver, defaultBot, metaBot, describe, loadBots, robotConfig, sanitize, saveBots, type BotSetup, type DriverKind } from './setup';
+import { BOT_IDS, REF_ERR, startSide, assignDriver, defaultBot, metaBot, describe, describeLines, loadBots, robotConfig, sanitize, saveBots, type BotSetup, type DriverKind } from './setup';
 import { MatchAudio } from './audio';
 import { Coach } from './auto/coach';
 import { Referee } from './ref/referee';
-import { Review, clockText } from './review';
+import { Review, clockText, type SystemMark } from './review';
 import { TraceRecorder } from './trace';
 import { LiveTreeState, TreePanel, treeStateAt } from './render/tree-view';
 import { TELEOP_TREES } from './auto/driver';
 import { CAMERAS, View, type CameraMode } from './render/view';
-import { RP } from './sim/config';
-import { fmtPos, fmtSpeed, getUnits, massFromInput, massToInput, setUnits, sizeFromInput, sizeToInput, speedFromInput, speedToInput, type Units } from './units';
-import { cameraSightings } from './sim/camera';
+import { MATCH, RP } from './sim/config';
+import { fmtPos, getUnits, massFromInput, massToInput, setUnits, sizeFromInput, sizeToInput, speedFromInput, speedToInput, type Units } from './units';
 import { DT, NO_INPUT, Sim, type AllianceScore, type Inputs, type MatchMode } from './sim/world';
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
@@ -29,6 +28,10 @@ const audio = new MatchAudio(), soundSel = $<HTMLSelectElement>('sound'); soundS
 const treeSel = $<HTMLSelectElement>('treeview'), treePanel = new TreePanel($('treebody'), $('treehead')), liveTrees = [0, 1, 2, 3].map(() => new LiveTreeState());
 try { treeSel.value = localStorage.getItem('biobuzz.treeview') === 'on' ? 'on' : 'off'; } catch { /* Storage is a convenience. */ }
 treeSel.onchange = () => { try { localStorage.setItem('biobuzz.treeview', treeSel.value); } catch { /* Storage is a convenience. */ } treeSel.blur(); paintTree(); };
+// AUTO paths draws the focus robot's AUTO plan and its planned path. The AUTO editor draws them whatever the setting.
+const pathsSel = $<HTMLSelectElement>('autopaths');
+try { pathsSel.value = localStorage.getItem('biobuzz.autopaths') === 'off' ? 'off' : 'on'; } catch { /* Storage is a convenience. */ }
+pathsSel.onchange = () => { try { localStorage.setItem('biobuzz.autopaths', pathsSel.value); } catch { /* Storage is a convenience. */ } pathsSel.blur(); };
 let treeRobot = -1; // -1 follows the focus robot.
 // One handler for the robot buttons. The buttons are rebuilt only when the robots or the choice change: a button that is
 // replaced between the press and the release of a click never receives the click.
@@ -45,6 +48,8 @@ for (const b of bots) if (b.auto !== 'default' && b.auto !== 'none' && !AUTO_TRE
 let units: Units = getUnits(); const unitsSel = $<HTMLSelectElement>('units'); unitsSel.value = units;
 unitsSel.onchange = () => { units = unitsSel.value as Units; setUnits(units); unitsSel.blur(); paintBots(); if (editing >= 0) openConfig(editing); };
 let sim: Sim; let seed = 1; let startAt = 0; let recorder: TraceRecorder; let traceSaved = false; let coaches: Coach[] = [], referee: Referee | null = null;
+// A paused MATCH doesn't step. `callsSeen` counts the referee's calls that have a note, and `toasted` holds the sim messages that had a toast.
+let livePaused = false, callsSeen = 0, toasted = new WeakSet<object>(), savedFrames = -1;
 const review = new Review(view, () => sim, canvas); let finalClosed = false;
 // The field editor edits one robot's AUTO poses before the MATCH. An edit switches the robot to the edited copy.
 const editor = new FieldEditor({ view, canvas, bots, sim: () => sim,
@@ -53,12 +58,32 @@ const editor = new FieldEditor({ view, canvas, bots, sim: () => sim,
 /** The robot that the HUD, the chase camera, and the shot preview follow: the first robot with a human driver, or R0. */
 const focus = () => Math.max(0, bots.findIndex(b => b.driver !== 'planner'));
 const settings = () => ({ match: modeSel.value, stage: stageSel.value, referee: refSel.value, ...Object.fromEntries(bots.map((b, i) => [BOT_IDS[i], `plate ${b.plate} · ${describe(b)}`])) });
-/** Saves the trace into the repository's traces/ folder through the dev server. */
-async function saveTrace() { try { const res = await fetch(`/api/trace/${recorder.trace.name}`, { method: 'POST', body: JSON.stringify(recorder.trace) }); sim.say(res.ok ? `Trace saved: traces/${recorder.trace.name}.json` : 'Review the match to annotate it. Export saves the trace as a file.'); } catch { sim.say('Review the match to annotate it. Export saves the trace as a file.'); } }
+/**
+ * Saves the trace into the repository's traces/ folder through the dev server. A trace that hasn't grown since the last
+ * save isn't sent again. The game setup's "This match" line shows the result.
+ */
+async function saveTrace() {
+  const tr = recorder.trace, n = tr.frames.length; if (n === savedFrames) return; savedFrames = n;
+  const status = (text: string) => { $('nsaved').textContent = text; };
+  try { const res = await fetch(`/api/trace/${tr.name}`, { method: 'POST', body: JSON.stringify(tr) }); status(res.ok ? `Trace saved: traces/${tr.name}.json` : 'Export saves the trace and the notes as files.'); } catch { status('Export saves the trace and the notes as files.'); }
+}
 /** Adds this finished MATCH to the site's live counter. The dev server has no counter, so a failure is silent. */
-async function countMatch() { try { const res = await fetch('/api/matches', { method: 'POST' }); if (!res.ok) return; const { count } = await res.json() as { count: number }; sim.say(`That was simulated match ${count.toLocaleString('en-US')} on this site.`); } catch { /* No counter here. */ } }
+async function countMatch() { try { await fetch('/api/matches', { method: 'POST' }); } catch { /* No counter here. */ } }
 /** Starts the MATCH after the announcer's "3-2-1-go". */
-function startMatch() { if (sim.phase !== 'pre' || startAt) return; closeConfig(); editor.close(); if (!audio.enabled) { sim.start(); return; } audio.play('start_countdown'); startAt = performance.now() + 3000; }
+function startMatch() { if (sim.phase !== 'pre' || startAt) return; closeConfig(); closeModals(); editor.close(); if (!audio.enabled) { sim.start(); return; } audio.play('start_countdown'); startAt = performance.now() + 3000; }
+/**
+ * Gets the MATCH length in seconds for a match mode, and the fixed points that the timeline marks: the MATCH start, the
+ * TELEOP start, FLOWERS open, the endgame, and the MATCH end. Practice has no clock, so only its start is marked. Each
+ * mark after the start sits 0.1 s past its boundary: the frame just before a boundary still shows the old period, and
+ * a jump to the mark lands on the first frame after the change.
+ */
+function timeline(mode: MatchMode): { span: number; marks: SystemMark[] } {
+  const { auto, transition, teleop, flowerUnlock, endgame } = MATCH, past = 0.1;
+  if (mode === 'practice') return { span: Infinity, marks: [{ t: 0, label: 'Start' }] };
+  if (mode === 'auto') return { span: auto, marks: [{ t: 0, label: 'MATCH starts' }, { t: auto + past, label: 'MATCH ends' }] };
+  const teleopAt = mode === 'full' ? auto + transition : 0, span = teleopAt + teleop;
+  return { span, marks: [{ t: 0, label: 'MATCH starts' }, ...(teleopAt ? [{ t: teleopAt + past, label: 'TELEOP starts' }] : []), { t: span - flowerUnlock + past, label: 'FLOWERS open' }, { t: span - endgame + past, label: 'Endgame' }, { t: span + past, label: 'MATCH ends' }] };
+}
 function reset() {
   editor.close();
   sim = new Sim(RAPIER, undefined, modeSel.value as MatchMode, seed++, { opponent: true, partners: true, playoff: stageSel.value === 'playoff', configFor: (a, slot) => robotConfig(bots[(a === 'red' ? 0 : 2) + slot]) });
@@ -67,8 +92,9 @@ function reset() {
   coaches = sim.robots.map((_, i) => { const c = new Coach(), b = bots[i]; c.flowerStartSec = b.flowerStartSec; c.defense = b.defense; c.autoOverride = b.auto === 'default' || b.auto === 'none' ? null : b.auto; c.traceTrees = true; return c; });
   referee = refSel.value === 'off' ? null : new Referee(); // The referee calls PINS (G421) by the fixed rule.
   view.plates = bots.map(b => b.plate); review.plates = Object.fromEntries(bots.map((b, i) => [BOT_IDS[i], b.plate]));
-  Object.assign(window, { sim, coaches, editor }); startAt = 0; review.exit(); review.notes = []; traceSaved = false; finalClosed = false;
-  recorder = new TraceRecorder(sim, settings()); paintBots();
+  Object.assign(window, { sim, coaches, editor, referee }); startAt = 0; review.exit(); review.notes = []; traceSaved = false; finalClosed = false;
+  livePaused = false; callsSeen = 0; toasted = new WeakSet(); savedFrames = -1;
+  recorder = new TraceRecorder(sim, settings()); const tl = timeline(sim.mode); review.attach(recorder.trace, tl.span, tl.marks); paintBots();
 }
 
 // ---------- robot config ----------
@@ -78,15 +104,16 @@ const bc = { plate: $<HTMLInputElement>('bcplate'), driver: $<HTMLSelectElement>
 const autoOptions = (i: number) => { const side = startSide(i);
   return `<option value="default">Default: wall-sweep pair, ${side} robot</option>` + Object.entries(AUTO_TREES).filter(([, d]) => autoStart(d) !== (side === 'right' ? 'left' : 'right')).map(([k, d]) => `<option value="${k}" title="${d.description ?? ''}">${d.name}</option>`).join('') + `<option value="none">None</option>`; };
 const gear = (i: number) => `<button class="gear" data-bot="${i}" title="Robot config for ${bots[i].plate}">&#9881;</button>`;
-/** Draws the robot rows in the scoreboard and in the setup panel. Called when a setup changes, not on every frame, so that the gear buttons stay clickable. */
+/** Draws the robot rows in the scoreboard and the robot cards in the game setup. Called when a setup changes, not on every frame, so that the buttons stay clickable. */
 function paintBots() {
   $('tred').innerHTML = [0, 1].map(i => `<div>${bots[i].plate}${gear(i)}</div>`).join(''); $('tblue').innerHTML = [2, 3].map(i => `<div>${gear(i)}${bots[i].plate}</div>`).join('');
-  $('botlist').innerHTML = bots.map((b, i) => `<div class="bot"><b style="background:var(--${i < 2 ? 'red' : 'blue'})">${b.plate}</b><span title="${describe(b, units)}">${describe(b, units)}</span>${gear(i)}</div>`).join('');
-  document.querySelectorAll<HTMLButtonElement>('button.gear').forEach(el => { el.onclick = () => openConfig(Number(el.dataset.bot)); });
+  $('botlist').innerHTML = bots.map((b, i) => { const side = i < 2 ? 'red' : 'blue';
+    return `<div class="bot ${side}" data-bot="${i}" title="${describe(b, units)}"><div class="bothead"><b style="background:var(--${side})">${b.plate}</b><span>${BOT_IDS[i]} · ${startSide(i)} start</span>${gear(i)}</div><div class="botdesc">${describeLines(b, units).map(l => `<div>${l}</div>`).join('')}</div></div>`; }).join('');
+  document.querySelectorAll<HTMLElement>('button.gear, #botlist .bot').forEach(el => { el.onclick = e => { e.stopPropagation(); openConfig(Number(el.dataset.bot)); }; });
 }
 /** Opens the robot config popup. Setups change only before a MATCH or after it, because a change rebuilds the FIELD. */
 function openConfig(i: number) {
-  if (review.active || (sim.phase !== 'pre' && sim.phase !== 'post') || startAt) return; editing = i; const b = bots[i];
+  if ((sim.phase !== 'pre' && sim.phase !== 'post') || startAt) return; if (review.active) review.exit(); closeModals(); editing = i; const b = bots[i];
   $('bchead').textContent = `Robot config: ${b.plate} (${BOT_IDS[i]}), ${i < 2 ? 'red' : 'blue'} alliance, ${startSide(i)} start`; bc.auto.innerHTML = autoOptions(i);
   bc.plate.value = b.plate; bc.driver.value = b.driver; bc.drive.value = b.stickFrame; bc.shooter.value = b.shooter; bc.auto.value = b.auto; bc.plan.value = String(b.flowerStartSec); bc.rpm.value = String(b.driveRpm); bc.size.value = String(sizeToInput(b.sizeIn, units)); bc.mass.value = String(massToInput(b.massLb, units)); $('bcsizelabel').textContent = `Chassis, square, ${units === 'us' ? 'in.' : 'cm'}`; $('bcmasslabel').textContent = `Mass, ${units === 'us' ? 'lb' : 'kg'}`; bc.intake.value = b.dualIntake ? 'dual' : 'front'; bc.ends.value = b.turret ? 'turret' : b.dualShooter ? 'both' : 'one'; bc.turretRange.value = String(b.turretRangeDeg ?? 360); bc.turretSlew.value = b.turretSlewDegPerSec ? String(b.turretSlewDegPerSec) : ''; for (const id of ['bcturretrow', 'bcslewrow']) $(id).classList.toggle('hidden', !b.turret); bc.defense.value = b.defense; bc.elev.value = String(b.errElevDeg); bc.azim.value = String(b.errAzimDeg); bc.speed.value = String(speedToInput(b.errSpeed, units)); bc.intakeP.value = String(Math.round(100 * b.intakeP)); $('bcspeedlabel').textContent = `Launch speed, ${units === 'us' ? 'ft/s' : 'm/s'}`;
   // Trees are written in red's frame, so AUTO poses are edited from a red robot. Blue robots run them rotated 180°.
@@ -106,13 +133,13 @@ for (const el of Object.values(bc)) { el.onchange = applyConfig; for (const ev o
 // The 1x, 3x, and 5x chips fill in the reference launcher's errors times that factor.
 document.querySelectorAll<HTMLButtonElement>('[data-err]').forEach(el => { el.onclick = () => { const k = Number(el.dataset.err); bc.elev.value = String(+(REF_ERR.errElevDeg * k).toFixed(2)); bc.azim.value = String(+(REF_ERR.errAzimDeg * k).toFixed(2)); bc.speed.value = String(speedToInput(+(REF_ERR.errSpeed * k).toFixed(3), units)); applyConfig(); }; });
 /** Opens the AUTO editor on red robot `i`. After a MATCH, it resets the FIELD first, because the plan preview draws from the start positions. */
-function openEditor(i: number) { if (review.active || startAt) return; closeConfig(); if (sim.phase !== 'pre') reset(); editor.open(i); }
+function openEditor(i: number) { if (review.active || startAt) return; closeConfig(); closeModals(); if (sim.phase !== 'pre') reset(); editor.open(i); }
 $('bcedit').onclick = () => { if (editing >= 0 && editing < 2) openEditor(editing); };
-$('editauto').onclick = () => { $('editauto').blur(); if (editor.active) editor.close(); else openEditor(treeRobot === 1 ? 1 : 0); };
+$('editauto').onclick = () => { $('editauto').blur(); closeModals(); if (editor.active) editor.close(); else openEditor(treeRobot === 1 ? 1 : 0); };
 $('bcdone').onclick = closeConfig; const applyPreset = (make: (i: number) => BotSetup) => { if (editing < 0) return; const i = editing, keep = { plate: bots[i].plate, driver: bots[i].driver, stickFrame: bots[i].stickFrame }; bots[i] = { ...make(i), ...keep }; saveBots(bots); reset(); openConfig(i); };
 $('bcdefault').onclick = () => applyPreset(metaBot); $('bcbaseline').onclick = () => applyPreset(defaultBot);
-// A click on the FIELD floor reports the position in the log, in the coordinate system that the floor labels show.
-// In the review, a click on a robot adds a note instead, and the position goes to the review bar.
+// A click on the FIELD floor shows the position in a toast, in the coordinate system that the floor labels show.
+// In the review, a click on a robot adds a note instead.
 canvas.addEventListener('click', e => {
   if (editor.takeClick()) return;
   // In the editor, a click on the other red robot shows that robot's plan. A click on a handle never gets here.
@@ -121,8 +148,7 @@ canvas.addEventListener('click', e => {
     const other = 1 - editor.robot; if (view.pickRobot(e.clientX, e.clientY, 0) === other) { editor.showRobot(other); return; }
   }
   if (review.active && view.pickRobot(e.clientX, e.clientY) !== null) return; const q = view.pickFloor(e.clientX, e.clientY); if (!q) return;
-  const text = `Field position: ${fmtPos(q.x, q.y, units)}`;
-  if (review.active) $('nsaved').textContent = text; else sim.say(text);
+  toast(`Field position: ${fmtPos(q.x, q.y, units)}`);
 });
 canvas.addEventListener('contextmenu', e => {
   e.preventDefault();
@@ -158,9 +184,76 @@ for (const ev of ['keydown', 'keyup']) $('aerefinput').addEventListener(ev, e =>
 
 reset();
 // Entering the review saves the trace first, so that annotations always have their trace on disk.
-const openReview = () => { closeConfig(); editor.close(); void saveTrace(); review.enter(recorder.trace); };
-$('reviewbtn').onclick = openReview;
-modeSel.onchange = reset; refSel.onchange = reset; stageSel.onchange = reset; $('reset').onclick = reset; $('start').onclick = startMatch;
+function openReview() { closeConfig(); closeModals(); editor.close(); void saveTrace(); review.enter(recorder.trace); }
+modeSel.onchange = reset; refSel.onchange = reset; stageSel.onchange = reset;
+
+// ---------- control bar ----------
+/** True from the countdown to the end of TELEOP. */
+const running = () => startAt > 0 || sim.phase === 'auto' || sim.phase === 'transition' || sim.phase === 'teleop';
+/** Closes the review and lets the MATCH run. */
+function goLive() { review.exit(); livePaused = false; }
+review.onEnd = () => { if (running()) goLive(); }; review.onOpen = openReview;
+/**
+ * The play button. Before the MATCH it starts the MATCH, and during the MATCH it pauses the MATCH or resumes it. In the
+ * review it plays the recording, and at the live edge it goes back to live. After the MATCH, it replays the MATCH from
+ * the start.
+ */
+function playPause() {
+  if (review.active) { if (running() && review.at >= review.end && !review.isPlaying) goLive(); else review.toggle(); }
+  else if (sim.phase === 'pre') startMatch();
+  else if (startAt) return;
+  else if (running()) livePaused = !livePaused;
+  else if (review.end >= 0) { openReview(); review.seek(0); review.toggle(); }
+}
+/** Moves the cursor to the previous stop or the next one. Past the last stop, it goes back to live, or to the end of the recording. */
+function skip(dir: -1 | 1) {
+  const end = review.end; if (end < 0) return;
+  if (dir < 0) { const to = review.prevStop(review.active ? review.at : end); if (!review.active) openReview(); review.seek(to); return; }
+  if (!review.active) return; const to = review.nextStop(review.at);
+  if (to === null && running()) goLive(); else review.seek(to ?? end);
+}
+/** Binds a control bar button. The button gives up the focus, so that Space and the arrow keys don't press it again. */
+const bind = (id: string, fn: () => void) => { const el = $<HTMLButtonElement>(id); el.onclick = () => { fn(); el.blur(); paintTransport(); }; };
+bind('tplay', playPause); bind('tprev', () => skip(-1)); bind('tnext', () => skip(1)); bind('treset', reset); bind('tlive', goLive);
+// A drag back from the live edge opens the review. The thumb can't go past the newest frame. Letting go at the live edge
+// of a running MATCH goes back to live.
+const scrub = $<HTMLInputElement>('scrub');
+scrub.oninput = () => {
+  const end = review.end, i = review.frameAt(Number(scrub.value)); if (end < 0) return;
+  if (!review.active) { if (i >= end) { review.paintTrack(); return; } openReview(); }
+  review.seek(i);
+};
+scrub.onchange = () => { if (review.active && running() && review.at >= review.end) goLive(); scrub.blur(); paintTransport(); };
+$('rspeed').onchange = () => $('rspeed').blur();
+// The game setup and the help are modals. The close button, a click on the scrim, or Esc closes them.
+function closeModals() { for (const id of ['setup', 'helpbox']) $(id).classList.add('hidden'); }
+const toggleModal = (id: string) => { const open = $(id).classList.contains('hidden'); closeModals(); $(id).classList.toggle('hidden', !open); };
+bind('tsetup', () => toggleModal('setup')); bind('thelp', () => toggleModal('helpbox'));
+for (const id of ['setup', 'helpbox']) $(id).addEventListener('click', e => { const t = e.target as HTMLElement; if (t === $(id) || t.closest('[data-close]')) closeModals(); });
+addEventListener('keydown', e => { if (e.key === 'Escape') closeModals(); });
+// The score table under the bar opens and closes. This browser keeps the choice.
+let scoreOpen = true; try { scoreOpen = localStorage.getItem('biobuzz.score') !== 'off'; } catch { /* Storage is a convenience. */ }
+bind('tscore', () => { scoreOpen = !scoreOpen; try { localStorage.setItem('biobuzz.score', scoreOpen ? 'on' : 'off'); } catch { /* Storage is a convenience. */ } $('left').classList.toggle('hidden', !scoreOpen); paintTree(); });
+/** Shows a message at the bottom edge for 4 s. At most three show at a time. */
+function toast(text: string, cls = '') {
+  const box = $('toasts'), el = document.createElement('div'); el.textContent = text; el.className = cls; box.append(el);
+  while (box.children.length > 3) box.firstElementChild!.remove();
+  setTimeout(() => el.classList.add('out'), 3500); setTimeout(() => el.remove(), 4000);
+}
+/** Draws the control bar: the timeline, the time at the cursor, and each button's state. */
+function paintTransport() {
+  review.paintTrack();
+  const live = running(), pre = sim.phase === 'pre' && !startAt;
+  if (!review.active) $('scrubtime').textContent = pre ? 'Ready' : startAt ? 'Starting' : `${{ auto: 'AUTO', transition: 'TRANSITION', teleop: 'TELEOP', post: 'FINAL', pre: '' }[sim.phase]} ${fmt(sim.timer)}`;
+  const on = review.active ? review.isPlaying : live && !livePaused, play = $('tplay'), label = on ? 'Pause' : pre ? 'Start the MATCH' : 'Play';
+  play.classList.toggle('on', on); play.title = `${label} (Space)`; play.setAttribute('aria-label', label);
+  const pill = $('tlive'); pill.classList.toggle('hidden', !live); pill.classList.toggle('behind', review.active);
+  pill.querySelector('span')!.textContent = review.active ? 'Go live' : livePaused ? 'Paused' : 'Live';
+  // A live MATCH runs at 1x. The speed applies to the recording.
+  const speed = $<HTMLSelectElement>('rspeed'); speed.disabled = live && !review.active; speed.title = speed.disabled ? 'A live MATCH runs at 1x. The speed applies when you review the recording.' : 'Playback speed of the recording';
+  $<HTMLButtonElement>('tprev').disabled = review.end < 0; $<HTMLButtonElement>('tnext').disabled = !review.active;
+  const sc = $('tscore'), scLabel = scoreOpen ? 'Hide the score' : 'Show the score'; sc.setAttribute('aria-expanded', String(scoreOpen)); sc.title = scLabel; sc.setAttribute('aria-label', scLabel);
+}
 camSel.onchange = () => { view.mode = camSel.value as CameraMode; };
 for (const el of [modeSel, camSel, refSel, stageSel]) el.addEventListener('change', () => el.blur());
 
@@ -252,9 +345,8 @@ function paintTree() {
     treeBotsKey = botsKey;
     $('treebots').innerHTML = order.map(k => `<button data-k="${k}" class="${k === picked ? 'on' : ''}" style="border-color:var(--${k < 2 ? 'red' : 'blue'})">${bots[k].plate}</button>`).join('');
   }
-  // The panel fills the space between the score panel and whatever is at the bottom left: the log, or the review bar.
-  const below = review.active ? $('review') : editor.active ? $('autoedit') : $('log');
-  el.style.top = `${$('left').getBoundingClientRect().bottom + 8}px`; el.style.bottom = `${innerHeight - below.getBoundingClientRect().top + 8}px`;
+  // The panel fills the space under the control bar and the score, down to the editor bar or the bottom edge.
+  el.style.top = `${$('dock').getBoundingClientRect().bottom + 8}px`; el.style.bottom = editor.active ? `${innerHeight - $('autoedit').getBoundingClientRect().top + 8}px` : '12px';
   if (editor.active) {
     // The overhead view keeps the FIELD clear of this panel, because the rear-side plans run under it.
     view.insetLeft = el.getBoundingClientRect().right + 8;
@@ -285,7 +377,7 @@ function hud(pads: Frame['pads']) {
   document.body.classList.toggle('playing', !f && (sim.phase === 'auto' || sim.phase === 'transition' || sim.phase === 'teleop' || startAt > 0));
   $('scoretable').innerHTML = scoreRows(r, b, totals, phase === 'post');
   // At the end of the MATCH, a results card shows the final score, the breakdown, and the ranking points.
-  const showFinal = !f && sim.phase === 'post' && !finalClosed; $('final').classList.toggle('hidden', !showFinal); $('left').classList.toggle('hidden', showFinal);
+  const showFinal = !f && sim.phase === 'post' && !finalClosed; $('final').classList.toggle('hidden', !showFinal); $('left').classList.toggle('hidden', showFinal || !scoreOpen);
   if (showFinal && r && b && $('final').dataset.key !== `${r.total}-${b.total}`) {
     const win = r.total > b.total ? 'RED WINS' : b.total > r.total ? 'BLUE WINS' : 'TIE', bg = r.total > b.total ? 'var(--red)' : b.total > r.total ? 'var(--blue)' : '#5b6370';
     $('final').dataset.key = `${r.total}-${b.total}`;
@@ -293,22 +385,16 @@ function hud(pads: Frame['pads']) {
       `<div class="body"><table class="ftc">${scoreRows(r, b, totals, true)}</table><div class="btns"><button id="freview" class="primary">Review and annotate (V)</button><button id="fclose">Close</button></div><div style="color:var(--dim);margin-top:6px;text-align:center">Press R to reset the field.</div></div>`;
     $('freview').onclick = openReview; $('fclose').onclick = () => { finalClosed = true; };
   }
-  // The bottom bar follows the focus robot: the first robot with a human driver, or R0.
-  const me = sim.view(focus());
-  $('carry').innerHTML = Array.from({ length: me.cfg.capacity }, (_, i) => `<i class="${me.carried[i] ?? ''}"></i>`).join('');
-  const near = me.reachableFlower();
-  // The camera matters in AUTO, where it gives the "ok to shoot" signal. The readout shows what it reads right now.
-  const seen = cameraSightings(me).filter(q => q.alliance === me.alliance), cam = seen.length ? seen.map(q => `${q.cell} CELL ${q.raised ? 'raised' : 'not raised'}, ${q.tags} tags`).join('; ') : 'no tags';
-  $('telemetry').textContent = `${bots[focus()].plate} · ${fmtSpeed(me.telemetry.speed, units)} · ${me.telemetry.busVoltage.toFixed(1)} V · TIPS ${sim.hives[me.alliance].tips} · NECTAR stash ${sim.stash[me.alliance]}${near ? ` · ${near.id} FLOWER in reach` : ''} · CAM ${cam}${(referee?.pins ?? []).map(q => ` · PIN on ${q.pinner.toUpperCase()} ${q.count.toFixed(1)} s${q.paused ? ' (paused)' : ''}`).join('')}`;
-  $('log').innerHTML = sim.messages.slice(-4).map(m => `<div>${m.text}</div>`).join('') || '<div>—</div>';
   $('pad').textContent = [0, 1].map(k => { const who = bots.find(q => q.driver === `pad${k + 1}`); return `Controller ${k + 1}: ${pads[k] ? pads[k]!.id.slice(0, 22) : 'not connected'}${who ? `, drives ${who.plate}` : ''}`; }).join(' · ');
   const humans = bots.filter(q => q.driver !== 'planner').map(q => q.plate), who = humans.length ? `Drivers of ${humans.join(' and ')}, you have the controls. The planner drives the other robots.` : 'The planner drives every robot.';
   const text = loadMsg ?? (startAt ? 'This MATCH begins in 3, 2, 1…'
-    : sim.phase === 'pre' ? `Press START or Enter to begin<small>Click a gear icon or right-click a robot to configure it. The dashed orange line is the AUTO plan of ${bots[focus()].plate}.</small>`
+    : sim.phase === 'pre' ? `Press Play or Enter to begin<small>Click a gear icon or right-click a robot to configure it.${pathsSel.value === 'on' ? ` The dashed orange line is the AUTO plan of ${bots[focus()].plate}.` : ''}</small>`
     : sim.phase === 'transition' ? `Drivers, pick up your controllers<small>${who}</small>`
     : null);
   banner.classList.toggle('hidden', !text || editing >= 0 || editor.active); if (text) banner.innerHTML = text;
-  $('start').classList.toggle('hidden', sim.phase !== 'pre');
+  // The scoreboard moves right when, centered, it would reach the control bar.
+  document.body.classList.toggle('narrow', innerWidth / 2 - $('top').offsetWidth / 2 < $('dock').getBoundingClientRect().right + 12);
+  paintTransport();
 }
 
 /**
@@ -334,14 +420,16 @@ function tick(now: number) {
   const frameDt = (now - last) / 1000; acc = Math.min(acc + frameDt, 0.05); last = now;
   const inF = readInput();
   if (inF.reset) reset(); if (inF.start) startMatch();
-  if (inF.mark && recorder.trace.frames.length) { const fr = recorder.trace.frames[recorder.trace.frames.length - 1]; review.mark(recorder.trace, fr.t); sim.say(`Marked t=${fr.t.toFixed(1)} s. Press V to review.`); }
-  if (inF.review) { if (review.active) review.exit(); else openReview(); }
+  if (inF.mark && recorder.trace.frames.length) { const fr = recorder.trace.frames[recorder.trace.frames.length - 1]; review.mark(recorder.trace, fr.t); }
+  if (inF.review) { if (review.active) goLive(); else openReview(); }
+  if (inF.play) playPause(); if (inF.prev) skip(-1); if (inF.next) skip(1);
   if (sim.phase === 'post' && !traceSaved) { traceSaved = true; void saveTrace(); void countMatch(); }
   if (review.active) { review.tick(frameDt); acc = 0; if (frame++ % 6 === 0) hud(inF.pads); requestAnimationFrame(tick); return; }
   if (startAt && now >= startAt) { startAt = 0; sim.start(); }
   for (const e of sim.events.splice(0)) audio.play(e);
   if (inF.camera) { view.cycleCamera(); camSel.value = view.mode; }
   const fi = focus();
+  if (livePaused) acc = 0;
   while (acc >= DT) {
     // AUTO always runs the robot's script (G401 allows no driver input). In TELEOP, a controller or the planner drives.
     const inAuto = sim.phase === 'auto', inputs: Inputs[] = [], flags: boolean[] = [], drivers: (Coach | null)[] = [];
@@ -352,14 +440,22 @@ function tick(now: number) {
     });
     sim.step(inputs, flags); referee?.update(sim, DT); recorder.record(sim, drivers, DT); acc -= DT;
   }
+  // Each FOUL gets a note on the robot that it was called on, so that the timeline marks it.
+  for (; referee && callsSeen < referee.calls.length; callsSeen++) {
+    const c = referee.calls[callsSeen], fr = recorder.trace.frames[recorder.trace.frames.length - 1]; if (!fr) continue;
+    review.mark(recorder.trace, fr.t, `REFEREE: ${c.kind} FOUL, ${c.rule}. ${bots[c.pinner].plate} pinned ${bots[c.victim].plate}.`, BOT_IDS[c.pinner]);
+  }
+  // Referee calls and rule messages, such as G410, show as toasts. The sim's other messages don't show.
+  for (const m of sim.messages) if (!toasted.has(m)) { toasted.add(m); if (/^(REFEREE:|G\d{3})/.test(m.text)) toast(m.text, 'ref'); }
   // The shot preview and the planned path belong to the focus robot. A human driver gets the preview, and a program gets the path.
   const me = sim.view(fi), humanNow = bots[fi].driver !== 'planner' && sim.phase !== 'auto', next = me.carried[0], dual = me.cfg.shooter.type === 'dual';
   const kind = !next ? null : dual ? (me.carried.includes('pollen') ? 'pollen' : 'nectar') : next === 'pollen' ? 'pollen' : 'nectar';
-  view.sync(me, kind, humanNow ? null : sim.phase === 'auto' ? coaches[fi].auto?.path ?? null : coaches[fi].executor.path);
+  const paths = pathsSel.value === 'on';
+  view.sync(me, kind, humanNow || !paths ? null : sim.phase === 'auto' ? coaches[fi].auto?.path ?? null : coaches[fi].executor.path);
   // Project the focus robot's AUTO trajectory onto the FIELD before and during AUTO.
   // In the field editor, the plan is the edited robot's, and it redraws after each edit.
   const pi = editor.active ? editor.robot : fi, pv = sim.view(pi);
-  const name = bots[pi].auto === 'default' ? autoFor(pv, SOLO_AUTO) : bots[pi].auto, tree = AUTO_TREES[name], showPlan = !!tree && (editor.active || ((sim.mode === 'full' || sim.mode === 'auto') && (sim.phase === 'pre' || sim.phase === 'auto')));
+  const name = bots[pi].auto === 'default' ? autoFor(pv, SOLO_AUTO) : bots[pi].auto, tree = AUTO_TREES[name], showPlan = !!tree && (editor.active || (paths && (sim.mode === 'full' || sim.mode === 'auto') && (sim.phase === 'pre' || sim.phase === 'auto')));
   if (showPlan && sim.phase === 'pre') { const key = `${name}:${pi}:${seed}:${editor.rev}`; if (key !== autoPlanKey) { const p = pv.robot.translation(); autoPlan = previewAuto(tree, pv, { x: p.x, z: p.z }); autoPlanKey = key; } }
   view.showAutoPlan(showPlan ? autoPlan : null, autoPlanKey);
   paintGhost(pv, showPlan ? autoPlan : null);
