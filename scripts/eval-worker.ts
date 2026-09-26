@@ -1,8 +1,8 @@
 // Runs one four-robot planner match and prints one JSON line with the score and a waste account per robot.
 // Run: npx tsx scripts/eval-worker.ts <seed>. BOTS works as in scripts/match.ts. OPPONENT=none plays red alone, and
-// REFEREE=1 adds the G421 PIN referee, whose MAJOR FOULS go to the other alliance's score. FIXED_CELL=1 starts the CELL
-// NECTAR at the CAD staging spots instead of a random drop (see `STAGING`). AUTO_INTAKE=all starts AUTO with the
-// intake on, where it starts off (see `AUTO_TUNING.intakeDefault`).
+// REFEREE=1 adds the G421 PIN referee, whose MAJOR FOULS go to the other alliance's score. RANDOM_CELL=1 drops the CELL
+// NECTAR at random spots instead of the CAD staging spots, as the runs from e49 to e94 did (see `STAGING`).
+// AUTO_INTAKE=all starts AUTO with the intake on, where it starts off (see `AUTO_TUNING.intakeDefault`).
 import RAPIER from '@dimforge/rapier3d-compat';
 import { Coach } from '../src/auto/coach';
 import { EXEC } from '../src/auto/executor';
@@ -13,7 +13,7 @@ import { DT, STAGING, Sim } from '../src/sim/world';
 
 const seed = Number(process.argv[2] ?? 1); await RAPIER.init();
 if (process.env.OLD_TIP) EXEC.tipByMotion = false; // For comparisons with the old TIP test.
-if (process.env.FIXED_CELL) STAGING.randomCellNectar = false; // For comparisons with the fixed CELL layout.
+if (process.env.RANDOM_CELL) STAGING.randomCellNectar = true; // For comparisons with the random CELL layout.
 if (process.env.AUTO_INTAKE) AUTO_TUNING.intakeDefault = process.env.AUTO_INTAKE as typeof AUTO_TUNING.intakeDefault;
 const given: Partial<BotSetup>[] = JSON.parse(process.env.BOTS ?? '[]'), bots = [0, 1, 2, 3].map(i => sanitize({ ...defaultBot(i), ...(given[i] ?? {}) }, i));
 const sim = new Sim(RAPIER, undefined, 'full', seed, { opponent: process.env.OPPONENT !== 'none', partners: true, configFor: (a, slot) => robotConfig(bots[(a === 'red' ? 0 : 2) + slot]) }); sim.start();

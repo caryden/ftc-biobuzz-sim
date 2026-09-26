@@ -1,17 +1,19 @@
 // Runs one four-robot scripted match for an experiment spec and prints one JSON line. 
-// Run: npx tsx scripts/exp-worker.ts <specId> <seed>
+// Run: npx tsx scripts/exp-worker.ts <specId> <seed>. RANDOM_CELL=1 drops the CELL NECTAR at random spots, as the `v3`
+// round did (see `STAGING`).
 import RAPIER from '@dimforge/rapier3d-compat';
 import { EXEC, flowerLocked } from '../src/auto/executor';
 import { FOLLOW } from '../src/auto/follow';
 import { PLAN } from '../src/auto/planner';
 import { Coach } from '../src/auto/coach';
 import { defaultBot, robotConfig } from '../src/setup';
-import { DT, NO_INPUT, Sim } from '../src/sim/world';
+import { DT, NO_INPUT, STAGING, Sim } from '../src/sim/world';
 import { SPECS, type Side } from './exp-specs';
 
 const [id, seedArg] = process.argv.slice(2), spec = SPECS[id], seed = Number(seedArg); if (!spec) throw new Error(`Unknown spec ${id}`);
 const g = spec.global ?? {}; if (g.margin !== undefined) PLAN.margin = g.margin; if (g.vMax !== undefined) FOLLOW.vMax = g.vMax; if (g.decel !== undefined) FOLLOW.decel = g.decel; if (g.lookahead !== undefined) FOLLOW.lookahead = g.lookahead; if (g.standoff !== undefined) EXEC.standoff = g.standoff; if (g.kv !== undefined) FOLLOW.kv = g.kv;
 await RAPIER.init();
+if (process.env.RANDOM_CELL) STAGING.randomCellNectar = true; // For comparisons with the `v3` round.
 const side = (a: 'red' | 'blue'): Side => spec[a] ?? {};
 const sim = new Sim(RAPIER, undefined, 'full', seed, { opponent: true, partners: true, configFor: (a, slot) => { const c = robotConfig(defaultBot((a === 'red' ? 0 : 2) + slot)); side(a).cfg?.(c, slot); return c; } });
 const coaches = sim.robots.map(r => { const s = side(r.alliance), c = new Coach(); c.flowerStartSec = s.flowerStart?.[r.slot] ?? 0; c.autoOverride = s.auto?.[r.slot] ?? null; return c; });
