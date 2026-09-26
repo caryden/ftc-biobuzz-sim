@@ -34,7 +34,7 @@ You need Node.js 20 or later.
 
 1. To install the dependencies, run `npm install`.
 2. To start the dev server, run `npm run dev`.
-3. Open the URL that Vite prints, go to **Simulator**, and then press **Start match**.
+3. Open the URL that Vite prints, go to **Simulator**, and then click **Play** in the control bar at the upper left.
 
 | Input | Action |
 | --- | --- |
@@ -44,6 +44,7 @@ You need Node.js 20 or later.
 | LT and RT | Place POLLEN and place NECTAR in a FLOWER |
 | Gear icon, or a right-click on a robot | Open the robot config |
 | Enter, R, C, M, V | Start, reset, change the camera, mark a moment, and review the match |
+| Space, left arrow, right arrow | Play or pause, and go to the previous or the next mark |
 
 To run the tests, run `npm test`. They cover the HIVE calibration, the drivetrain, the behavior-tree runtime, the AUTO trees, the referee, and
 full scripted matches, without a browser.
@@ -136,7 +137,8 @@ To deploy your own copy, follow these steps:
 ## Contribute
 
 See [CONTRIBUTING.md](CONTRIBUTING.md). The fastest bug report is an annotated match: review a match in the
-simulator, click the robot that did something wrong, type a note, click **Export**, and attach the files to an issue.
+simulator, click the robot that did something wrong, type a note, click **Export** in the game setup, and attach the
+files to an issue.
 
 ## License
 

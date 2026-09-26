@@ -54,7 +54,7 @@ The fastest bug report is an annotated match:
 
 1. Play a match in the simulator, and press **V** to review it.
 2. Scrub to the moment, click the robot, and type what is wrong.
-3. Click **Export**, and attach the two files to a GitHub issue.
+3. Click the gear icon in the control bar, click **Export**, and attach the two files to a GitHub issue.
 
 The notes file records what every robot was doing at each marked moment, which is what a fix needs. The files in
 `traces/` are the annotated matches that drove the fixes so far, and the code comments refer to them by name.

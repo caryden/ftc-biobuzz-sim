@@ -159,4 +159,8 @@ export const POINTS = { leave: 3, park: 5, tip: 20, cell: 2, bottomNectar: 5, fl
  * Competition Manual's ranking point table (3 for a win, 1 for a tie). I haven't checked them against the BIOBUZZ manual.
  */
 export const RP = { swarm: 16, pollinator1: 4, pollinator2: 7, win: 3, tie: 1 };
-export const MATCH = { auto: 30, transition: 8, teleop: 120, flowerUnlock: 60 };
+/**
+ * MATCH timing in seconds: the AUTO period, the transition, and TELEOP, and two TELEOP clock values: FLOWERS unlock at
+ * `flowerUnlock` (G410), and the endgame sound plays at `endgame`.
+ */
+export const MATCH = { auto: 30, transition: 8, teleop: 120, flowerUnlock: 60, endgame: 20 };

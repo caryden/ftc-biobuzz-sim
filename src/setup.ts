@@ -100,8 +100,32 @@ export function robotConfig(b: BotSetup): RobotConfig {
   return c;
 }
 
-/** Describes a setup in one line, for the setup panel and the trace. The trace always uses metric units. */
+/** Gets the phrases that describe a setup. A phrase is empty when the setup has the default for it. */
+function phrases(b: BotSetup, units: Units) {
+  const turret = (b.turretRangeDeg ?? 360) < 360 || b.turretSlewDegPerSec ? ` ${b.turretRangeDeg ?? 360}°${b.turretSlewDegPerSec ? `, ${b.turretSlewDegPerSec}°/s` : ''}` : '';
+  const errored = b.errElevDeg !== REF_ERR.errElevDeg || b.errAzimDeg !== REF_ERR.errAzimDeg || b.errSpeed !== REF_ERR.errSpeed;
+  return {
+    driver: b.driver === 'planner' ? 'Planner' : `Controller ${b.driver === 'pad1' ? 1 : 2}, ${b.stickFrame}-centric`,
+    shooter: b.shooter, auto: `AUTO ${b.auto.replace(/[_-]/g, ' ')}`, teleop: b.flowerStartSec ? `FLOWERS from ${b.flowerStartSec} s` : 'tips only',
+    rpm: `${b.driveRpm} rpm`, size: fmtSize(b.sizeIn, units), mass: fmtMass(b.massLb, units), intake: b.dualIntake ? 'dual intake' : '',
+    ends: b.turret ? `turret${turret}` : b.dualShooter ? 'launches from both ends' : '', defense: b.defense !== 'none' ? `${b.defense} defense` : '',
+    error: errored ? `launch error ${b.errElevDeg}°, ${b.errAzimDeg}°, ${fmtSpeed(b.errSpeed, units === 'us' ? 'usft' : units)}` : '',
+    intakeP: b.intakeP !== DEFAULT_ROBOT.intake.successP ? `intake ${Math.round(100 * b.intakeP)}%` : '',
+  };
+}
+
+/** Describes a setup in one line, for tooltips and the trace. The trace always uses metric units. */
 export function describe(b: BotSetup, units: Units = 'metric'): string {
-  const driver = b.driver === 'planner' ? 'Planner' : `Controller ${b.driver === 'pad1' ? 1 : 2}, ${b.stickFrame}-centric`;
-  return `${driver} · ${b.shooter} · AUTO ${b.auto.replace(/[_-]/g, ' ')} · ${b.flowerStartSec ? `FLOWERS from ${b.flowerStartSec} s` : 'tips only'} · ${b.driveRpm} rpm · ${fmtSize(b.sizeIn, units)} · ${fmtMass(b.massLb, units)}${b.dualIntake ? ' · dual intake' : ''}${b.turret ? ` · turret${(b.turretRangeDeg ?? 360) < 360 || b.turretSlewDegPerSec ? ` ${b.turretRangeDeg ?? 360}°${b.turretSlewDegPerSec ? `, ${b.turretSlewDegPerSec}°/s` : ''}` : ''}` : b.dualShooter ? ' · launches from both ends' : ''}${b.defense !== 'none' ? ` · ${b.defense} defense` : ''}${b.errElevDeg !== REF_ERR.errElevDeg || b.errAzimDeg !== REF_ERR.errAzimDeg || b.errSpeed !== REF_ERR.errSpeed ? ` · launch error ${b.errElevDeg}°, ${b.errAzimDeg}°, ${fmtSpeed(b.errSpeed, units === 'us' ? 'usft' : units)}` : ''}${b.intakeP !== DEFAULT_ROBOT.intake.successP ? ` · intake ${Math.round(100 * b.intakeP)}%` : ''}`;
+  const p = phrases(b, units);
+  return [p.driver, p.shooter, p.auto, p.teleop, p.rpm, p.size, p.mass, p.intake, p.ends, p.defense, p.error, p.intakeP].filter(Boolean).join(' · ');
+}
+
+const SHOOTER_NAME: Record<ShooterType, string> = { catapult: 'Catapult', fifo: 'Single shooter, FIFO', dual: 'Dual shooter' };
+/**
+ * Describes a setup in lines for the robot cards in the game setup: the driver, the plans, the mechanisms, and the
+ * drivetrain, and then the launcher error and the intake success if they differ from the reference.
+ */
+export function describeLines(b: BotSetup, units: Units = 'metric'): string[] {
+  const p = phrases(b, units);
+  return [[p.driver, p.defense], [p.auto, p.teleop], [SHOOTER_NAME[b.shooter], p.ends, p.intake], [p.rpm, p.size, p.mass], [p.error, p.intakeP]].map(line => line.filter(Boolean).join(' · ')).filter(Boolean);
 }
