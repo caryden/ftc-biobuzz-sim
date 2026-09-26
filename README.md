@@ -127,6 +127,8 @@ To deploy your own copy, follow these steps:
   extracts the ball models. The STEP file isn't in the repository.
 - **Rules and point values.** The BIOBUZZ Competition Manual, sections 9 and 10.
 - **HIVE tipping point.** The Event Field Setup Guide, section 12.3.
+- **Starting positions of the CELL NECTAR and the GARDEN POLLEN.** The CAD staging spots, which match the Event Field
+  Setup Guide, section 11, and the Competition Manual, section 10.3.1.
 - **Ball masses.** AndyMark's product page: 0.055 lb for POLLEN (am-5851) and 0.091 lb for NECTAR (am-5852). The
   manual's section 9.8 names the material, polyethylene, and gives no weight. `node scripts/ball-mass.mjs` checks the
   weights against the plastic volume of the CAD models.
