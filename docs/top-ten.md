@@ -426,13 +426,19 @@ the predicted shot scores.
 - **7,584 matches**, 96 for each of 79 setups, tested the designs and strategies in lessons 1 to 4 and 6 to 8, the
   turret, and the combined build: red gets the change, and blue is two baseline robots. The pooled tables are in
   `experiments/run-v3-report.md`.
-- **2,460 matches** in runs of 24 fixed seeds tested one decision change at a time, for lessons 5, 9, and 10, and also
+- **2,508 matches** in runs of 24 fixed seeds tested one decision change at a time, for lessons 5, 9, and 10, and also
   the combined build, the launcher errors one at a time, and defense. The log is `experiments/policy-loop.md`.
 - **2,304 earlier matches** used older planners. The first 1,524 used a heavier robot, and 780 more used 12 matches per
   setup. This round replaces them. Against the first round, gearing for speed no longer hurts up to 700 rpm, and the
   shooter's side now matters. Against the 12-match round, gearing down to 435 rpm or 500 rpm now measurably helps, and
   the far edge of the scoring window costs less than the near one.
 
-To rerun the design tables, run `npx tsx scripts/exp-run.ts all 96 10 101 TAG` with a tag of your own, and then run
-`npx tsx scripts/exp-report.ts`. It is 7,584 matches, about 8 hours on a 10-core laptop. To watch a match, run
-`npm run dev`. To configure a robot, click the gear icon next to its number.
+The 7,584 design matches, and the 24-seed runs from e51 to e95, started the three NECTAR in each raised CELL at random
+spots. The rules place them in a row against the back of the CELL. We reran 14 of the setups, 1,344 matches, with the
+NECTAR in that row. No change moved by more than 1.2 standard errors, and no lesson changed. The check is
+`experiments/cell-layout-check.md`.
+
+To rerun the design tables, run `RANDOM_CELL=1 npx tsx scripts/exp-run.ts all 96 10 101 TAG` with a tag of your own,
+and then run `npx tsx scripts/exp-report.ts`. Without `RANDOM_CELL=1`, the NECTAR start in the prescribed row. It is
+7,584 matches, about 8 hours on a 10-core laptop. To watch a match, run `npm run dev`. To configure a robot, click the
+gear icon next to its number.

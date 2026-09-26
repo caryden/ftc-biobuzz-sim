@@ -77,11 +77,12 @@ export interface SimOptions {
 /** Switches for experiments on the pre-MATCH setup. */
 export const STAGING = {
   /**
-   * If true, the NECTAR that start in each raised CELL drop in at random spots drawn from the seed, and the sim lets
-   * them settle before the MATCH starts. The FIELD reset crew tosses them in, so their layout differs from MATCH to
-   * MATCH. If false, they sit in a row against the back skin at the CAD staging spots. Default: true.
+   * If false, the three NECTAR in each raised CELL start at the CAD staging spots: touching each other in a row against
+   * the back skin, packed against the side wall nearest their own ALLIANCE AREA. The Event Field Setup Guide, section
+   * 11.1, and the Competition Manual, section 10.3.1, place them there. If true, they drop in at random spots drawn from
+   * the seed and settle before the MATCH starts, which a FIELD crew doesn't do. Default: false.
    */
-  randomCellNectar: true,
+  randomCellNectar: false,
   /** The seconds of physics that the constructor runs after a random drop, so that the NECTAR are at rest at the start. */
   settleSec: 1.5,
 };
