@@ -67,7 +67,7 @@ export class FieldEditor {
   constructor(private readonly host: EditorHost) {
     const c = host.canvas;
     c.addEventListener('pointerdown', e => {
-      if (this.robot < 0 || e.button !== 0) return;
+      if (this.robot < 0 || this.host.view.mode === 'orbit' || e.button !== 0) return;
       // What's selected wins: a selected step's handle or the selected reference point under the pointer takes the press,
       // so that a step that names a reference point, and sits on it, can be dragged. Otherwise a reference point, small
       // and drawn over the steps that name it, wins within its own few pixels. Then an offset line wins where it shows

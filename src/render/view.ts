@@ -1,11 +1,13 @@
 import * as THREE from 'three';
+import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { FIELD, HIVE } from '../sim/config';
 import type { RobotConfig } from '../sim/config';
 import { flowerHeights, type BallKind, type Sim } from '../sim/world';
 
 const COLOR: Record<BallKind, number> = { pollen: 0xf2c81e, nectar_red: 0xd8261c, nectar_blue: 0x1f4fd8 };
-export const CAMERAS = ['driver', 'overhead', 'chase', 'audience'] as const;
+/** Camera choices available in the selector and through the camera shortcut. */
+export const CAMERAS = ['driver', 'overhead', 'chase', 'audience', 'orbit'] as const;
 export type CameraMode = (typeof CAMERAS)[number];
 /** The distance from a drive handle to its heading knob, in meters. */
 export const KNOB = 0.3;
@@ -22,8 +24,16 @@ function along(p: Pose2[], f: number): Pose2 | null {
 
 /** Draws the simulation with three.js. The official field CAD supplies every FIELD element mesh. */
 export class View {
-  renderer: THREE.WebGLRenderer; scene = new THREE.Scene(); camera = new THREE.PerspectiveCamera(58, 1, 0.05, 40);
-  mode: CameraMode = 'driver';
+  renderer: THREE.WebGLRenderer; scene = new THREE.Scene();
+  private fixedCamera = new THREE.PerspectiveCamera(58, 1, 0.05, 40);
+  private orbitCamera = new THREE.PerspectiveCamera(50, 1, 0.05, 40);
+  private orbit: OrbitControls;
+  private cameraMode: CameraMode = 'driver';
+  /** Uses a separate orbit camera so switching views preserves the user's angle and zoom. */
+  get camera() { return this.mode === 'orbit' ? this.orbitCamera : this.fixedCamera; }
+  /** Selects the view and enables dragging only for the orbit camera. */
+  get mode(): CameraMode { return this.cameraMode; }
+  set mode(mode: CameraMode) { this.cameraMode = mode; this.orbit.enabled = mode === 'orbit'; }
   /** The number plate text of each robot, in `sim.robots` order. A missing entry shows the alliance letter and the slot. */
   plates: string[] = [];
   /** Pixels at the left edge that a panel covers. The overhead camera centers the FIELD in the rest of the window. */
@@ -43,6 +53,27 @@ export class View {
   constructor(canvas: HTMLCanvasElement, private onProgress: (msg: string | null) => void) {
     this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
     this.renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+    this.orbit = new OrbitControls(this.orbitCamera, canvas);
+    this.orbit.enabled = false;
+    // View limits keep the FIELD centered and the camera above the floor; they aren't game dimensions.
+    this.orbit.enablePan = false;
+    this.orbit.minDistance = 2; this.orbit.maxDistance = 12;
+    this.orbit.maxPolarAngle = Math.PI / 2 - 0.05;
+    this.resetOrbitCamera();
+    // A drag must not also select a robot, create a review note, or report a floor position.
+    let press: { x: number; y: number } | null = null, dragged = false;
+    canvas.addEventListener('pointerdown', e => {
+      // A middle-button drag has no click to clear its state before the next press.
+      if (this.mode !== 'orbit') { press = null; dragged = false; return; }
+      dragged = !!press; press = { x: e.clientX, y: e.clientY };
+    }, true);
+    const trackDrag = (e: PointerEvent) => {
+      if (press && Math.hypot(e.clientX - press.x, e.clientY - press.y) > 5) dragged = true;
+    };
+    canvas.addEventListener('pointermove', trackDrag, true);
+    canvas.addEventListener('pointerup', e => { trackDrag(e); press = null; }, true);
+    canvas.addEventListener('pointercancel', () => { press = null; dragged = false; }, true);
+    canvas.addEventListener('click', e => { if (dragged) { e.stopImmediatePropagation(); dragged = false; } }, true);
     this.scene.background = new THREE.Color(0x14171c);
     this.scene.add(new THREE.HemisphereLight(0xffffff, 0x30343c, 1.25));
     const sun = new THREE.DirectionalLight(0xffffff, 1.6); sun.position.set(-2, 6, 3); this.scene.add(sun);
@@ -55,7 +86,16 @@ export class View {
     addEventListener('resize', () => this.resize()); this.resize();
   }
 
-  private resize() { const w = innerWidth, h = innerHeight; this.renderer.setSize(w, h, false); this.camera.aspect = w / h; this.camera.updateProjectionMatrix(); }
+  /** Restores the orbit view without resetting the match or changing another camera. */
+  resetOrbitCamera() {
+    this.orbitCamera.position.set(0, 3.5, 5);
+    this.orbit.target.set(0, 0.3, 0); this.orbit.update();
+  }
+
+  private resize() {
+    const w = innerWidth, h = innerHeight; this.renderer.setSize(w, h, false);
+    for (const camera of [this.fixedCamera, this.orbitCamera]) { camera.aspect = w / h; camera.updateProjectionMatrix(); }
+  }
 
   private buildFloor() {
     const venue = new THREE.Mesh(new THREE.PlaneGeometry(14, 14), new THREE.MeshStandardMaterial({ color: 0x23272e, roughness: 1 }));
@@ -424,7 +464,9 @@ export class View {
     } else this.arc.visible = false;
 
     const side = sim.alliance === 'red' ? -1 : 1;
-    if (this.mode === 'driver') { this.camera.fov = 52; this.camera.position.set(side * 3.5, 1.68, side * -0.6); this.camera.lookAt(side * -0.2, 0.3, 0); }
+    if (this.mode !== 'overhead') this.camera.up.set(0, 1, 0);
+    if (this.mode === 'orbit') this.orbit.update();
+    else if (this.mode === 'driver') { this.camera.fov = 52; this.camera.position.set(side * 3.5, 1.68, side * -0.6); this.camera.lookAt(side * -0.2, 0.3, 0); }
     else if (this.mode === 'overhead') {
       this.camera.fov = 40; this.camera.position.set(0, 6.4, 0.001); this.camera.up.set(side < 0 ? 1 : -1, 0, 0); this.camera.lookAt(0, 0, 0);
       // Slide the camera along the screen's horizontal axis by half the inset, so that the FIELD centers in the uncovered part.

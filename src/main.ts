@@ -255,6 +255,7 @@ function paintTransport() {
   const sc = $('tscore'), scLabel = scoreOpen ? 'Hide the score' : 'Show the score'; sc.setAttribute('aria-expanded', String(scoreOpen)); sc.title = scLabel; sc.setAttribute('aria-label', scLabel);
 }
 camSel.onchange = () => { view.mode = camSel.value as CameraMode; };
+$('resetcamera').onclick = () => { view.resetOrbitCamera(); view.mode = 'orbit'; camSel.value = view.mode; $('resetcamera').blur(); };
 for (const el of [modeSel, camSel, refSel, stageSel]) el.addEventListener('change', () => el.blur());
 
 /** Rotates stick input from the driver's point of view into the frame of robot `i`. */
@@ -424,10 +425,10 @@ function tick(now: number) {
   if (inF.review) { if (review.active) goLive(); else openReview(); }
   if (inF.play) playPause(); if (inF.prev) skip(-1); if (inF.next) skip(1);
   if (sim.phase === 'post' && !traceSaved) { traceSaved = true; void saveTrace(); void countMatch(); }
+  if (inF.camera) { view.cycleCamera(); camSel.value = view.mode; }
   if (review.active) { review.tick(frameDt); acc = 0; if (frame++ % 6 === 0) hud(inF.pads); requestAnimationFrame(tick); return; }
   if (startAt && now >= startAt) { startAt = 0; sim.start(); }
   for (const e of sim.events.splice(0)) audio.play(e);
-  if (inF.camera) { view.cycleCamera(); camSel.value = view.mode; }
   const fi = focus();
   if (livePaused) acc = 0;
   while (acc >= DT) {
