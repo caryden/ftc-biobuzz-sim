@@ -549,9 +549,15 @@ export class Sim {
     for (const b of this.balls.values()) {
       const p = b.body.translation();
       if (Math.abs(p.x) > FIELD.half + 0.05 || Math.abs(p.z) > FIELD.half + 0.05 || p.y < -0.2) {
-        // FIELD STAFF return SCORING ELEMENTS that leave the FIELD (section 10.8.2).
-        const nx = Math.max(-1.5, Math.min(1.5, p.x)), nz = Math.max(-1.5, Math.min(1.5, p.z));
-        b.body.setTranslation({ x: nx, y: 0.2, z: nz }, true); b.body.setLinvel({ x: 0, y: 0, z: 0 }, true); b.airborne = false; this.touch();
+        // TU02 section 10.8.2: FIELD STAFF return POLLEN near its exit. NECTAR goes to its own
+        // DRIVE TEAM and re-enters via the LOADING ZONE (G427), even before the G426 unlock.
+        // ASSUMPTION: retrieval is immediate, placing returned NECTAR on the TILE without using the stash.
+        const zone = b.kind === 'pollen' ? null : FIELD.loadingZone[b.kind === 'nectar_red' ? 'red' : 'blue'];
+        const nx = zone ? (zone[0] + zone[1]) / 2 : Math.max(-1.5, Math.min(1.5, p.x));
+        const nz = zone ? (zone[2] + zone[3]) / 2 : Math.max(-1.5, Math.min(1.5, p.z));
+        b.body.setTranslation({ x: nx, y: zone ? b.radius : 0.2, z: nz }, true);
+        b.body.setLinvel({ x: 0, y: 0, z: 0 }, true); b.body.setAngvel({ x: 0, y: 0, z: 0 }, true);
+        b.body.resetForces(true); b.body.resetTorques(true); b.airborne = false; this.touch();
       }
     }
   }

@@ -1,6 +1,6 @@
 import RAPIER from '@dimforge/rapier3d-compat';
 import { beforeAll, describe, expect, it } from 'vitest';
-import { DEFAULT_ROBOT, HIVE } from '../src/sim/config';
+import { DEFAULT_ROBOT, FIELD, HIVE } from '../src/sim/config';
 import { mecanumForces } from '../src/sim/drivetrain';
 import { cameraSightings, seesRaisedCell } from '../src/sim/camera';
 import { DT, NO_INPUT, Sim } from '../src/sim/world';
@@ -87,6 +87,40 @@ describe('shooting and HIVE TIP', () => {
     const n = new Sim(RAPIER, undefined, 'practice', 7, { configFor: limited(90, 3600) });
     n.robot.setTranslation({ x: HIVE.pivotX.red, y, z: 1.4 }, true); face(n, Math.PI / 2); run(n, 1);
     expect(n.previewShot('pollen').scores).toBe(false);
+  });
+});
+
+describe('out-of-field returns (TU02 section 10.8.2)', () => {
+  it.each(['red', 'blue'] as const)('returns %s NECTAR to its own loading zone before unlock, even with no stash', alliance => {
+    const s = new Sim(RAPIER, undefined, 'full'); s.start();
+    s.stash[alliance] = 0;
+    const count = s.balls.size;
+    // Exercise all four perimeter exits, including the opposing alliance's side.
+    for (const [x, z] of [[2, 0], [-2, 0], [0, 2], [0, -2]]) {
+      const b = s.spawn(alliance === 'red' ? 'nectar_red' : 'nectar_blue', x, 1, z,
+        { x: 1, y: 2, z: 3 }, { x: 4, y: 5, z: 6 });
+      s.step({ ...NO_INPUT, intake: 'none' });
+      const p = b.body.translation(), zone = FIELD.loadingZone[alliance];
+      expect(p.x).toBeGreaterThan(zone[0] + b.radius); expect(p.x).toBeLessThan(zone[1] - b.radius);
+      expect(p.z).toBeGreaterThan(zone[2] + b.radius); expect(p.z).toBeLessThan(zone[3] - b.radius);
+      expect(p.y).toBeCloseTo(b.radius);
+      expect(b.body.linvel()).toMatchObject({ x: 0, y: 0, z: 0 });
+      expect(b.body.angvel()).toMatchObject({ x: 0, y: 0, z: 0 });
+      expect(b.airborne).toBe(false);
+      expect(s.balls.get(b.id)).toBe(b);
+    }
+    expect(s.flowersUnlocked).toBe(false);
+    expect(s.stash[alliance]).toBe(0);
+    expect(s.balls.size).toBe(count + 4);
+    s.world.free();
+  });
+  it('returns POLLEN near its exit instead of to a loading zone', () => {
+    const s = new Sim(RAPIER, undefined, 'practice');
+    const b = s.spawn('pollen', 0.7, 1, -2);
+    s.step({ ...NO_INPUT, intake: 'none' });
+    expect(b.body.translation().x).toBeCloseTo(0.7);
+    expect(b.body.translation().z).toBeCloseTo(-1.5);
+    s.world.free();
   });
 });
 
