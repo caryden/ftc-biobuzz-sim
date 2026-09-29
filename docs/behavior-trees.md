@@ -834,8 +834,8 @@ tree in the page. Each increment is one pull request.
      tree view lists the definitions at the root, and the FIELD constants, such as `field.hiveX`, which moved out of
      the plans into the environment. Every edit loads the draft again, and each problem that the loader reports shows
      on its field and its row. A draft with problems saves but doesn't run. See
-     [Settings, definitions, and problems](#settings-definitions-and-problems). `e96-field-constants` equals
-     `e94-editor-flow` on every seed.
+     [Settings, definitions, and problems](#settings-definitions-and-problems). `e97-editor-forms` equals
+     `e96-placed-cell-nectar` on every seed.
    - **Expression fields.** An expression field uses CodeMirror 6, which loads only with the editor: highlighting,
      completion from the environment schema and the tree's definitions, and errors from `src/bt/expr.ts` as you type.
 10. **Structure editing.** Insert a node from a palette of the node types and the AUTO leaves, with templates such as
