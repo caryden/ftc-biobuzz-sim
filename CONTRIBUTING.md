@@ -44,8 +44,9 @@ comes with a measurement:
 One match varies by about 20 points, and the standard error over 24 seeds is 6 to 10 points. Treat a difference under
 20 combined points as unproven, and say so in the row.
 
-To compare robot designs, add a row to `scripts/exp-specs.ts`, run `npx tsx scripts/exp-run.ts GROUP 12 11 101 TAG`,
-and then run `npx tsx scripts/exp-report.ts`.
+To compare robot designs, add a row to `scripts/exp-specs.ts`, run `npx tsx scripts/exp-run.ts GROUP 96 10 101 TAG`,
+and then run `npx tsx scripts/exp-report.ts`. Its Change column compares each design with the baseline seed by
+seed.
 
 ## Report a behavior that looks wrong
 
@@ -53,7 +54,7 @@ The fastest bug report is an annotated match:
 
 1. Play a match in the simulator, and press **V** to review it.
 2. Scrub to the moment, click the robot, and type what is wrong.
-3. Click **Export**, and attach the two files to a GitHub issue.
+3. Click the gear icon in the control bar, click **Export**, and attach the two files to a GitHub issue.
 
 The notes file records what every robot was doing at each marked moment, which is what a fix needs. The files in
 `traces/` are the annotated matches that drove the fixes so far, and the code comments refer to them by name.

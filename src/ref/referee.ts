@@ -19,6 +19,8 @@ export interface PinState { pinner: Alliance; victim: Alliance; key: string; cou
  */
 export class Referee {
   pins: PinState[] = []; lastFacts: unknown = null;
+  /** Every FOUL this referee called, in order. `pinner` and `victim` are indexes into `sim.robots`. The page marks each one on the timeline. */
+  calls: { pinner: number; victim: number; kind: 'MAJOR' | 'MINOR'; rule: string }[] = [];
   private contact: Record<string, number> = {}; private askAt: Record<string, number> = {}; private t = 0;
   private judged: Record<string, number> = {}; private origin: Record<string, { a: { x: number; z: number }; b: { x: number; z: number } }> = {};
   private endTimer: Record<string, { apart: number; moved: number }> = {};
@@ -84,6 +86,8 @@ export class Referee {
     if (e.apart > 3 || e.moved > 3 || mutual) { this.pins = this.pins.filter(x => x !== pin); if (pin.count > 0.5) sim.say(`REFEREE: PIN count on ${pin.pinner.toUpperCase()} ended at ${pin.count.toFixed(1)} s`); return; }
     if (pin.paused) return;
     pin.count += dt;
-    if (pin.count > FOUL_EVERY * (pin.fouls + 1)) { pin.fouls++; sim.foul(pin.pinner, 'MAJOR', `G421 PIN, ${Math.round(pin.count)} seconds`); }
+    if (pin.count > FOUL_EVERY * (pin.fouls + 1)) {
+      const rule = `G421 PIN, ${Math.round(pin.count)} seconds`; pin.fouls++; this.calls.push({ pinner: a, victim: b, kind: 'MAJOR', rule }); sim.foul(pin.pinner, 'MAJOR', rule);
+    }
   }
 }

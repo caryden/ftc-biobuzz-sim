@@ -1,6 +1,6 @@
 # BIOBUZZ simulator
 
-A browser physics simulator for BIOBUZZ, the 2026-2027 *FIRST* Tech Challenge game, with the results of about 3,600
+A browser physics simulator for BIOBUZZ, the 2026-2027 *FIRST* Tech Challenge game, with the results of about 12,000
 simulated matches. It is a project of the students and mentors of NCSSM FTC teams 5064, 8569, and 22377.
 
 [![CI](https://github.com/caryden/ftc-biobuzz-sim/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/caryden/ftc-biobuzz-sim/actions/workflows/ci.yml)
@@ -34,7 +34,7 @@ You need Node.js 20 or later.
 
 1. To install the dependencies, run `npm install`.
 2. To start the dev server, run `npm run dev`.
-3. Open the URL that Vite prints, go to **Simulator**, and then press **Start match**.
+3. Open the URL that Vite prints, go to **Simulator**, and then click **Play** in the control bar at the upper left.
 
 | Input | Action |
 | --- | --- |
@@ -44,6 +44,7 @@ You need Node.js 20 or later.
 | LT and RT | Place POLLEN and place NECTAR in a FLOWER |
 | Gear icon, or a right-click on a robot | Open the robot config |
 | Enter, R, C, M, V | Start, reset, change the camera, mark a moment, and review the match |
+| Space, left arrow, right arrow | Play or pause, and go to the previous or the next mark |
 
 To run the tests, run `npm test`. They cover the HIVE calibration, the drivetrain, the behavior-tree runtime, the AUTO trees, the referee, and
 full scripted matches, without a browser.
@@ -55,7 +56,7 @@ full scripted matches, without a browser.
 | `npx tsx scripts/match.ts` | Plays one four-robot match and prints a timeline and the final score |
 | `npx tsx scripts/eval.ts LABEL` | Plays 24 fixed seeds and reports the combined score and where TELEOP time goes |
 | `python3 scripts/eval-compare.py BASE NEW` | Compares two evaluation runs |
-| `npx tsx scripts/exp-run.ts GROUP 12 11 101 TAG` | Runs a group of robot designs from `scripts/exp-specs.ts` against the baseline |
+| `npx tsx scripts/exp-run.ts GROUP 96 10 101 TAG` | Runs a group of robot designs from `scripts/exp-specs.ts` against the baseline |
 | `npx tsx scripts/exp-report.ts` | Pools the design runs into tables |
 | `npx tsx scripts/auto-timeline.ts 1001` | Prints the AUTO timeline of the red robots |
 
@@ -127,6 +128,8 @@ To deploy your own copy, follow these steps:
   extracts the ball models. The STEP file isn't in the repository.
 - **Rules and point values.** The BIOBUZZ Competition Manual, sections 9 and 10.
 - **HIVE tipping point.** The Event Field Setup Guide, section 12.3.
+- **Starting positions of the CELL NECTAR and the GARDEN POLLEN.** The CAD staging spots, which match the Event Field
+  Setup Guide, section 11, and the Competition Manual, section 10.3.1.
 - **Ball masses.** AndyMark's product page: 0.055 lb for POLLEN (am-5851) and 0.091 lb for NECTAR (am-5852). The
   manual's section 9.8 names the material, polyethylene, and gives no weight. `node scripts/ball-mass.mjs` checks the
   weights against the plastic volume of the CAD models.
@@ -134,7 +137,8 @@ To deploy your own copy, follow these steps:
 ## Contribute
 
 See [CONTRIBUTING.md](CONTRIBUTING.md). The fastest bug report is an annotated match: review a match in the
-simulator, click the robot that did something wrong, type a note, click **Export**, and attach the files to an issue.
+simulator, click the robot that did something wrong, type a note, click **Export** in the game setup, and attach the
+files to an issue.
 
 ## License
 
