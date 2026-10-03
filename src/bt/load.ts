@@ -353,6 +353,51 @@ export function checkTree(source: unknown, reg: Registry, limits: Partial<Limits
   return { def: { id, name, env: envName, description: source.description as string | undefined, meta: isObj(source.meta) ? source.meta : {}, root, nodeCount: count, defs, defNames }, issues };
 }
 
+/**
+ * The names that one expression in a tree can use, for an editor that checks and completes an expression as you type:
+ * the environment's fields, the tree's definitions with their types, and the functions. A node's own bindings and
+ * `input` aren't in it.
+ */
+export interface ExprContext {
+  env: Type & { kind: 'object' };
+  defs: readonly { name: string; type: Type }[];
+  fns: Readonly<Record<string, FnSpec>>;
+  /** The definitions after the one being written, which it can't use. The checker names them in its message. */
+  later?: readonly string[];
+}
+
+/**
+ * Gets the names that an expression in `def` can use. A definition can use only the definitions before it, as the
+ * loader compiles them, so `before` limits the definitions to the ones ahead of that name.
+ * @throws Error If the registry has no environment `envName`.
+ */
+export function exprContext(reg: Registry, envName: string, def: TreeDef | null, before?: string): ExprContext {
+  const env = reg.envs[envName]; if (!env || env.kind !== 'object') throw new Error(`no environment '${envName}'`);
+  const names = def?.defNames ?? [], stop = before === undefined ? -1 : names.indexOf(before);
+  const end = stop < 0 ? names.length : stop;
+  const defs = names.slice(0, end).map((name, i) => ({ name, type: def!.defs[i].type }));
+  return { env, defs, fns: { ...MATH_FNS, ...reg.fns }, later: names.slice(end + 1) };
+}
+
+/**
+ * Checks one expression, as the loader would: it must parse, name only what `ctx` has, and give the `expected` type.
+ * Returns its type, or the problem and the character position where it starts.
+ */
+export function checkExpr(source: string, ctx: ExprContext, expected?: Type, maxLength = DEFAULT_LIMITS.maxExpr): { type: Type } | { message: string; pos: number } {
+  const defs = new Map(ctx.defs.map(d => [d.name, d.type]));
+  const scope: StaticScope<unknown> = {
+    fns: ctx.fns,
+    lookup: n => { const type = defs.get(n) ?? ctx.env.fields[n]; return type ? { type, get: () => null } : undefined; },
+  };
+  try { return { type: compile(source, scope, expected, maxLength).type }; }
+  catch (e) {
+    if (!(e instanceof ExprError)) throw e;
+    const name = /^unknown name '(\w+)'$/.exec(e.reason)?.[1];
+    if (name && ctx.later?.includes(name)) return { message: `'${name}' is defined later, and a definition can use only the ones before it`, pos: e.pos };
+    return { message: e.reason, pos: e.pos };
+  }
+}
+
 /** Describes a node's settings in a few words, for a tree view. Expressions are shown as they are written. */
 function detailOf(kind: string, raw: Record<string, unknown>, spec: unknown): string | undefined {
   const o = isObj(spec) ? spec : {}, show = (v: unknown) => (typeof v === 'string' ? v : JSON.stringify(v));

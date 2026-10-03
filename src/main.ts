@@ -289,9 +289,10 @@ try { snapBox.checked = localStorage.getItem('biobuzz.snap') === 'on'; } catch {
 editor.snapGrid = snapBox.checked;
 snapBox.onchange = () => { editor.snapGrid = snapBox.checked; try { localStorage.setItem('biobuzz.snap', snapBox.checked ? 'on' : 'off'); } catch { /* Storage is a convenience. */ } snapBox.blur(); };
 editor.hoverRef = (ref, x, y) => { const tip = $('aehover'); tip.classList.toggle('hidden', !ref); if (ref) { tip.textContent = ref.name; tip.style.left = `${x + 12}px`; tip.style.top = `${y + 10}px`; } };
-// Undo and redo keys, and Delete for a selected offset line or reference point, while you edit a plan. They leave text fields to the browser.
+// Undo and redo keys, and Delete for a selected offset line or reference point, while you edit a plan. They leave text
+// fields to the browser, and CodeMirror's expression fields, which are contenteditable, to CodeMirror.
 addEventListener('keydown', e => {
-  if (!editor.active || !editor.editing || (e.target as HTMLElement).closest?.('input, textarea, select')) return;
+  if (!editor.active || !editor.editing || (e.target as HTMLElement).closest?.('input, textarea, select, [contenteditable="true"]')) return;
   if ((e.key === 'Delete' || e.key === 'Backspace') && editor.selectedLink) { e.preventDefault(); editor.deleteLink(); return; }
   if ((e.key === 'Delete' || e.key === 'Backspace') && editor.selectedRef) { e.preventDefault(); editor.deleteRef(); return; }
   const z = e.key === 'z' || e.key === 'Z';
@@ -343,7 +344,7 @@ function paintEditor() {
   status.classList.toggle('warn', !!wrong || bad > 0);
   status.textContent = !def ? '' : wrong ? `This plan is for the ${wrong} start position.` : editor.isUserPlan ? `${editor.editing ? 'Your plan · editing' : 'Your plan'}${changes}${problems}` : 'System plan · read-only';
   const insp = $('aeinsp'); insp.classList.toggle('hidden', !def);
-  if (def) inspector.paint({ editing: editor.editing, problems: editor.problems, path: editor.selected, node: editor.selectedNode(), fields: editor.fields(), def: editor.selectedDef(), adding: editor.addingDef },
+  if (def) inspector.paint({ editing: editor.editing, problems: editor.problems, path: editor.selected, node: editor.selectedNode(), fields: editor.fields(), def: editor.selectedDef(), adding: editor.addingDef, ctx: before => editor.exprContext(before), valueOf: path => editor.valueOf(path) },
     `${def.id}:${editor.robot}|${editor.rev}|${editor.selected}|${editor.editing}|${editor.selectedRef}|${editor.addingDef}`);
   $<HTMLButtonElement>('aeundo').disabled = !editor.canUndo; $<HTMLButtonElement>('aeredo').disabled = !editor.canRedo;
   $('aeframe').textContent = 'Red alliance frame: +x toward the blue wall, +y toward the rear wall. Blue robots run this tree rotated 180°.';

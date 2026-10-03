@@ -80,6 +80,8 @@ export interface ParamField {
   live: boolean;
   /** The type, as the loader describes it, such as `number` or `'rear' | 'audience'`. */
   typeText: string;
+  /** The type, for an editor that checks the field as you type. */
+  type: Type;
   /** The value as the tree writes it, or an empty string when the tree doesn't set it. */
   text: string;
 }
@@ -104,7 +106,7 @@ export function paramFields(tree: Json, path: string, reg: Registry): ParamField
     return {
       key, doc: ps.doc, unit: ps.unit, min: ps.min, max: ps.max, control, values: base.kind === 'enum' ? base.values : undefined,
       nullable: ps.type.kind === 'nullable', required: ps.default === undefined, defaultText: ps.default === undefined ? null : ps.default === '' ? "''" : valueText(ps.default),
-      live: !!ps.live, typeText: describe(ps.type), text: key in given ? valueText(given[key]) : '',
+      live: !!ps.live, typeText: describe(ps.type), type: ps.type, text: key in given ? valueText(given[key]) : '',
     };
   });
 }

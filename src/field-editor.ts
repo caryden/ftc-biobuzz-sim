@@ -5,7 +5,7 @@
  * and a blue robot runs them rotated 180° about the FIELD center, so the editor works on the two red robots. The
  * browser keeps your plans (`user-trees.ts`). See `auto/auto-edit.ts` for how a drag changes a tree.
  */
-import type { TreeDef } from './bt';
+import { exprContext, type ExprContext, type TreeDef } from './bt';
 import { addReference, defUsers, deleteDef, changedDefs, changedSteps, clonePlan, editHandles, isEdited, makeAbsolute, moveHandle, moveReference, planId, poseText, referencePoints, referTo, resetHandle, sharedWith, sourceOf, stepReference, toAlliance, turnHandle, turnReference, type Handle, type RefPoint } from './auto/auto-edit';
 import { AUTO_FIELD, AUTO_PROBLEMS, AUTO_REGISTRY, AUTO_SOURCES, AUTO_TREES, BUILT_IN_AUTO, SOLO_AUTO, addAutoTree, autoFor, autoStart, defValues } from './auto/onboard';
 import { addDef, defRows, paramFields, readField, setDef, setParam, sortProblems, type DefRow, type ParamField, type Problems } from './auto/draft';
@@ -381,6 +381,19 @@ export class FieldEditor {
     this.defsCache = { key, rows }; return rows;
   }
   private defsCache: { key: string; rows: (DefRow & { value: string | null })[] } | null = null;
+
+  /**
+   * Gets the names that an expression in the plan can use, for the panel's expression fields. In a definition, `before`
+   * is the definition's name, because a definition can use only the ones before it.
+   */
+  exprContext(before?: string): ExprContext { return exprContext(AUTO_REGISTRY, 'onboard', this.def, before); }
+
+  /** Gets the value before the MATCH of a definition or a FIELD constant, as text, such as `-0.3237` for `field.hiveX`, or undefined for another name. */
+  valueOf(path: string): string | null | undefined {
+    const c = /^field\.(\w+)$/.exec(path);
+    if (c && c[1] in AUTO_FIELD) return String(AUTO_FIELD[c[1] as keyof typeof AUTO_FIELD]);
+    return this.defs().find(d => d.name === path)?.value;
+  }
 
   /** Gets the selected definition, with the steps and definitions that use it, or null. */
   selectedDef(): (DefRow & { value: string | null; users: string[] }) | null {
