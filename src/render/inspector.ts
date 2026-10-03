@@ -3,8 +3,13 @@
  * step's parameters, the selected definition, or the form that adds a definition. The tree view lists the definitions,
  * at the root. The panel draws what `FieldEditor` gives it, and sends each edit back as text. A text field sends its
  * edit when it loses focus or on Enter, so an edit is one step of undo. Escape puts the field back as it was.
+ *
+ * An expression field starts as a plain text field, and becomes a CodeMirror field from `expr-cm.ts` when that module
+ * loads: highlighting, completion, and the checker's problems as you type. If the module doesn't load, for example
+ * offline, the plain fields stay and work.
  */
 import type { DefRow, ParamField, Problems } from '../auto/draft';
+import type { ExprContext } from '../bt';
 
 export interface InspectorModel {
   editing: boolean;
@@ -17,6 +22,10 @@ export interface InspectorModel {
   def: (DefRow & { value: string | null; users: string[] }) | null;
   /** True while the panel shows the form that adds a definition. */
   adding: boolean;
+  /** Gets the names that an expression can use: in a definition, only the definitions before it. */
+  ctx(before?: string): ExprContext;
+  /** Gets the value of a definition or a constant before the MATCH, as text, for the completion list. */
+  valueOf(path: string): string | null | undefined;
 }
 
 export interface InspectorActions {
@@ -35,13 +44,19 @@ const esc = (s: string) => s.replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;
 /** Writes inline code in a doc string, such as `timeoutSec`, as code. */
 const doc = (s: string) => esc(s).replace(/`([^`]+)`/g, '<code>$1</code>');
 
+type ExprModule = typeof import('./expr-cm');
+
 export class Inspector {
   private key = ''; private error = '';
   private model: InspectorModel | null = null;
+  /** The CodeMirror fields on the panel, which a redraw destroys, and a count of redraws, so that a late load is dropped. */
+  private views: { destroy(): void }[] = []; private gen = 0;
+  private static cm: Promise<ExprModule> | null = null;
 
   constructor(private readonly root: HTMLElement, private readonly act: InspectorActions) {
-    // The page's keys, such as Enter to start the match, mustn't fire while you type in a field.
-    for (const ev of ['keydown', 'keyup']) root.addEventListener(ev, e => { if ((e.target as HTMLElement).closest('input, select, textarea')) e.stopPropagation(); });
+    // The page's keys, such as Enter to start the match, mustn't fire while you type in a field. A CodeMirror field is
+    // a contenteditable element, not an input.
+    for (const ev of ['keydown', 'keyup']) root.addEventListener(ev, e => { if ((e.target as HTMLElement).closest('input, select, textarea, [contenteditable="true"]')) e.stopPropagation(); });
     root.addEventListener('keydown', e => {
       const el = e.target as HTMLInputElement; if (el.tagName !== 'INPUT') return;
       if (e.key === 'Enter') { e.preventDefault(); if (el.dataset.add !== undefined) this.add(); else el.blur(); }
@@ -81,8 +96,9 @@ export class Inspector {
 
   private repaint() {
     const m = this.model; if (!m) return;
-    // Keep the focus in the same field across a redraw.
-    const focused = (document.activeElement as HTMLElement | null)?.dataset?.field;
+    // Keep the focus in the same field across a redraw. In a CodeMirror field, the focus is on an element inside it.
+    const focused = (document.activeElement as HTMLElement | null)?.closest<HTMLElement>('[data-field]')?.dataset.field;
+    for (const v of this.views) v.destroy(); this.views = [];
     const off = m.editing ? '' : ' disabled', p = m.problems, parts: string[] = [];
     const err = (list: readonly string[]) => list.map(q => `<div class="ai-err">${esc(q)}</div>`).join('');
 
@@ -120,6 +136,32 @@ export class Inspector {
     this.root.innerHTML = parts.join('');
     if (focused) this.root.querySelector<HTMLElement>(`[data-field="${CSS.escape(focused)}"]`)?.focus();
     if (m.adding && !focused) this.root.querySelector<HTMLInputElement>('[data-add="name"]')?.focus();
+    void this.upgrade(m);
+  }
+
+  /** Replaces the panel's expression fields with CodeMirror fields, once the module loads. */
+  private async upgrade(m: InspectorModel) {
+    const inputs = Array.from(this.root.querySelectorAll<HTMLInputElement>('input.mono[data-field]')); if (!inputs.length) return;
+    const gen = ++this.gen;
+    let mod: ExprModule;
+    try { mod = await (Inspector.cm ??= import('./expr-cm')); } catch { Inspector.cm = null; return; }
+    if (gen !== this.gen) return; // The panel was redrawn while the module loaded.
+    for (const input of inputs) {
+      if (!input.isConnected) continue;
+      const [kind, ...rest] = input.dataset.field!.split(':'), key = rest.join(':');
+      const field = kind === 'p' ? m.fields?.find(f => f.key === key) : undefined;
+      const focused = document.activeElement === input, live = document.createElement('div');
+      live.className = 'ai-err ai-live';
+      const view = mod.mountExprField(input, {
+        value: input.value, ctx: kind === 'd' ? m.ctx(key) : m.ctx(), expected: field?.type, disabled: input.disabled, placeholder: input.placeholder,
+        valueOf: p => m.valueOf(p),
+        onCommit: text => { if (kind === 'p' && m.path) this.act.setParam(m.path, key, text); else if (kind === 'd') this.act.setDef(key, text); },
+        onProblem: msg => { live.textContent = msg ? `${msg.charAt(0).toUpperCase()}${msg.slice(1)}.` : ''; },
+      });
+      view.dom.after(live);
+      this.views.push(view);
+      if (focused) view.focus();
+    }
   }
 
   /** Draws one parameter's field: its name, its control, its problems, its type and limits, and its doc. */

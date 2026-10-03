@@ -142,7 +142,8 @@ grid. For all the tools, see
 [Reference points and snapping](behavior-trees.md#reference-points-and-snapping).
 
 The tree view lists the plan's definitions above its steps, and the panel on the right shows what you select: a step's
-settings, such as `timeoutSec`, or a definition. To change one, type in its field and press Enter. A plan with problems lists them in red at the top of the panel, and its robot
+settings, such as `timeoutSec`, or a definition. To change one, type in its field and press Enter. An expression field
+completes names as you type, such as `bots.me.` or `field.`, and marks a problem before you save. A plan with problems lists them in red at the top of the panel, and its robot
 stays still in AUTO until you fix them. For more information, see
 [Settings, definitions, and problems](behavior-trees.md#settings-definitions-and-problems).
 

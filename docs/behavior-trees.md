@@ -610,6 +610,25 @@ didn't compile gives null. A step whose pose doesn't evaluate, for example becau
 handle on the FIELD until the problem is fixed. `src/auto/draft.ts` builds the form fields and sorts the problems, with
 no DOM, and `test/draft.test.ts` runs it.
 
+### Expression fields
+
+A number field, an expression field, and a definition's field are CodeMirror 6 fields, from `src/render/expr-cm.ts`:
+
+- **Highlighting.** Numbers, strings, the words of the language, function names, and field names each have a color.
+- **Completion.** Typing a name offers the environment's top-level fields, the plan's definitions, the functions, and
+  the words of the language. After a dot, as in `bots.me.`, it offers the fields of that path, with their types. A
+  definition or a constant shows its value before the MATCH, such as `hiveX number = -0.3237`. Enter or Tab accepts a
+  completion, and Escape closes the list.
+- **Problems as you type.** `checkExpr` in `src/bt/load.ts` checks the text as the loader would, with the type that the
+  parameter needs, and the field marks where the problem starts. A definition can use only the definitions before it,
+  as the loader compiles them, so its field offers only those, and a later one gets "'park' is defined later".
+- **Keys.** Enter or leaving the field saves the text, as one step of undo. Escape puts the text back. Inside a field,
+  Cmd+Z undoes typing, and the page's keys, such as Enter to start the MATCH, don't fire.
+
+`completeAt` in `src/bt/complete.ts` finds the completions, with no DOM, and `test/expr-edit.test.ts` runs it and the
+checker. CodeMirror is a separate file of the build, 340 kB, or 112 kB compressed, which the page loads the first time
+that the panel shows an expression field. If it doesn't load, for example offline, the fields stay plain text fields.
+
 ## Code leaves in a sandbox
 
 A leaf that a user writes runs in QuickJS, a JavaScript engine that is compiled to WebAssembly. The page calls it
@@ -836,8 +855,9 @@ tree in the page. Each increment is one pull request.
      on its field and its row. A draft with problems saves but doesn't run. See
      [Settings, definitions, and problems](#settings-definitions-and-problems). `e97-editor-forms` equals
      `e96-placed-cell-nectar` on every seed.
-   - **Expression fields.** An expression field uses CodeMirror 6, which loads only with the editor: highlighting,
-     completion from the environment schema and the tree's definitions, and errors from `src/bt/expr.ts` as you type.
+   - **Expression fields. Done.** An expression field uses CodeMirror 6, which loads only with the editor:
+     highlighting, completion from the environment schema, the tree's definitions, and the FIELD constants, and the
+     checker's problems as you type. See [Expression fields](#expression-fields). No match code changed.
 10. **Structure editing.** Insert a node from a palette of the node types and the AUTO leaves, with templates such as
     the sweep. Delete a node and its subtree, reorder by drag-and-drop, and wrap a node in a sequence, a parallel, or a
     fallback.
