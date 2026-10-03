@@ -11,11 +11,10 @@
   "full": "bots.me.transfer.full",
   "len": "bots.me.dimensions.length",
   "flip": "if(bots.me.shooter.facing == 'front', 180, 0)",
-  "hiveX": "-0.3237",
   "stand": "len / 2 + field.flowerHalfSize + 0.02",
-  "launchAudience": "pose(hiveX, -1.32, -90 + flip)",
-  "launchRear": "pose(hiveX, 1.32, 90 + flip)",
-  "ownFlower": "pose(-1.7282 + stand, -0.5942, 180)",
+  "launchAudience": "pose(field.hiveX, -1.32, -90 + flip)",
+  "launchRear": "pose(field.hiveX, 1.32, 90 + flip)",
+  "ownFlower": "pose(-field.flowerFar + stand, -field.flowerNear, 180)",
   "park": "pose(-(field.half - len / 2 - 0.09), 0.8954, 180)",
   "parkRight": "pose(park.x, 0.8954 - 0.33, park.headingDeg)",
   "wallStand": "field.half - len / 2 - 0.035",
@@ -242,7 +241,7 @@
               "note": "That volley was the third TIP, which raises the rear CELL. The robot backs under the HIVE, so that the spill passes over it to the wall, and sweeps after the spill lands.",
               "ref": "drive.driveTo",
               "params": {
-               "pose": "pose(hiveX, -0.62, -90 + flip)",
+               "pose": "pose(field.hiveX, -0.62, -90 + flip)",
                "timeoutSec": 2
               }
              }
@@ -383,7 +382,7 @@
                     "note": "Spill collects on the rear wall between the rear FLOWER and the center line, 0.25 m behind the launch spot, and the intake already faces it. The pose is 3 cm toward the center line, so that a 0.43 m robot clears the FLOWER. In trace 20260920-155206, three POLLEN rested there and the robot parked with 6 s left.",
                     "ref": "drive.driveTo",
                     "params": {
-                     "pose": "pose(hiveX + 0.03, wallStand, 90 + flip)",
+                     "pose": "pose(field.hiveX + 0.03, wallStand, 90 + flip)",
                      "timeoutSec": 1.5
                     }
                    }

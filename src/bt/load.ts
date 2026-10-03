@@ -65,10 +65,22 @@ interface Ctx { path: string; depth: number; input: Type; bindings: ReadonlyMap<
  * @throws TreeLoadError If the file has any problem. The error lists all of them.
  */
 export function loadTree(source: unknown, reg: Registry, limits: Partial<Limits> = {}): TreeDef {
+  const r = checkTree(source, reg, limits);
+  if (r.issues.length || !r.def) throw new TreeLoadError(r.issues);
+  return r.def;
+}
+
+/**
+ * Checks and compiles a tree file, and returns the tree even when it has problems, for an editor that shows a draft.
+ * In a tree with problems, a node that didn't compile is a placeholder that fails when it runs, and an expression that
+ * didn't compile gives null. So a host must not run such a tree. `def` is null only when the file isn't an object or
+ * names no known environment.
+ */
+export function checkTree(source: unknown, reg: Registry, limits: Partial<Limits> = {}): { def: TreeDef | null; issues: LoadIssue[] } {
   const lim = { ...DEFAULT_LIMITS, ...limits }, issues: LoadIssue[] = [];
   const issue = (path: string, message: string) => { issues.push({ path, message }); };
   const fns: Record<string, FnSpec> = { ...MATH_FNS, ...reg.fns };
-  if (!isObj(source)) throw new TreeLoadError([{ path: 'tree', message: 'a tree file must be a JSON object' }]);
+  if (!isObj(source)) return { def: null, issues: [{ path: 'tree', message: 'a tree file must be a JSON object' }] };
   for (const k of Object.keys(source)) if (!['kind', 'id', 'name', 'env', 'description', 'meta', 'defs', 'root'].includes(k)) issue('tree', `unknown field '${k}'`);
   if (source.kind !== 'bt.tree') issue('tree', "'kind' must be \"bt.tree\"");
   const id = typeof source.id === 'string' && TREE_ID.test(source.id) ? source.id : (issue('tree', "'id' must be 1 to 64 lowercase letters, digits, and '-', starting with a letter or digit"), '');
@@ -77,7 +89,7 @@ export function loadTree(source: unknown, reg: Registry, limits: Partial<Limits>
   const envType = reg.envs[envName];
   if (!envType || envType.kind !== 'object') {
     issue('tree', `'env' must be one of ${Object.keys(reg.envs).map(e => `"${e}"`).join(', ')}`);
-    throw new TreeLoadError(issues);
+    return { def: null, issues };
   }
   const envFields = envType.fields;
   if (source.description !== undefined && typeof source.description !== 'string') issue('tree', "'description' must be a string");
@@ -338,8 +350,7 @@ export function loadTree(source: unknown, reg: Registry, limits: Partial<Limits>
 
   if (!('root' in source)) issue('tree', "'root' is required");
   const root = build(source.root, { path: '', depth: 1, input: t.any(), bindings: new Map(), inChain: false }, 'root', 0, true);
-  if (issues.length) throw new TreeLoadError(issues);
-  return { id, name, env: envName, description: source.description as string | undefined, meta: isObj(source.meta) ? source.meta : {}, root, nodeCount: count, defs, defNames };
+  return { def: { id, name, env: envName, description: source.description as string | undefined, meta: isObj(source.meta) ? source.meta : {}, root, nodeCount: count, defs, defNames }, issues };
 }
 
 /** Describes a node's settings in a few words, for a tree view. Expressions are shown as they are written. */
