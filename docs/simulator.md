@@ -143,9 +143,12 @@ grid. For all the tools, see
 
 The tree view lists the plan's definitions above its steps, and the panel on the right shows what you select: a step's
 settings, such as `timeoutSec`, or a definition. To change one, type in its field and press Enter. An expression field
-completes names as you type, such as `bots.me.` or `field.`, and marks a problem before you save. A plan with problems lists them in red at the top of the panel, and its robot
-stays still in AUTO until you fix them. For more information, see
-[Settings, definitions, and problems](behavior-trees.md#settings-definitions-and-problems).
+completes names as you type, such as `bots.me.` or `field.`, and marks a problem before you save. A plan with problems
+lists them in red at the top of the panel, and its robot stays still in AUTO until you fix them. For more information,
+see [Settings, definitions, and problems](behavior-trees.md#settings-definitions-and-problems).
+
+To add a step, click **+ Add** above the selected step, or right-click a row in the tree view. To move a step, drag its
+row. For all the tools, see [Structure editing](behavior-trees.md#structure-editing).
 
 This browser keeps your plans, and the **AUTO plan** list in the robot config shows them. An edited step has a green
 ring on the FIELD and a green dot in the tree view. **Reset this step** moves the selected step back to where the source plan has it, and **Delete plan** deletes the

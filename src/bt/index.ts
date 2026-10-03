@@ -11,7 +11,7 @@ export { completeAt, type Completion } from './complete';
 export { Failure, isFailure, type Behavior, type CNode } from './core';
 export { compile, ExprError, literalNumber, MATH_FNS, RESERVED, splitCall, type FnSpec } from './expr';
 export { defineLeaf, type LeafCtx, type LeafType, type ParamBase, type ParamSpec, type Registry } from './leaf';
-export { checkExpr, checkTree, DEFAULT_LIMITS, exprContext, loadTree, TreeLoadError, type Limits, type ExprContext, type LoadIssue, type TreeDef } from './load';
+export { checkExpr, checkTree, DEFAULT_LIMITS, exprContext, loadTree, NODE_KINDS, TreeLoadError, type Limits, type ExprContext, type LoadIssue, type TreeDef } from './load';
 export { TreeRunner, type RunnerOptions, type TreeStatus } from './runner';
 export { assignable, describe, mismatch, t, typeAt, type Infer, type Type } from './schema';
 export { Recorder, type LogData, type RecorderOptions, type Span } from './trace';

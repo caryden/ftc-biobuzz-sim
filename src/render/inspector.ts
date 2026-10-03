@@ -9,7 +9,8 @@
  * offline, the plain fields stay and work.
  */
 import type { DefRow, ParamField, Problems } from '../auto/draft';
-import type { ExprContext } from '../bt';
+import type { ControlField } from '../auto/structure';
+import { t, type ExprContext, type Type } from '../bt';
 
 export interface InspectorModel {
   editing: boolean;
@@ -26,6 +27,13 @@ export interface InspectorModel {
   ctx(before?: string): ExprContext;
   /** Gets the value of a definition or a constant before the MATCH, as text, for the completion list. */
   valueOf(path: string): string | null | undefined;
+  /** The settings of the selected control node, such as a `parallel` node's policy, or null for a leaf. */
+  controls: ControlField[] | null;
+  /** The palette, while it is open: where the new node goes, as text, and the items. */
+  palette: { where: string; items: readonly { id: string; group: string; label: string; doc: string }[] } | null;
+  /** The node types that Wrap takes, and whether the selected node can move up and down. */
+  wraps: readonly string[];
+  canMove: { up: boolean; down: boolean };
 }
 
 export interface InspectorActions {
@@ -36,6 +44,14 @@ export interface InspectorActions {
   cancelAdd(): void;
   /** Returns a problem to show, or null. */
   deleteDef(name: string): string | null;
+  setControl(path: string, key: string, text: string): void;
+  openPalette(): void;
+  closePalette(): void;
+  /** Returns a problem to show, or null. */
+  addItem(id: string): string | null;
+  deleteNode(): void;
+  move(delta: -1 | 1): void;
+  wrap(kind: string): void;
   selectNode(path: string): void;
   selectDef(name: string): void;
 }
@@ -67,6 +83,8 @@ export class Inspector {
       const [kind, ...rest] = f.split(':'), name = rest.join(':');
       if (kind === 'p' && this.model?.path) this.act.setParam(this.model.path, name, el.value);
       if (kind === 'd') this.act.setDef(name, el.value);
+      if (kind === 'c' && this.model?.path) this.act.setControl(this.model.path, name, el.value);
+      if (kind === 'wrap' && el.value) this.act.wrap(el.value);
     });
     root.addEventListener('click', e => {
       const t = e.target as HTMLElement;
@@ -74,6 +92,17 @@ export class Inspector {
       const del = t.closest<HTMLElement>('[data-del]'); if (del) { this.error = this.act.deleteDef(del.dataset.del!) ?? ''; this.key = ''; this.repaint(); return; }
       if (t.closest('[data-addbtn]')) this.add();
       if (t.closest('[data-cancel]')) this.act.cancelAdd();
+      const pal = t.closest<HTMLElement>('[data-pal]'); if (pal) { this.error = this.act.addItem(pal.dataset.pal!) ?? ''; if (this.error) { this.key = ''; this.repaint(); } return; }
+      const act = t.closest<HTMLElement>('[data-act]')?.dataset.act;
+      if (act === 'add') this.act.openPalette(); if (act === 'close-palette') this.act.closePalette();
+      if (act === 'up') this.act.move(-1); if (act === 'down') this.act.move(1); if (act === 'delete') this.act.deleteNode();
+    });
+    // The palette's search hides the items that don't match, without a redraw, so that the search field keeps its text.
+    root.addEventListener('input', e => {
+      const el = e.target as HTMLInputElement; if (el.dataset.search === undefined) return;
+      const q = el.value.trim().toLowerCase();
+      for (const b of Array.from(root.querySelectorAll<HTMLElement>('[data-pal]'))) b.classList.toggle('hidden', !!q && !`${b.dataset.pal} ${b.title}`.toLowerCase().includes(q));
+      for (const g of Array.from(root.querySelectorAll<HTMLElement>('.ai-group'))) g.classList.toggle('hidden', !g.querySelector('[data-pal]:not(.hidden)'));
     });
   }
 
@@ -109,7 +138,12 @@ export class Inspector {
       parts.push(`<section class="ai-problems"><h3>${p.count} problem${p.count === 1 ? '' : 's'}</h3><p>This plan doesn't run until you fix ${p.count === 1 ? 'it' : 'them'}: its robot stays still in AUTO.</p><ul>${items.join('')}</ul></section>`);
     }
 
-    if (m.adding) {
+    if (m.palette) {
+      const groups = [...new Set(m.palette.items.map(i => i.group))];
+      parts.push(`<section class="ai-palette"><h3>Add a step</h3><p class="ai-hint">It goes ${esc(m.palette.where)}.</p><input type="text" spellcheck="false" data-search placeholder="Search, such as shoot or wait">`
+        + groups.map(g => `<div class="ai-group"><div class="ai-gname">${esc(g)}</div><div class="ai-items">${m.palette!.items.filter(i => i.group === g).map(i => `<button data-pal="${esc(i.id)}" title="${esc(i.doc)}">${esc(i.label)}</button>`).join('')}</div></div>`).join('')
+        + `${err(this.error ? [this.error] : [])}<div class="ai-btns"><button data-act="close-palette">Cancel</button></div></section>`);
+    } else if (m.adding) {
       parts.push('<section><h3>New definition</h3><p class="ai-hint">A name that the steps and other definitions can use, such as <code>backOff</code> for <code>0.25</code>, or a pose such as <code>pose(-1.2, 0.6, 180)</code>, which is also a reference point on the FIELD.</p>'
         + '<div class="ai-field"><label>Name</label><input type="text" spellcheck="false" data-add="name" placeholder="backOff"></div>'
         + '<div class="ai-field"><label>Expression</label><input type="text" spellcheck="false" class="mono" data-add="src" placeholder="0.25"></div>'
@@ -124,14 +158,20 @@ export class Inspector {
         + (m.editing ? `${err(this.error ? [this.error] : [])}<div class="ai-btns"><button data-del="${esc(d.name)}" title="Steps that are this pose, or an offset from it, keep their places.">Delete</button></div>` : '')
         + '</section>');
     } else if (m.node) {
-      parts.push(`<section><h3>Step</h3><div class="ai-node"><b>${esc(m.node.label)}</b> <i>${esc(m.node.id)}</i></div>`);
+      parts.push(`<section><h3>${m.node.leaf ? 'Step' : 'Node'}</h3>`);
+      if (m.editing) parts.push(`<div class="ai-tools"><button data-act="add" title="Adds a step after this one, or inside it if it holds a list of steps.">+ Add</button>`
+        + `<select data-field="wrap" title="Puts this node inside a new node."><option value="">Wrap in…</option>${m.wraps.map(w => `<option value="${esc(w)}">${esc(w)}</option>`).join('')}</select>`
+        + `<button data-act="up" title="Moves it up one place (Alt+Up)"${m.canMove.up ? '' : ' disabled'}>↑</button><button data-act="down" title="Moves it down one place (Alt+Down)"${m.canMove.down ? '' : ' disabled'}>↓</button>`
+        + `<button data-act="delete" title="Deletes it and everything under it (Delete)"${m.path === 'root' ? ' disabled' : ''}>Delete</button></div>`);
+      parts.push(`<div class="ai-node"><b>${esc(m.node.label)}</b> <i>${esc(/^n\d+$/.test(m.node.id) ? '' : m.node.id)}</i></div>`);
       if (m.node.doc) parts.push(`<p class="ai-doc">${doc(m.node.doc)}</p>`);
       const own = m.path ? p.nodes.get(m.path) ?? [] : [];
       parts.push(err(own.filter(q => !q.param || !m.fields?.some(f => f.key === q.param)).map(q => q.message)));
-      if (!m.fields) parts.push(`<p class="ai-hint">${m.node.detail ? `<code>${esc(m.node.detail)}</code>. ` : ''}The settings of this node type can't be edited here yet.</p>`);
-      else for (const f of m.fields) parts.push(this.field(f, own.filter(q => q.param === f.key).map(q => q.message), off, m.editing));
+      if (m.fields) for (const f of m.fields) parts.push(this.field(f, own.filter(q => q.param === f.key).map(q => q.message), off, m.editing));
+      else if (m.controls) for (const c of m.controls) parts.push(this.field(controlField(c), own.map(q => q.message).filter(q => q.includes(`'${c.key}'`)), off, m.editing, 'c'));
+      else parts.push(`<p class="ai-hint">${m.node.detail ? `<code>${esc(m.node.detail)}</code>. ` : ''}This node type has no settings.</p>`);
       parts.push('</section>');
-    } else parts.push(`<p class="ai-hint">Click a step or a definition in the tree, or a handle on the FIELD, to see its settings.</p>`);
+    } else parts.push(`<p class="ai-hint">Click a step or a definition in the tree, or a handle on the FIELD, to see its settings.</p>${m.editing ? '<div class="ai-btns"><button data-act="add">+ Add a step at the end</button></div>' : ''}`);
 
     this.root.innerHTML = parts.join('');
     if (focused) this.root.querySelector<HTMLElement>(`[data-field="${CSS.escape(focused)}"]`)?.focus();
@@ -149,13 +189,13 @@ export class Inspector {
     for (const input of inputs) {
       if (!input.isConnected) continue;
       const [kind, ...rest] = input.dataset.field!.split(':'), key = rest.join(':');
-      const field = kind === 'p' ? m.fields?.find(f => f.key === key) : undefined;
+      const field = kind === 'p' ? m.fields?.find(f => f.key === key) : kind === 'c' ? m.controls?.map(controlField).find(f => f.key === key) : undefined;
       const focused = document.activeElement === input, live = document.createElement('div');
       live.className = 'ai-err ai-live';
       const view = mod.mountExprField(input, {
         value: input.value, ctx: kind === 'd' ? m.ctx(key) : m.ctx(), expected: field?.type, disabled: input.disabled, placeholder: input.placeholder,
         valueOf: p => m.valueOf(p),
-        onCommit: text => { if (kind === 'p' && m.path) this.act.setParam(m.path, key, text); else if (kind === 'd') this.act.setDef(key, text); },
+        onCommit: text => { if (kind === 'p' && m.path) this.act.setParam(m.path, key, text); else if (kind === 'c' && m.path) this.act.setControl(m.path, key, text); else if (kind === 'd') this.act.setDef(key, text); },
         onProblem: msg => { live.textContent = msg ? `${msg.charAt(0).toUpperCase()}${msg.slice(1)}.` : ''; },
       });
       view.dom.after(live);
@@ -164,8 +204,8 @@ export class Inspector {
     }
   }
 
-  /** Draws one parameter's field: its name, its control, its problems, its type and limits, and its doc. */
-  private field(f: ParamField, errs: string[], off: string, editing: boolean): string {
+  /** Draws one parameter's field: its name, its control, its problems, its type and limits, and its doc. `kind` is `p` for a leaf's parameter and `c` for a control node's setting. */
+  private field(f: ParamField, errs: string[], off: string, editing: boolean, kind: 'p' | 'c' = 'p'): string {
     const bad = errs.length ? ' bad' : '';
     const limits = f.min !== undefined && f.max !== undefined ? `from ${f.min} to ${f.max}` : f.min !== undefined ? `at least ${f.min}` : f.max !== undefined ? `at most ${f.max}` : '';
     const meta = [f.typeText + (f.unit ? ` in ${f.unit}` : ''), limits, f.live ? 'checked on every step' : ''].filter(Boolean).join(' · ');
@@ -175,16 +215,22 @@ export class Inspector {
         f.nullable && !(f.defaultText === 'null' && !f.required) ? `<option value="null"${f.text === 'null' ? ' selected' : ''}>null</option>` : '',
         f.required && f.text === '' ? '<option value="" selected>choose one</option>' : '',
         ...(f.values ?? []).map(v => `<option value="${esc(v)}"${f.text === v ? ' selected' : ''}>${esc(v)}</option>`)];
-      control = `<select data-field="p:${esc(f.key)}" class="${bad}"${off}>${opts.join('')}</select>`;
+      control = `<select data-field="${kind}:${esc(f.key)}" class="${bad}"${off}>${opts.join('')}</select>`;
     } else if (f.control === 'list') {
       const n = (() => { try { return (JSON.parse(f.text || '[]') as unknown[]).length; } catch { return 0; } })();
       control = `<div class="ai-ro">${n} point${n === 1 ? '' : 's'}${editing ? ' · drag them on the FIELD' : ''}</div>`;
     } else {
       const ph = f.required ? 'required' : `default: ${f.defaultText}`;
-      control = `<input type="text" spellcheck="false" data-field="p:${esc(f.key)}" class="${f.control === 'text' ? '' : 'mono'}${bad}" value="${esc(f.text)}" placeholder="${esc(ph)}"${off}>`;
+      control = `<input type="text" spellcheck="false" data-field="${kind}:${esc(f.key)}" class="${f.control === 'text' ? '' : 'mono'}${bad}" value="${esc(f.text)}" placeholder="${esc(ph)}"${off}>`;
     }
     return `<div class="ai-field"><label><code>${esc(f.key)}</code>${f.required ? ' <span class="ai-req">required</span>' : ''}</label>${control}`
       + errs.map(q => `<div class="ai-err">${esc(q)}</div>`).join('')
       + `<div class="ai-meta">${esc(meta)}</div>${f.doc ? `<div class="ai-doc">${doc(f.doc)}</div>` : ''}</div>`;
   }
+}
+
+/** Writes a control node's setting as a parameter field, so that one renderer draws both. */
+function controlField(c: ControlField): ParamField {
+  const type: Type = c.control === 'number' ? t.number() : c.control === 'expr' ? t.boolean() : t.enum(...(c.values ?? []));
+  return { key: c.key, doc: c.doc, control: c.control, values: c.values, nullable: false, required: c.required, defaultText: c.defaultText, live: false, typeText: c.control === 'number' ? 'number' : c.control === 'expr' ? 'boolean' : (c.values ?? []).map(v => `'${v}'`).join(' | '), type, text: c.text };
 }

@@ -8,6 +8,8 @@
 import { exprContext, type ExprContext, type TreeDef } from './bt';
 import { addReference, defUsers, deleteDef, changedDefs, changedSteps, clonePlan, editHandles, isEdited, makeAbsolute, moveHandle, moveReference, planId, poseText, referencePoints, referTo, resetHandle, sharedWith, sourceOf, stepReference, toAlliance, turnHandle, turnReference, type Handle, type RefPoint } from './auto/auto-edit';
 import { AUTO_FIELD, AUTO_PROBLEMS, AUTO_REGISTRY, AUTO_SOURCES, AUTO_TREES, BUILT_IN_AUTO, SOLO_AUTO, addAutoTree, autoFor, autoStart, defValues } from './auto/onboard';
+import { PALETTE, startingPose } from './auto/palette';
+import { childCount, controlFields, deleteNode, ensureIds, idsFor, insertAfter, insertNode, isContainer, moveBy, moveNode, positionOf, setControl, wrapNode, WRAPS, type ControlField } from './auto/structure';
 import { addDef, defRows, paramFields, readField, setDef, setParam, sortProblems, type DefRow, type ParamField, type Problems } from './auto/draft';
 import type { View, CameraMode } from './render/view';
 import type { TreeEdit } from './render/tree-view';
@@ -211,7 +213,15 @@ export class FieldEditor {
     const id = this.treeOf(i);
     this.robot = i; this.editing = false; this.selected = null; this.point = -1; this.drag = null; this.past = []; this.future = [];
     this.selectedRef = null; this.selectedLink = null; this.dwell = null; this.addingDef = false;
-    this.tree = id ? (AUTO_SOURCES[id] as Json) : {}; this.original = this.originalOf(this.tree);
+    this.tree = id ? (AUTO_SOURCES[id] as Json) : {}; this.palette = null;
+    // A plan that you made gets an id on every node in a list, so that a structure edit doesn't change the paths of the
+    // other nodes. A plan made before structure editing gets its ids here, once. The source plan gets the same ids, so
+    // the change marks still match.
+    if (this.isUserPlan) {
+      const withIds = ensureIds(this.tree);
+      if (JSON.stringify(withIds) !== JSON.stringify(this.tree)) { addAutoTree(withIds, true); saveUserTree(withIds); this.tree = withIds; }
+    }
+    this.original = this.isUserPlan ? ensureIds(this.originalOf(this.tree)) : this.tree;
     this.rev++; this.refresh(); this.host.changed();
   }
 
@@ -252,7 +262,7 @@ export class FieldEditor {
     if (!n) return 'Give the plan a name.'; if (n.length > 80) return 'A name can have at most 80 characters.';
     if (!d) return 'Say what the plan does, in a sentence or two.'; if (!src) return 'Pick a plan to copy.';
     if (Object.values(AUTO_TREES).some(t => t.name.toLowerCase() === n.toLowerCase())) return `A plan is already named "${n}".`;
-    const tree = clonePlan(src, { id: planId(n, id => id in AUTO_TREES), name: n, description: d });
+    const tree = ensureIds(clonePlan(src, { id: planId(n, id => id in AUTO_TREES), name: n, description: d }));
     addAutoTree(tree, true); saveUserTree(tree);
     this.host.setAuto(this.robot, String(tree.id));
     this.showRobot(this.robot); this.edit();
@@ -282,12 +292,12 @@ export class FieldEditor {
 
   /** Selects a step, and the point of it that the ghost robot shows: `point`, or the step's first handle. */
   select(path: string | null, point?: number) {
-    this.selected = path; this.point = point ?? this.handles.findIndex(h => h.path === path); this.selectedRef = null; this.selectedLink = null; this.notice = null; this.addingDef = false;
+    this.selected = path; this.point = point ?? this.handles.findIndex(h => h.path === path); this.selectedRef = null; this.selectedLink = null; this.notice = null; this.addingDef = false; this.palette = null;
     this.paint(); this.host.changed();
   }
 
   /** Selects a reference point. The steps that name it show their offset lines to it. */
-  selectRef(name: string) { this.notice = null; this.addingDef = false; this.selected = null; this.point = -1; this.selectedRef = name; this.selectedLink = null; this.paint(); this.host.changed(); }
+  selectRef(name: string) { this.notice = null; this.addingDef = false; this.palette = null; this.selected = null; this.point = -1; this.selectedRef = name; this.selectedLink = null; this.paint(); this.host.changed(); }
 
   /** Selects the offset line of a step, and the step. **Delete** then makes the step absolute. */
   selectLink(path: string) { this.select(path); this.selectedLink = path; this.paint(); this.host.changed(); }
@@ -372,6 +382,8 @@ export class FieldEditor {
    * until the plan or the robot changes, because the page redraws the tree view often.
    */
   defs(): (DefRow & { value: string | null })[] {
+    // A CodeMirror field can still ask for values after the editor closes, for example when a MATCH starts.
+    if (this.robot < 0) return [];
     const key = `${this.rev}:${this.robot}`; if (this.defsCache?.key === key) return this.defsCache.rows;
     const def = this.def, values = def ? defValues(def, this.host.sim().view(this.robot)) : [];
     const rows = defRows(this.tree, def).map(r => {
@@ -404,7 +416,7 @@ export class FieldEditor {
   /** True while the settings panel shows the form that adds a definition. */
   addingDef = false;
   /** Shows the form that adds a definition, in place of the selection. */
-  startAddDef() { if (!this.editing) return; this.selected = null; this.point = -1; this.selectedRef = null; this.selectedLink = null; this.addingDef = true; this.paint(); this.host.changed(); }
+  startAddDef() { if (!this.editing) return; this.palette = null; this.selected = null; this.point = -1; this.selectedRef = null; this.selectedLink = null; this.addingDef = true; this.paint(); this.host.changed(); }
   cancelAddDef() { this.addingDef = false; this.host.changed(); }
 
   /** Sets a definition's expression. */
@@ -419,6 +431,80 @@ export class FieldEditor {
     if (!this.editing) return 'Edit a plan that you made to add definitions.';
     const r = addDef(this.tree, name, text); if ('error' in r) return r.error;
     this.remember(this.tree); this.apply(r.tree, true); this.selectRef(name.trim()); return null;
+  }
+
+  /** Where the palette adds a node: after the node at `path`, or inside it. Null while the palette is closed. */
+  palette: { path: string | null; mode: 'after' | 'inside' } | null = null;
+
+  /**
+   * Opens the palette. Without a mode, a node goes inside the selected node if it holds a list of children, and after
+   * it otherwise. With nothing selected, a node goes at the end of the root.
+   */
+  openPalette(path: string | null = this.selected, mode?: 'after' | 'inside') {
+    if (!this.editing) return;
+    const at = path ?? 'root', inside = mode ? mode === 'inside' : isContainer(this.tree, at);
+    this.selected = path; this.selectedRef = null; this.selectedLink = null; this.addingDef = false;
+    this.palette = { path: at, mode: inside ? 'inside' : 'after' }; this.paint(); this.host.changed();
+  }
+  closePalette() { this.palette = null; this.host.changed(); }
+
+  /** Adds the palette item `id` where the palette points, and selects the new node. Returns a problem to show, or null. */
+  addFromPalette(id: string): string | null {
+    const item = PALETTE.find(q => q.id === id), at = this.palette; if (!item || !at || !this.editing) return null;
+    const tree = ensureIds(this.tree), node = item.make(idsFor(tree), startingPose(tree, at.path));
+    const r = at.mode === 'inside' ? insertNode(tree, at.path ?? 'root', node) : insertAfter(tree, at.path ?? 'root', node);
+    if (!r) return at.mode === 'inside' ? 'This node holds one child, not a list.' : 'A node can go only after a node in a list, such as a step of a sequence.';
+    this.palette = null; this.structure(r);
+    return null;
+  }
+
+  /** Deletes the selected node and everything under it. */
+  deleteSelected() { if (this.selected && this.selected !== 'root') this.structure({ tree: deleteNode(ensureIds(this.tree), this.selected), path: null }); }
+
+  /** Moves the selected node one place up or down among its siblings. */
+  moveSelected(delta: -1 | 1) { if (this.selected) this.structure(moveBy(ensureIds(this.tree), this.selected, delta)); }
+
+  /** Moves the node at `path` into the container at `parent`, before the child at `index`, or to its end, as a drag in the tree does. */
+  moveTo(path: string, parent: string, index?: number) { this.structure(moveNode(ensureIds(this.tree), path, parent, index)); }
+
+  /** Wraps the selected node in a new node of type `kind`, such as `parallel` or `timeout`. */
+  wrapSelected(kind: string) { if (this.selected && kind in WRAPS) this.structure(wrapNode(ensureIds(this.tree), this.selected, kind)); }
+
+  /** The node types that `wrapSelected` takes. */
+  readonly wraps = Object.keys(WRAPS);
+
+  /** Applies a structure edit as one step of undo, and selects the node that it names. */
+  private structure(r: { tree: Json; path: string | null } | null) {
+    if (!r || !this.editing || JSON.stringify(r.tree) === JSON.stringify(this.tree)) return;
+    this.remember(this.tree); this.apply(r.tree, true);
+    if (r.path) this.select(r.path); else this.select(null);
+  }
+
+  /** Checks whether the node at `path` holds a list of children. */
+  holdsList(path: string) { return isContainer(this.tree, path); }
+  /** Gets where the node at `path` sits in a list of children, or null for the root and for a single child. */
+  positionOf(path: string) { return positionOf(this.tree, path); }
+  /** Checks whether the selected node can move up and down among its siblings. */
+  canMove(): { up: boolean; down: boolean } {
+    const at = this.selected ? positionOf(this.tree, this.selected) : null; if (!at) return { up: false, down: false };
+    return { up: at.index > 0, down: at.index < childCount(this.tree, at.parent) - 1 };
+  }
+  /** Describes where the palette puts a node, such as `after s3` or `at the end of n2`. */
+  paletteWhere(): string {
+    const at = this.palette; if (!at) return '';
+    const name = (p: string | null) => { const seg = (p ?? 'root').split('/').pop()!; return p === 'root' || !p ? 'the plan' : /^n\d+$/.test(seg) ? (this.selectedNode()?.label ?? seg) : seg; };
+    return at.mode === 'inside' ? `at the end of ${name(at.path)}` : `after ${name(at.path)}`;
+  }
+
+  /** Gets the settings of the selected control node, such as a `parallel` node's policy, or null for a leaf. */
+  controls(): ControlField[] | null { return this.selected ? controlFields(this.tree, this.selected) : null; }
+
+  /** Sets a setting of a control node from a field's text. A number field holds a number, or an expression. An empty field removes the setting. */
+  setControlText(path: string, key: string, text: string) {
+    const f = controlFields(this.tree, path)?.find(q => q.key === key); if (!f || !this.editing) return;
+    const s = text.trim(), value = s === '' ? undefined : f.control === 'number' && /^[-+]?(\d+\.?\d*|\.\d+)$/.test(s) ? Number(s) : s;
+    const next = setControl(this.tree, path, key, value); if (JSON.stringify(next) === JSON.stringify(this.tree)) return;
+    this.remember(this.tree); this.apply(next, true);
   }
 
   private refDrawList() { return this.refs.map(r => ({ ...r.sim, selected: r.name === this.selectedRef })); }
