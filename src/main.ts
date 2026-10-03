@@ -331,7 +331,9 @@ const inspector = new Inspector($('aeinsp'), {
 });
 /** Draws the editor bar: the tree, the selected step's pose, and the buttons. */
 function paintEditor() {
-  document.body.classList.toggle('editing', editor.active); $('autoedit').classList.toggle('hidden', !editor.active); if (!editor.active) return;
+  document.body.classList.toggle('editing', editor.active); $('autoedit').classList.toggle('hidden', !editor.active);
+  // The settings panel closes with the editor. It opens again below, when there is a plan to show.
+  if (!editor.active) { $('aeinsp').classList.add('hidden'); return; }
   const def = editor.def, plate = bots[editor.robot].plate, wrong = editor.wrongStart;
   $('aehead').textContent = `${plate} · ${def?.name ?? 'No AUTO plan'}`;
   const status = $('aestatus'); status.classList.toggle('warn', !!wrong);
