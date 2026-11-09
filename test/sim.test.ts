@@ -90,7 +90,7 @@ describe('shooting and HIVE TIP', () => {
   });
 });
 
-describe('out-of-field returns (TU02 section 10.8.2)', () => {
+describe('out-of-field returns (Competition Manual section 10.8.2, G426, G427)', () => {
   it.each(['red', 'blue'] as const)('returns %s NECTAR to its own loading zone before unlock, even with no stash', alliance => {
     const s = new Sim(RAPIER, undefined, 'full'); s.start();
     s.stash[alliance] = 0;
@@ -112,6 +112,30 @@ describe('out-of-field returns (TU02 section 10.8.2)', () => {
     expect(s.flowersUnlocked).toBe(false);
     expect(s.stash[alliance]).toBe(0);
     expect(s.balls.size).toBe(count + 4);
+    s.world.free();
+  });
+  it('returns NECTAR that leaves in one step to separate spots in the zone, where it stays', () => {
+    const s = new Sim(RAPIER, undefined, 'practice'), zone = FIELD.loadingZone.red;
+    const balls = [0, 1, 2].map(i => s.spawn('nectar_red', 2.2, 0.3, -0.2 * i));
+    for (let k = 0; k < 250; k++) s.step({ ...NO_INPUT, intake: 'none' }); // 1 s
+    const ps = balls.map(b => b.body.translation());
+    for (const p of ps) { expect(p.x).toBeGreaterThan(zone[0]); expect(p.x).toBeLessThan(zone[1]); expect(p.z).toBeGreaterThan(zone[2]); expect(p.z).toBeLessThan(zone[3]); }
+    for (let i = 0; i < 3; i++) for (let j = i + 1; j < 3; j++) expect(Math.hypot(ps[i].x - ps[j].x, ps[i].z - ps[j].z)).toBeGreaterThan(2 * balls[0].radius);
+    s.world.free();
+  });
+  it('holds NECTAR outside the wall while a robot covers the zone, and enters it after the robot leaves (G427)', () => {
+    const s = new Sim(RAPIER, undefined, 'practice'), zone = FIELD.loadingZone.red, r = s.robots[0].body;
+    const cx = (zone[0] + zone[1]) / 2, cz = (zone[2] + zone[3]) / 2, y = r.translation().y;
+    r.setTranslation({ x: cx, y, z: cz }, true); r.setLinvel({ x: 0, y: 0, z: 0 }, true);
+    const b = s.spawn('nectar_red', 2.2, 0.3, 0);
+    for (let k = 0; k < 50; k++) s.step({ ...NO_INPUT, intake: 'none' });
+    expect(b.body.isEnabled()).toBe(false);
+    expect(Math.abs(b.body.translation().x)).toBeGreaterThan(FIELD.half);
+    r.setTranslation({ x: 0, y, z: 0 }, true);
+    for (let k = 0; k < 50; k++) s.step({ ...NO_INPUT, intake: 'none' });
+    const p = b.body.translation();
+    expect(b.body.isEnabled()).toBe(true);
+    expect(p.x).toBeGreaterThan(zone[0]); expect(p.x).toBeLessThan(zone[1]); expect(p.z).toBeGreaterThan(zone[2]); expect(p.z).toBeLessThan(zone[3]);
     s.world.free();
   });
   it('returns POLLEN near its exit instead of to a loading zone', () => {
