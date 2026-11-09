@@ -1,7 +1,7 @@
 import { Defender } from './defend';
 import { TELEOP_TREES, TeleopProgram } from './driver';
 import { Executor } from './executor';
-import { AUTO_TREES, AutoProgram, SOLO_AUTO, autoFor } from './onboard';
+import { AUTO_PROBLEMS, AUTO_TREES, AutoProgram, SOLO_AUTO, autoFor } from './onboard';
 import { Recorder, type TreeDef } from '../bt';
 import { NO_INPUT, type Inputs, type Sim } from '../sim/world';
 
@@ -40,9 +40,10 @@ export class Coach {
   /** Gets the inputs for one physics step. Call it once per step while a program drives. */
   update(sim: Sim, dt: number): Inputs {
     // AUTO runs a tree in the onboard environment: poses, open-loop shots, and the camera, with no view of the balls or
-    // other robots. An unknown id runs the solo tree.
+    // other robots. An unknown id runs the solo tree. A draft with problems doesn't run, and the robot stays still.
     if (sim.phase === 'auto') {
       const name = this.autoOverride ?? autoFor(sim, this.autoRoutine);
+      if (AUTO_PROBLEMS[name]) return NO_INPUT;
       if (!this.auto || this.autoName !== name) { this.autoName = name; this.auto = new AutoProgram(AUTO_TREES[name] ?? AUTO_TREES[SOLO_AUTO], this.recorder()); }
       return this.auto.update(sim, dt);
     }

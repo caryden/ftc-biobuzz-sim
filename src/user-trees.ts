@@ -13,12 +13,16 @@ function read(): Record<string, unknown> {
 }
 function write(all: Record<string, unknown>) { try { localStorage.setItem(KEY, JSON.stringify(all)); } catch { /* The tree lasts for this page only. */ } }
 
-/** Adds the saved trees to `AUTO_TREES`. A saved tree that no longer loads, for example after a leaf changed, is left out and stays saved. Returns the ids added. */
+/**
+ * Adds the saved trees to `AUTO_TREES`. A saved tree with problems, for example after a leaf changed, is added as a draft
+ * with its problems in `AUTO_PROBLEMS`, and doesn't run. A saved value that isn't a tree is left out and stays saved.
+ * Returns the ids added.
+ */
 export function loadUserTrees(): string[] {
   const ids: string[] = [];
   for (const [id, src] of Object.entries(read())) {
     if (BUILT_IN_AUTO.has(id)) continue;
-    try { ids.push(addAutoTree(src).id); } catch (e) { console.warn(`The saved AUTO tree '${id}' doesn't load:`, e); }
+    try { ids.push(addAutoTree(src, true).id); } catch (e) { console.warn(`The saved AUTO tree '${id}' doesn't load:`, e); }
   }
   return ids;
 }

@@ -65,10 +65,22 @@ interface Ctx { path: string; depth: number; input: Type; bindings: ReadonlyMap<
  * @throws TreeLoadError If the file has any problem. The error lists all of them.
  */
 export function loadTree(source: unknown, reg: Registry, limits: Partial<Limits> = {}): TreeDef {
+  const r = checkTree(source, reg, limits);
+  if (r.issues.length || !r.def) throw new TreeLoadError(r.issues);
+  return r.def;
+}
+
+/**
+ * Checks and compiles a tree file, and returns the tree even when it has problems, for an editor that shows a draft.
+ * In a tree with problems, a node that didn't compile is a placeholder that fails when it runs, and an expression that
+ * didn't compile gives null. So a host must not run such a tree. `def` is null only when the file isn't an object or
+ * names no known environment.
+ */
+export function checkTree(source: unknown, reg: Registry, limits: Partial<Limits> = {}): { def: TreeDef | null; issues: LoadIssue[] } {
   const lim = { ...DEFAULT_LIMITS, ...limits }, issues: LoadIssue[] = [];
   const issue = (path: string, message: string) => { issues.push({ path, message }); };
   const fns: Record<string, FnSpec> = { ...MATH_FNS, ...reg.fns };
-  if (!isObj(source)) throw new TreeLoadError([{ path: 'tree', message: 'a tree file must be a JSON object' }]);
+  if (!isObj(source)) return { def: null, issues: [{ path: 'tree', message: 'a tree file must be a JSON object' }] };
   for (const k of Object.keys(source)) if (!['kind', 'id', 'name', 'env', 'description', 'meta', 'defs', 'root'].includes(k)) issue('tree', `unknown field '${k}'`);
   if (source.kind !== 'bt.tree') issue('tree', "'kind' must be \"bt.tree\"");
   const id = typeof source.id === 'string' && TREE_ID.test(source.id) ? source.id : (issue('tree', "'id' must be 1 to 64 lowercase letters, digits, and '-', starting with a letter or digit"), '');
@@ -77,7 +89,7 @@ export function loadTree(source: unknown, reg: Registry, limits: Partial<Limits>
   const envType = reg.envs[envName];
   if (!envType || envType.kind !== 'object') {
     issue('tree', `'env' must be one of ${Object.keys(reg.envs).map(e => `"${e}"`).join(', ')}`);
-    throw new TreeLoadError(issues);
+    return { def: null, issues };
   }
   const envFields = envType.fields;
   if (source.description !== undefined && typeof source.description !== 'string') issue('tree', "'description' must be a string");
@@ -338,8 +350,52 @@ export function loadTree(source: unknown, reg: Registry, limits: Partial<Limits>
 
   if (!('root' in source)) issue('tree', "'root' is required");
   const root = build(source.root, { path: '', depth: 1, input: t.any(), bindings: new Map(), inChain: false }, 'root', 0, true);
-  if (issues.length) throw new TreeLoadError(issues);
-  return { id, name, env: envName, description: source.description as string | undefined, meta: isObj(source.meta) ? source.meta : {}, root, nodeCount: count, defs, defNames };
+  return { def: { id, name, env: envName, description: source.description as string | undefined, meta: isObj(source.meta) ? source.meta : {}, root, nodeCount: count, defs, defNames }, issues };
+}
+
+/**
+ * The names that one expression in a tree can use, for an editor that checks and completes an expression as you type:
+ * the environment's fields, the tree's definitions with their types, and the functions. A node's own bindings and
+ * `input` aren't in it.
+ */
+export interface ExprContext {
+  env: Type & { kind: 'object' };
+  defs: readonly { name: string; type: Type }[];
+  fns: Readonly<Record<string, FnSpec>>;
+  /** The definitions after the one being written, which it can't use. The checker names them in its message. */
+  later?: readonly string[];
+}
+
+/**
+ * Gets the names that an expression in `def` can use. A definition can use only the definitions before it, as the
+ * loader compiles them, so `before` limits the definitions to the ones ahead of that name.
+ * @throws Error If the registry has no environment `envName`.
+ */
+export function exprContext(reg: Registry, envName: string, def: TreeDef | null, before?: string): ExprContext {
+  const env = reg.envs[envName]; if (!env || env.kind !== 'object') throw new Error(`no environment '${envName}'`);
+  const names = def?.defNames ?? [], stop = before === undefined ? -1 : names.indexOf(before);
+  const end = stop < 0 ? names.length : stop;
+  const defs = names.slice(0, end).map((name, i) => ({ name, type: def!.defs[i].type }));
+  return { env, defs, fns: { ...MATH_FNS, ...reg.fns }, later: names.slice(end + 1) };
+}
+
+/**
+ * Checks one expression, as the loader would: it must parse, name only what `ctx` has, and give the `expected` type.
+ * Returns its type, or the problem and the character position where it starts.
+ */
+export function checkExpr(source: string, ctx: ExprContext, expected?: Type, maxLength = DEFAULT_LIMITS.maxExpr): { type: Type } | { message: string; pos: number } {
+  const defs = new Map(ctx.defs.map(d => [d.name, d.type]));
+  const scope: StaticScope<unknown> = {
+    fns: ctx.fns,
+    lookup: n => { const type = defs.get(n) ?? ctx.env.fields[n]; return type ? { type, get: () => null } : undefined; },
+  };
+  try { return { type: compile(source, scope, expected, maxLength).type }; }
+  catch (e) {
+    if (!(e instanceof ExprError)) throw e;
+    const name = /^unknown name '(\w+)'$/.exec(e.reason)?.[1];
+    if (name && ctx.later?.includes(name)) return { message: `'${name}' is defined later, and a definition can use only the ones before it`, pos: e.pos };
+    return { message: e.reason, pos: e.pos };
+  }
 }
 
 /** Describes a node's settings in a few words, for a tree view. Expressions are shown as they are written. */

@@ -137,6 +137,7 @@ Transit is about 73% of TELEOP. The changes that paid were the ones that removed
 | `e94-editor-flow` | The AUTO editor makes plans with **Create new**, and the tree files lose `meta.partner`, which no code read | 817 ± 9.3 | Identical to e90 on every seed. |
 | `e95-random-cell-check` | The code of e96 with `RANDOM_CELL=1`, which restores the random CELL NECTAR of e49 to e94 | 817 ± 9.3 | The reference for e96. Identical to e94 on every seed. |
 | `e96-placed-cell-nectar` | A setup change, not a planner change. The three NECTAR in each raised CELL start at the CAD staging spots again: in a row against the back skin, packed against the side wall nearest their own ALLIANCE AREA. The Event Field Setup Guide, section 11.1, and the Competition Manual, section 10.3.1, place them there (#22). | 819 ± 7.0 | Kept, because it follows the rules. +1.9 ± 12.3 against e95, which is noise. AUTO points 172.2, against 177.0 in e95. A rerun of 14 design setups on 96 seeds found no setup that moved by more than 1.2 standard errors: see `cell-layout-check.md`. |
+| `e97-editor-forms` | The AUTO editor's settings panel: the coach doesn't run an AUTO draft that has problems, and the AUTO plans read `field.hiveX`, `field.flowerNear`, and `field.flowerFar` from the environment, where each plan had its own `hiveX` and bare numbers | 819 ± 7.0 | Identical to e96 on every seed. |
 
 Net for the planner: 736 to 800 combined on the default robots, or about +32 per alliance. The standard error of that difference is about 11.
 

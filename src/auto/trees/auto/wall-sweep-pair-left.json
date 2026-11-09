@@ -11,16 +11,15 @@
   "full": "bots.me.transfer.full",
   "len": "bots.me.dimensions.length",
   "flip": "if(bots.me.shooter.facing == 'front', 180, 0)",
-  "hiveX": "-0.3237",
   "stand": "len / 2 + field.flowerHalfSize + 0.02",
-  "rearFlower": "pose(-0.5942, 1.7282 - stand, 90)",
+  "rearFlower": "pose(-field.flowerNear, field.flowerFar - stand, 90)",
   "park": "pose(-(field.half - len / 2 - 0.09), 0.8954, 180)",
-  "angledRear": "pose(hiveX - 0.62, 1.17, 129.4 + flip)",
+  "angledRear": "pose(field.hiveX - 0.62, 1.17, 129.4 + flip)",
   "parkLeft": "pose(park.x, 0.8954 + 0.33, park.headingDeg)",
   "wallStand": "field.half - len / 2 - 0.035",
   "yaw": "rad(30)",
   "wallReach": "field.half - (len / 2) * sin(yaw) - (len / 2) * cos(yaw) - 0.015",
-  "leftSweepFrom": "-(field.flowerHalfSize + 0.5942 + (len / 2) * cos(yaw) + (len / 2) * sin(yaw) + 0.03)"
+  "leftSweepFrom": "-(field.flowerHalfSize + field.flowerNear + (len / 2) * cos(yaw) + (len / 2) * sin(yaw) + 0.03)"
  },
  "root": {
   "sequence": {
@@ -195,7 +194,7 @@
                     "id": "s12",
                     "ref": "drive.driveTo",
                     "params": {
-                     "pose": "pose(hiveX + 0.03, 1.28, 90 + flip)",
+                     "pose": "pose(field.hiveX + 0.03, 1.28, 90 + flip)",
                      "timeoutSec": 2.5
                     }
                    }
@@ -217,7 +216,7 @@
                     "id": "s13",
                     "ref": "drive.driveTo",
                     "params": {
-                     "pose": "pose(hiveX + 0.03, wallStand, 90 + flip)",
+                     "pose": "pose(field.hiveX + 0.03, wallStand, 90 + flip)",
                      "timeoutSec": 2
                     }
                    }
