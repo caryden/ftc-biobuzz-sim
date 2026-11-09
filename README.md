@@ -45,6 +45,7 @@ You need Node.js 20 or later.
 | Gear icon, or a right-click on a robot | Open the robot config |
 | Enter, R, C, M, V | Start, reset, change the camera, mark a moment, and review the match |
 | Space, left arrow, right arrow | Play or pause, and go to the previous or the next mark |
+| Drag, and scroll or pinch | In the **Orbit** camera, rotate the view and zoom |
 
 To run the tests, run `npm test`. They cover the HIVE calibration, the drivetrain, the behavior-tree runtime, the AUTO trees, the referee, and
 full scripted matches, without a browser.
