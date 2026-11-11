@@ -549,11 +549,42 @@ export class Sim {
     for (const b of this.balls.values()) {
       const p = b.body.translation();
       if (Math.abs(p.x) > FIELD.half + 0.05 || Math.abs(p.z) > FIELD.half + 0.05 || p.y < -0.2) {
-        // FIELD STAFF return SCORING ELEMENTS that leave the FIELD (section 10.8.2).
-        const nx = Math.max(-1.5, Math.min(1.5, p.x)), nz = Math.max(-1.5, Math.min(1.5, p.z));
-        b.body.setTranslation({ x: nx, y: 0.2, z: nz }, true); b.body.setLinvel({ x: 0, y: 0, z: 0 }, true); b.airborne = false; this.touch();
+        // Competition Manual section 10.8.2: FIELD STAFF return POLLEN near its exit. NECTAR goes to its own DRIVE
+        // TEAM, who may enter it again at any time (G426) through their LOADING ZONE, so that it touches the TILE
+        // there before a ROBOT (G427). It doesn't count against the stash.
+        // ASSUMPTION: the DRIVE TEAM enters it at once, on a free spot of the zone. With no free spot, for example
+        // while a ROBOT sits in the zone, they hold it outside the wall, and the next step tries again.
+        const zone = b.kind === 'pollen' ? null : FIELD.loadingZone[b.kind === 'nectar_red' ? 'red' : 'blue'];
+        const spot = zone ? this.freeLoadingSpot(b, zone) : { x: Math.max(-1.5, Math.min(1.5, p.x)), z: Math.max(-1.5, Math.min(1.5, p.z)) };
+        if (!spot) {
+          // The held NECTAR wait in a row along the wall, one ball apart, so that they draw apart.
+          const cz = (zone![2] + zone![3]) / 2, side = Math.sign(zone![0] + zone![1]);
+          const held = [...this.balls.values()].filter(o => o.kind === b.kind && !o.body.isEnabled()).length;
+          if (b.body.isEnabled()) { b.body.setEnabled(false); b.body.setTranslation({ x: side * (FIELD.half + 0.15), y: 0.6, z: cz + held * 2.2 * b.radius }, true); this.touch(); }
+          continue;
+        }
+        b.body.setEnabled(true);
+        b.body.setTranslation({ x: spot.x, y: zone ? b.radius + 0.002 : 0.2, z: spot.z }, true);
+        b.body.setLinvel({ x: 0, y: 0, z: 0 }, true); b.body.setAngvel({ x: 0, y: 0, z: 0 }, true);
+        b.body.resetForces(true); b.body.resetTorques(true); b.airborne = false; this.touch();
       }
     }
+  }
+
+  /**
+   * Finds a spot for a returned NECTAR on the TILE in a LOADING ZONE, clear of every robot and every ball on the floor,
+   * nearest the zone's center. The spots are a grid one ball and two gaps apart, so that a ball on one spot leaves the
+   * spots next to it free. Returns null if the zone has no free spot.
+   */
+  private freeLoadingSpot(b: Ball, zone: readonly number[]): { x: number; z: number } | null {
+    const r = b.radius, gap = 0.01, cx = (zone[0] + zone[1]) / 2, cz = (zone[2] + zone[3]) / 2, spots: { x: number; z: number }[] = [];
+    for (let x = zone[0] + r + gap; x <= zone[1] - r - gap; x += 2 * r + 2 * gap) for (let z = zone[2] + r + gap; z <= zone[3] - r - gap; z += 2 * r + 2 * gap) spots.push({ x, z });
+    spots.sort((p, q) => Math.hypot(p.x - cx, p.z - cz) - Math.hypot(q.x - cx, q.z - cz));
+    // A ball above 0.5 m is in flight, or on top of a FIELD element, and doesn't block the TILE.
+    const floor = [...this.balls.values()].filter(o => o !== b && o.body.isEnabled()).map(o => ({ p: o.body.translation(), r: o.radius })).filter(o => o.p.y < 0.5);
+    const robots = this.robots.map((_, k) => this.view(k));
+    return spots.find(s => floor.every(o => Math.hypot(o.p.x - s.x, o.p.z - s.z) > o.r + r + gap)
+      && robots.every(v => { const q = v.toRobot(s.x, s.z); return Math.abs(q.f) > v.cfg.length / 2 + r + gap || Math.abs(q.l) > v.cfg.width / 2 + r + gap; })) ?? null;
   }
 
   /** Assesses a FOUL against an alliance: the points go to the opponent (section 10.6). MAJOR is 20, MINOR is 5. */
