@@ -49,7 +49,8 @@ export interface TreeDef {
   defNames: readonly string[];
 }
 
-const NODE_KINDS = ['sequence', 'fallback', 'parallel', 'chain', 'guard', 'timeout', 'retry', 'repeat', 'cooldown', 'hold', 'ensure', 'recover', 'map', 'matches', 'bind', 'validate', 'condition', 'ref'] as const;
+/** The node types of a tree file, each the key that names a node's type. */
+export const NODE_KINDS = ['sequence', 'fallback', 'parallel', 'chain', 'guard', 'timeout', 'retry', 'repeat', 'cooldown', 'hold', 'ensure', 'recover', 'map', 'matches', 'bind', 'validate', 'condition', 'ref'] as const;
 const VALIDATE_TYPES: Record<string, Type> = { number: t.number(), string: t.string(), boolean: t.boolean(), list: t.array(t.any()), object: t.object({}) };
 const NAME = /^[A-Za-z_][A-Za-z0-9_]*$/;
 const ID = /^[A-Za-z0-9_-]{1,64}$/;

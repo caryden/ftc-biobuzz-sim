@@ -75,10 +75,11 @@ export class TreePanel {
         + (edit?.changed?.has(n.path) ? ' chg' : edit?.changed && [...edit.changed].some(p => p.startsWith(`${n.path}/`)) ? ' chg2' : '')
         + (edit?.problems?.has(n.path) ? ' bad' : '');
       // A single child's path segment is its parent's key, such as `child`, which says nothing, so it isn't shown.
-      const name = n.leaf ? n.label.replace(/^(auto|teleop)\./, '') : n.kind, id = segment(n), idText = id !== n.kind && id !== n.label && !['child', 'cleanup', 'otherwise'].includes(id) ? id : '';
+      // An id that the field editor made, such as `n3`, says nothing to a reader, so it isn't shown either.
+      const name = n.leaf ? n.label.replace(/^(auto|teleop)\./, '') : n.kind, id = segment(n), idText = id !== n.kind && id !== n.label && !['child', 'cleanup', 'otherwise'].includes(id) && !/^n\d+$/.test(id) ? id : '';
       const result = running ? 'running' : code === undefined ? '' : code === 's' ? 'done' : code.startsWith('f:') ? code.slice(2) || 'failed' : code === 'h' ? 'halted' : 'error';
       if (running) deepest = n.path;
-      rows.push(`<div class="tv ${cls}" data-path="${esc(n.path)}" style="padding-left:${6 + depth * 12}px"${n.note || n.detail ? ` title="${esc([n.detail, n.note].filter(Boolean).join('\n\n'))}"` : ''}>`
+      rows.push(`<div class="tv ${cls}" data-path="${esc(n.path)}"${edit?.canAdd && depth > 0 ? ' draggable="true"' : ''} style="padding-left:${6 + depth * 12}px"${n.note || n.detail ? ` title="${esc([n.detail, n.note].filter(Boolean).join('\n\n'))}"` : ''}>`
         // The result comes before the settings, so that a long setting can't hide it.
         + `<b class="${n.leaf ? 'leaf' : ''}">${esc(name)}</b>${idText ? ` <i>${esc(idText)}</i>` : ''}${result ? ` <em>${esc(result)}</em>` : ''}`
         + `${n.detail ? ` <span class="d">${esc(n.detail)}</span>` : ''}</div>`);

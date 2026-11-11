@@ -10,6 +10,7 @@ import { Referee } from './ref/referee';
 import { Review, clockText, type SystemMark } from './review';
 import { TraceRecorder } from './trace';
 import { Inspector } from './render/inspector';
+import { PALETTE } from './auto/palette';
 import { LiveTreeState, TreePanel, treeStateAt } from './render/tree-view';
 import { TELEOP_TREES } from './auto/driver';
 import { CAMERAS, View, type CameraMode } from './render/view';
@@ -296,6 +297,10 @@ addEventListener('keydown', e => {
   if (!editor.active || !editor.editing || (e.target as HTMLElement).closest?.('input, textarea, select, [contenteditable="true"]')) return;
   if ((e.key === 'Delete' || e.key === 'Backspace') && editor.selectedLink) { e.preventDefault(); editor.deleteLink(); return; }
   if ((e.key === 'Delete' || e.key === 'Backspace') && editor.selectedRef) { e.preventDefault(); editor.deleteRef(); return; }
+  // With a node selected and nothing else, Delete deletes it, and Alt+Up and Alt+Down move it. The keys stop here, so
+  // that the page doesn't also read the arrows.
+  if ((e.key === 'Delete' || e.key === 'Backspace') && editor.selected && editor.selected !== 'root') { e.preventDefault(); e.stopPropagation(); editor.deleteSelected(); return; }
+  if (e.altKey && (e.key === 'ArrowUp' || e.key === 'ArrowDown') && editor.selected) { e.preventDefault(); e.stopPropagation(); editor.moveSelected(e.key === 'ArrowUp' ? -1 : 1); return; }
   const z = e.key === 'z' || e.key === 'Z';
   if ((e.metaKey || e.ctrlKey) && z) { e.preventDefault(); if (e.shiftKey) editor.redo(); else editor.undo(); }
   else if (e.ctrlKey && e.key === 'y') { e.preventDefault(); editor.redo(); }
@@ -321,6 +326,49 @@ $('treebody').addEventListener('click', e => {
   if (t.closest('.tv[data-adddef]')) { editor.startAddDef(); return; }
   const row = t.closest<HTMLElement>('.tv[data-path]'); if (row) editor.select(row.dataset.path!);
 });
+// A right-click on a tree row opens the structure menu for that node, while you edit a plan.
+$('treebody').addEventListener('contextmenu', e => {
+  if (!editor.active || !editor.editing) return;
+  const row = (e.target as HTMLElement).closest<HTMLElement>('.tv[data-path]'); if (!row) return;
+  e.preventDefault(); const path = row.dataset.path!; editor.select(path);
+  const pos = editor.positionOf(path), can = editor.canMove(), root = path === 'root';
+  const item = (act: string, label: string, ok = true) => `<button data-tv="${act}"${ok ? '' : ' disabled'}>${label}</button>`;
+  const menu = $('tvmenu');
+  menu.innerHTML = item('after', 'Add after…', !!pos) + item('inside', 'Add inside…', editor.holdsList(path))
+    + editor.wraps.map(w => item(`wrap:${w}`, `Wrap in ${w}`)).join('')
+    + item('up', 'Move up', can.up) + item('down', 'Move down', can.down) + item('delete', 'Delete', !root);
+  menu.style.left = `${e.clientX}px`; menu.style.top = `${e.clientY}px`; menu.classList.remove('hidden');
+  const box = menu.getBoundingClientRect();
+  if (box.bottom > innerHeight - 4) menu.style.top = `${Math.max(4, e.clientY - box.height)}px`;
+});
+addEventListener('pointerdown', e => { if (!(e.target as HTMLElement).closest?.('#tvmenu')) $('tvmenu').classList.add('hidden'); }, true);
+$('tvmenu').addEventListener('click', e => {
+  const act = (e.target as HTMLElement).closest<HTMLButtonElement>('[data-tv]')?.dataset.tv; if (!act) return;
+  $('tvmenu').classList.add('hidden'); const path = editor.selected;
+  if (act === 'after' || act === 'inside') editor.openPalette(path, act);
+  else if (act.startsWith('wrap:')) editor.wrapSelected(act.slice(5));
+  else if (act === 'up' || act === 'down') editor.moveSelected(act === 'up' ? -1 : 1);
+  else if (act === 'delete') editor.deleteSelected();
+});
+// Dragging a tree row moves its node. A line shows where it lands: before or after a row, or, over the middle of a
+// container's row, at the end of that container. A node can't land inside itself.
+let dragging: string | null = null, dropAt: { parent: string; index?: number } | null = null;
+const clearDrop = () => { for (const r of Array.from($('treebody').querySelectorAll('.drop-before, .drop-after, .drop-in'))) r.classList.remove('drop-before', 'drop-after', 'drop-in'); };
+$('treebody').addEventListener('dragstart', e => {
+  const row = (e.target as HTMLElement).closest<HTMLElement>('.tv[data-path]'); if (!row || !editor.editing) return;
+  dragging = row.dataset.path!; e.dataTransfer?.setData('text/plain', dragging); if (e.dataTransfer) e.dataTransfer.effectAllowed = 'move';
+});
+$('treebody').addEventListener('dragover', e => {
+  const row = (e.target as HTMLElement).closest<HTMLElement>('.tv[data-path]'); if (!dragging || !row) return;
+  const path = row.dataset.path!; clearDrop(); dropAt = null;
+  if (path === dragging || path.startsWith(`${dragging}/`)) return;
+  const r = row.getBoundingClientRect(), y = (e.clientY - r.top) / r.height, pos = editor.positionOf(path);
+  if (editor.holdsList(path) && (y > 0.3 && y < 0.7 || !pos)) { dropAt = { parent: path }; row.classList.add('drop-in'); }
+  else if (pos) { dropAt = { parent: pos.parent, index: y < 0.5 ? pos.index : pos.index + 1 }; row.classList.add(y < 0.5 ? 'drop-before' : 'drop-after'); }
+  if (dropAt) { e.preventDefault(); if (e.dataTransfer) e.dataTransfer.dropEffect = 'move'; }
+});
+$('treebody').addEventListener('drop', e => { e.preventDefault(); clearDrop(); if (dragging && dropAt) editor.moveTo(dragging, dropAt.parent, dropAt.index); dragging = null; dropAt = null; });
+$('treebody').addEventListener('dragend', () => { clearDrop(); dragging = null; dropAt = null; });
 // The settings panel: the plan's problems, the selected step's parameters, and the definitions.
 const inspector = new Inspector($('aeinsp'), {
   setParam: (path, key, text) => editor.setParamText(path, key, text),
@@ -329,6 +377,13 @@ const inspector = new Inspector($('aeinsp'), {
   cancelAdd: () => editor.cancelAddDef(),
   deleteDef: name => editor.deleteRef(name),
   selectNode: path => editor.select(path),
+  setControl: (path, key, text) => editor.setControlText(path, key, text),
+  openPalette: () => editor.openPalette(),
+  closePalette: () => editor.closePalette(),
+  addItem: id => editor.addFromPalette(id),
+  deleteNode: () => editor.deleteSelected(),
+  move: delta => editor.moveSelected(delta),
+  wrap: kind => editor.wrapSelected(kind),
   selectDef: name => editor.selectRef(name),
 });
 /** Draws the editor bar: the tree, the selected step's pose, and the buttons. */
@@ -345,8 +400,9 @@ function paintEditor() {
   status.classList.toggle('warn', !!wrong || bad > 0);
   status.textContent = !def ? '' : wrong ? `This plan is for the ${wrong} start position.` : editor.isUserPlan ? `${editor.editing ? 'Your plan · editing' : 'Your plan'}${changes}${problems}` : 'System plan · read-only';
   const insp = $('aeinsp'); insp.classList.toggle('hidden', !def);
-  if (def) inspector.paint({ editing: editor.editing, problems: editor.problems, path: editor.selected, node: editor.selectedNode(), fields: editor.fields(), def: editor.selectedDef(), adding: editor.addingDef, ctx: before => editor.exprContext(before), valueOf: path => editor.valueOf(path) },
-    `${def.id}:${editor.robot}|${editor.rev}|${editor.selected}|${editor.editing}|${editor.selectedRef}|${editor.addingDef}`);
+  if (def) inspector.paint({ editing: editor.editing, problems: editor.problems, path: editor.selected, node: editor.selectedNode(), fields: editor.fields(), def: editor.selectedDef(), adding: editor.addingDef, ctx: before => editor.exprContext(before), valueOf: path => editor.valueOf(path),
+    controls: editor.controls(), palette: editor.palette ? { where: editor.paletteWhere(), items: PALETTE } : null, wraps: editor.wraps, canMove: editor.canMove() },
+    `${def.id}:${editor.robot}|${editor.rev}|${editor.selected}|${editor.editing}|${editor.selectedRef}|${editor.addingDef}|${editor.palette?.path}:${editor.palette?.mode}`);
   $<HTMLButtonElement>('aeundo').disabled = !editor.canUndo; $<HTMLButtonElement>('aeredo').disabled = !editor.canRedo;
   $('aeframe').textContent = 'Red alliance frame: +x toward the blue wall, +y toward the rear wall. Blue robots run this tree rotated 180°.';
   // The bar cuts long lines short, so each line's tooltip holds the whole text.

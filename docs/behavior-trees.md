@@ -629,6 +629,36 @@ A number field, an expression field, and a definition's field are CodeMirror 6 f
 checker. CodeMirror is a separate file of the build, 340 kB, or 112 kB compressed, which the page loads the first time
 that the panel shows an expression field. If it doesn't load, for example offline, the fields stay plain text fields.
 
+### Structure editing
+
+While you edit a plan, the structure actions are in two places: a right-click on a tree row opens a menu, and the
+settings panel has a toolbar above the selected node. The actions are as follows:
+
+- **Add.** **+ Add** opens a palette in the settings panel. A node goes after the selected node, or at the end of a
+  selected container, such as a `sequence`. **Add after…** and **Add inside…** in the menu say which. The palette has
+  the leaves by subsystem, the control nodes, and three templates: **collect**, which drives to a pose with the intake on
+  until the transfer is full, **sweep**, which follows a path the same way, and **launch**, which drives to a pose and
+  launches. A search field filters the palette. A new drive step starts at the pose of the drive step before it, so it
+  shows on the FIELD, ready to drag. The new node is selected.
+- **Delete.** **Delete**, in the toolbar or the menu, or the Delete key, deletes the selected node and everything under
+  it.
+- **Move.** Drag a row: a line shows where it lands, before or after a row, and over the middle of a container's row, the
+  container lights up, and the node goes at its end. A node can't land inside itself. Alt+Up and Alt+Down, and ↑ and ↓
+  in the toolbar, move it one place among its siblings.
+- **Wrap.** **Wrap in…** puts the selected node inside a new `sequence`, `parallel`, `fallback`, `timeout`, or `guard`.
+- **Settings.** A control node's settings have fields, as a leaf's parameters do: a `parallel` node's `policy`, a
+  `timeout` node's `sec`, a `guard` node's `when`, and the rest. A number setting also takes an expression.
+
+Each action is one step of undo. A structure that the loader rejects, such as a container with no children, or two
+children of a `parallel` node that both command the drive, is a problem of the draft until it's fixed.
+
+A node's path names it by its id, or by `INDEX.LABEL` when it has none, so a node without an id would get a new path
+when a sibling before it moves. A plan that you make gets an id on every node in a list, such as `n3`, and a plan made
+earlier gets its ids the first time that the editor shows it. The ids come from the structure alone, in tree order, so
+the source plan gets the same ones, and the change marks still match. The tree view doesn't show an id of the form `n3`.
+`src/auto/structure.ts` holds the structure edits and `src/auto/palette.ts` the palette, with no DOM, and
+`test/structure.test.ts` runs them.
+
 ## Code leaves in a sandbox
 
 A leaf that a user writes runs in QuickJS, a JavaScript engine that is compiled to WebAssembly. The page calls it
@@ -858,9 +888,10 @@ tree in the page. Each increment is one pull request.
    - **Expression fields. Done.** An expression field uses CodeMirror 6, which loads only with the editor:
      highlighting, completion from the environment schema, the tree's definitions, and the FIELD constants, and the
      checker's problems as you type. See [Expression fields](#expression-fields). No match code changed.
-10. **Structure editing.** Insert a node from a palette of the node types and the AUTO leaves, with templates such as
-    the sweep. Delete a node and its subtree, reorder by drag-and-drop, and wrap a node in a sequence, a parallel, or a
-    fallback.
+10. **Structure editing. Done.** A palette adds the AUTO leaves, the control nodes, and templates such as the sweep. A
+    node can be deleted with its subtree, moved by dragging its row or with Alt+Up and Alt+Down, and wrapped in a
+    sequence, a parallel, a fallback, a timeout, or a guard. The control nodes' settings, such as a `parallel` node's
+    policy, have forms. See [Structure editing](#structure-editing). No match code changed.
 11. **Run and scrub in the editor.** A quick run plays AUTO only, with all four robots, in a Web Worker, and records a
     trace. The editor reuses the review scrubber and the tree view at the cursor. A timeline shows both red robots'
     steps on one clock, because partners coordinate by the clock and the camera.
