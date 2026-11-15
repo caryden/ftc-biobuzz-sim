@@ -127,6 +127,9 @@
   input[type=number] { background: #232831; color: var(--fg); border: 1px solid var(--line); border-radius: 6px; padding: 4px 8px; font: inherit; }
   .errhead { display: flex; justify-content: space-between; align-items: center; margin: 8px 0 2px; color: var(--fg); font-size: 12px; } .chips { display: flex; gap: 4px; } .chips button { width: auto; margin: 0; padding: 2px 9px; border-radius: 999px; font-size: 11px; }
   /* The tree view: the chosen robot's behavior tree as an outline. It sits on the left, under the control bar and the score. */
+  #robotcam { right: 12px; bottom: 12px; width: 344px; z-index: 3; } body.editing #robotcam { display: none; }
+  .rchead { display: flex; justify-content: space-between; align-items: baseline; } #rcplate { color: var(--fg); font-weight: 600; margin-left: 4px; } #rcstat { color: var(--dim); font-size: 11px; }
+  .rcview { position: relative; width: 320px; height: 240px; border-radius: 6px; overflow: hidden; background: #000; } .rcview canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
   #tree { left: 12px; width: 360px; display: flex; flex-direction: column; font: 11.5px/1.45 ui-monospace, SFMono-Regular, Menlo, monospace; padding: 8px 10px; }
   #treebody { flex: 1; min-height: 0; overflow: auto; }
   #tree h2 { font-family: ui-sans-serif, system-ui, sans-serif; margin-bottom: 4px; } #treebots { display: flex; gap: 4px; margin-bottom: 6px; }
@@ -189,6 +192,7 @@
     <label>Units <select id="units"><option value="metric">Metric</option><option value="us">US</option></select></label>
     <label>Sound <select id="sound"><option value="on">On</option><option value="off">Off</option></select></label>
     <label title="Shows a robot's behavior tree: the running nodes, and each other node's last result. It follows the review cursor too.">Tree view <select id="treeview"><option value="off">Off</option><option value="on">On</option></select></label>
+    <label title="Shows what a Limelight on the robot that the view follows would see, with a ring on each POLLEN a detector should report. Save frame downloads the image and its ball labels, for training or testing a detector.">Robot camera <select id="robotcamsel"><option value="off">Off</option><option value="pollen">Pollen camera</option><option value="tags">AprilTag camera</option></select></label>
     <label title="Draws the AUTO plan of the robot that the view follows as a dashed orange line, and the path that the planner drives in blue. The AUTO editor always draws them.">AUTO paths <select id="autopaths"><option value="on">On</option><option value="off">Off</option></select></label>
     <label>Referee <select id="referee"><option value="rule">PINS (G421)</option><option value="off">Off</option></select></label>
   </div></div>
@@ -220,6 +224,7 @@
   <div id="bcnote" style="color:var(--dim);font-size:11px;margin-top:4px"></div>
   <div class="btns"><button id="bcdone" class="primary">Done</button><button id="bcdefault" title="A four-element catapult, 30 cm (12 in.), 7 kg (15.4 lb), 500 rpm, and intakes at both ends.">Meta build</button><button id="bcbaseline" title="The reference robot of the experiments: 38 cm (15 in.), 10 kg (22 lb), 600 rpm, two at a time, and a front intake.">Baseline</button></div>
 </div>
+<div id="robotcam" class="panel hidden"><div class="rchead"><h2>Robot camera <b id="rcplate"></b></h2><span id="rcstat"></span></div><div class="rcview"><canvas id="rcimg"></canvas><canvas id="rcover"></canvas></div><button id="rcsave" title="Downloads this image as PNG and its ball labels as JSON">Save frame</button></div>
 <div id="tree" class="panel hidden"><h2 id="treehead"></h2><div id="treebots"></div><div id="treebody"></div></div>
 <div id="helpbox" class="modal hidden"><div class="panel" role="dialog" aria-modal="true" aria-labelledby="helphead">
   <div class="mhead"><h2 id="helphead">Help</h2><button class="ib" data-close title="Close (Esc)" aria-label="Close"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg></button></div>

@@ -4,6 +4,7 @@ import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { FIELD, HIVE } from '../sim/config';
 import type { RobotConfig } from '../sim/config';
 import { flowerHeights, type BallKind, type Sim } from '../sim/world';
+import type { BallMesh, RobotCamera } from './robot-camera';
 
 const COLOR: Record<BallKind, number> = { pollen: 0xf2c81e, nectar_red: 0xd8261c, nectar_blue: 0x1f4fd8 };
 /** Camera choices available in the selector and through the camera shortcut. */
@@ -51,6 +52,11 @@ export class View {
   private autoPoses = new THREE.Group(); private autoKey = '';
   private arc: THREE.Line; private arcMat = new THREE.LineBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.85 });
   private staticKey = ''; private chaseAngle: number | null = null;
+  /** The robot camera's panel while it is open. It draws after the main view, from the focus robot. */
+  robotCam: RobotCamera | null = null;
+  /** The see-through perimeter panels, which don't block the robot camera's view, and the floor labels it must not see. */
+  private clearMeshes: THREE.Object3D[] = []; private axisLabels: THREE.Object3D[] = [];
+  private lastSim: Sim | null = null;
 
   constructor(canvas: HTMLCanvasElement, private onProgress: (msg: string | null) => void) {
     this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
@@ -120,7 +126,7 @@ export class View {
           if (!m.geometry.getAttribute('normal')) m.geometry.computeVertexNormals();
           // The CAD perimeter panels are opaque. Real panels are clear polycarbonate.
           const mat = m.material as THREE.MeshStandardMaterial;
-          if (o.parent?.name === 'perimeter' || o.name === 'perimeter') { const c = mat.color; if (c.r > 0.4 && c.g > 0.4) { mat.transparent = true; mat.opacity = 0.22; mat.depthWrite = false; } }
+          if (o.parent?.name === 'perimeter' || o.name === 'perimeter') { const c = mat.color; if (c.r > 0.4 && c.g > 0.4) { mat.transparent = true; mat.opacity = 0.22; mat.depthWrite = false; this.clearMeshes.push(m); } }
         }
       });
       this.scene.add(gltf.scene); this.onProgress(null);
@@ -423,7 +429,7 @@ export class View {
       const cv = document.createElement('canvas'); cv.width = 512; cv.height = 96; const g = cv.getContext('2d')!;
       g.fillStyle = 'rgba(233,236,241,0.55)'; g.font = '600 44px ui-monospace, Menlo, monospace'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText(text, 256, 48);
       const m = new THREE.Mesh(new THREE.PlaneGeometry(1.2, 0.225), new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(cv), transparent: true, depthWrite: false }));
-      m.rotation.x = -Math.PI / 2; m.position.set(x, -0.01, z); this.scene.add(m);
+      m.rotation.x = -Math.PI / 2; m.position.set(x, -0.01, z); this.scene.add(m); this.axisLabels.push(m);
     };
     const e = FIELD.half + 0.32;
     label('+x  blue wall', e + 0.35, 0); label('-x  red wall', -e - 0.35, 0); label('-y  audience', 0, e); label('+y  rear', 0, -e);
@@ -444,7 +450,7 @@ export class View {
     const seen = new Set<number>();
     for (const b of sim.balls.values()) {
       let m = this.ballMeshes.get(b.id);
-      if (!m) { m = new THREE.Mesh(b.kind === 'pollen' ? this.ballGeo.pollen : this.ballGeo.nectar, this.ballMat.get(b.kind)); this.ballMeshes.set(b.id, m); this.scene.add(m); }
+      if (!m) { m = new THREE.Mesh(b.kind === 'pollen' ? this.ballGeo.pollen : this.ballGeo.nectar, this.ballMat.get(b.kind)); m.userData.kind = b.kind; this.ballMeshes.set(b.id, m); this.scene.add(m); }
       const t = b.body.translation(); m.position.set(t.x, t.y, t.z); seen.add(b.id);
       // The ball turns with its physics body, so its holes roll. A replayed trace has positions only.
       const q = (b.body as { rotation?: () => { x: number; y: number; z: number; w: number } }).rotation?.(); if (q) m.quaternion.set(q.x, q.y, q.z, q.w);
@@ -454,7 +460,7 @@ export class View {
     const key = sim.flowers.map(f => f.stack.join()).join('|');
     if (key !== this.staticKey) {
       this.staticKey = key; this.staticBalls.clear();
-      for (const f of sim.flowers) { const hs = flowerHeights(f.stack); f.stack.forEach((k, i) => { const r = k === 'pollen' ? FIELD.pollenRadius : FIELD.nectarRadius; const m = new THREE.Mesh(k === 'pollen' ? this.ballGeo.pollen : this.ballGeo.nectar, this.ballMat.get(k)); m.position.set(f.x, hs[i] + r, f.z); this.staticBalls.add(m); }); }
+      for (const f of sim.flowers) { const hs = flowerHeights(f.stack); f.stack.forEach((k, i) => { const r = k === 'pollen' ? FIELD.pollenRadius : FIELD.nectarRadius; const m = new THREE.Mesh(k === 'pollen' ? this.ballGeo.pollen : this.ballGeo.nectar, this.ballMat.get(k)); m.userData.kind = k; m.position.set(f.x, hs[i] + r, f.z); this.staticBalls.add(m); }); }
     }
     // The CAD poses the red HIVE at -30 degrees and the blue HIVE at +30 degrees.
     if (this.hiveNodes.red) this.hiveNodes.red.rotation.x = sim.hives.red.phi + HIVE.tiltLimit;
@@ -492,5 +498,24 @@ export class View {
     if (this.mode !== 'overhead') this.camera.up.set(0, 1, 0);
     this.camera.updateProjectionMatrix();
     this.renderer.render(this.scene, this.camera);
+    this.lastSim = sim;
+    if (this.robotCam) this.drawRobotCamera(sim);
+  }
+
+  /** Renders and labels the robot camera's frame for the snapshot on screen now, and downloads both. */
+  saveRobotCamera() {
+    if (!this.robotCam || !this.lastSim) return;
+    this.drawRobotCamera(this.lastSim, true); this.robotCam.save();
+  }
+
+  /** Draws the focus robot's camera, with the robot itself and every overlay of the page hidden from it. */
+  private drawRobotCamera(sim: Sim, force = false) {
+    const me = (sim as unknown as { me?: number }).me ?? 0, r = sim.robots[me];
+    const hide = [this.robotGroups[me], this.pathLine, this.autoLine, this.autoPoses, this.arc, this.handleGroup, this.refGroup, this.linkGroup, this.gridGroup, this.ghost, this.runner, ...this.axisLabels]
+      .filter((o): o is THREE.Object3D => !!o);
+    const balls: BallMesh[] = [...this.ballMeshes].map(([id, mesh]) => ({ mesh, id, kind: mesh.userData.kind as BallKind, inFlower: false }));
+    this.staticBalls.children.forEach((mesh, k) => balls.push({ mesh, id: 1_000_000 + k, kind: mesh.userData.kind as BallKind, inFlower: true }));
+    const plate = this.plates[me] ?? (r ? `${r.alliance === 'red' ? 'R' : 'B'}${r.slot}` : '');
+    this.robotCam!.update(this.renderer, this.scene, sim, plate, hide, this.clearMeshes, balls, force);
   }
 }

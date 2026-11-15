@@ -14,6 +14,7 @@ import { PALETTE } from './auto/palette';
 import { LiveTreeState, TreePanel, treeStateAt } from './render/tree-view';
 import { TELEOP_TREES } from './auto/driver';
 import { CAMERAS, View, type CameraMode } from './render/view';
+import { RobotCamera, type Mount } from './render/robot-camera';
 import { MATCH, RP } from './sim/config';
 import { fmtPos, getUnits, massFromInput, massToInput, setUnits, sizeFromInput, sizeToInput, speedFromInput, speedToInput, type Units } from './units';
 import { DT, NO_INPUT, Sim, type AllianceScore, type Inputs, type MatchMode } from './sim/world';
@@ -34,6 +35,17 @@ treeSel.onchange = () => { try { localStorage.setItem('biobuzz.treeview', treeSe
 const pathsSel = $<HTMLSelectElement>('autopaths');
 try { pathsSel.value = localStorage.getItem('biobuzz.autopaths') === 'off' ? 'off' : 'on'; } catch { /* Storage is a convenience. */ }
 pathsSel.onchange = () => { try { localStorage.setItem('biobuzz.autopaths', pathsSel.value); } catch { /* Storage is a convenience. */ } pathsSel.blur(); };
+// The robot camera follows the robot that the view follows. It draws after the main view, so it costs a render only
+// while it is open.
+const robotCamSel = $<HTMLSelectElement>('robotcamsel'), robotCam = new RobotCamera($<HTMLCanvasElement>('rcimg'), $<HTMLCanvasElement>('rcover'));
+try { const v = localStorage.getItem('biobuzz.robotcam'); if (v === 'pollen' || v === 'tags') robotCamSel.value = v; } catch { /* Storage is a convenience. */ }
+function paintRobotCam() {
+  const on = robotCamSel.value !== 'off'; $('robotcam').classList.toggle('hidden', !on);
+  view.robotCam = on ? robotCam : null; if (on) robotCam.mount = robotCamSel.value as Mount;
+}
+robotCamSel.onchange = () => { try { localStorage.setItem('biobuzz.robotcam', robotCamSel.value); } catch { /* Storage is a convenience. */ } robotCamSel.blur(); paintRobotCam(); };
+paintRobotCam();
+$('rcsave').onclick = () => { view.saveRobotCamera(); $('rcsave').blur(); };
 let treeRobot = -1; // -1 follows the focus robot.
 // One handler for the robot buttons. The buttons are rebuilt only when the robots or the choice change: a button that is
 // replaced between the press and the release of a click never receives the click.
@@ -454,6 +466,10 @@ function paintTree() {
 
 function hud(pads: Frame['pads']) {
   paintTree();
+  if (view.robotCam) {
+    const n = robotCam.targets;
+    $('rcplate').textContent = bots[focus()]?.plate ?? ''; $('rcstat').textContent = `${n} POLLEN to detect`;
+  }
   // In the review, the scoreboard, the clock, and the score table show the trace frame at the cursor.
   const f = review.frame, r = f ? f.scores?.red ?? null : sim.score('red'), b = f ? f.scores?.blue ?? null : sim.score('blue');
   const totals = f ? f.score : { red: r!.total, blue: b!.total }, phase = (f ? f.phase : sim.phase) as Sim['phase'], clock = f ? f.clock : sim.timer;
