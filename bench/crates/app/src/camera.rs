@@ -414,10 +414,16 @@ pub fn camera_of(state: &State, field: &FieldInfo, optics: &Optics, kind: MountK
 
 /// True for a label the detector is meant to report: floor POLLEN, mostly visible, in range, and not in a FLOWER.
 pub fn is_target(l: &BallLabel, field: &FieldInfo) -> bool {
+    floor_pollen(l, field) && l.in_image >= 0.5
+}
+
+/// Floor POLLEN the detector may report, whether or not most of it is in the image. A detection on one that is mostly
+/// cut off by the image edge is neither a hit nor a false detection.
+fn floor_pollen(l: &BallLabel, field: &FieldInfo) -> bool {
     let on_floor = l.world.y < field.pollen_radius + 0.03;
     let hs = field.flower_half_size;
     let in_flower = field.flowers.iter().any(|f| (l.world.x - f.x).abs() < hs && (l.world.z - f.z).abs() < hs);
-    l.kind == BallKind::Pollen && on_floor && !in_flower && l.visible >= 0.5 && l.in_image >= 0.5 && l.range <= MAX_RANGE
+    l.kind == BallKind::Pollen && on_floor && !in_flower && l.visible >= 0.5 && l.range <= MAX_RANGE
 }
 
 /// A perfect detector: the `llpython` the PROTOCOL says the camera would send for these labels.
@@ -478,7 +484,7 @@ fn score(labels: &[BallLabel], rows: &[LlRow], field: &FieldInfo) -> (Counts, Ve
             }
         }
     }
-    k.false_pos = det_to.iter().filter(|m| m.is_none_or(|l| !is_target(&labels[l], field))).count() as u32;
+    k.false_pos = det_to.iter().filter(|m| m.is_none_or(|l| !floor_pollen(&labels[l], field))).count() as u32;
     (k, calls, det_to)
 }
 
@@ -662,19 +668,20 @@ fn frame(
     let mut tags = Vec::new();
     for (row, m) in rows.iter().zip(&det_to) {
         let good = m.is_some_and(|l| is_target(&out.labels[l], field));
+        let cropped = !good && m.is_some_and(|l| floor_pollen(&out.labels[l], field));
         let held = row.robot_adjacent();
-        let (col, alpha) = match (good, held) {
+        let (col, alpha) = match (good, cropped || held) {
             (true, _) => (GREEN, 1.0),
             (false, true) => (TEXT, 0.6),
             (false, false) => (RED, 1.0),
         };
         overlay.push(Prim::Circle { at: [row.cx, row.cy, row.r], col, alpha, dashed: false, width: if real { 1.5 } else { 1.0 } });
         if real {
-            let what = if held { "held" } else if good { "" } else { "false" };
+            let what = if held { "held" } else if good { "" } else if cropped { "cropped" } else { "false" };
             tags.push(([row.cx + row.r * 0.7 + 3.0, row.cy - row.r * 0.7 - 14.0], format!("{:.2} {what}", row.conf).trim().to_string(), col));
         }
         overlay.push(Prim::Cross { at: [row.cx, row.cy], size: 3.0, col });
-        if !good && !held {
+        if !good && !held && !cropped {
             if let Some(g) = row.ground {
                 false_ground.push(frames::from_field(g));
             }
@@ -751,5 +758,47 @@ pub fn paint_overlay(b: Bounds<Pixels>, scale: f32, prims: &[Prim], window: &mut
                 stroke(window, &[tp(*x, *y - size), tp(*x, *y + size)], c(*col), 1.0);
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn field() -> FieldInfo {
+        serde_json::from_value(serde_json::json!({
+            "half": 1.7929, "pollenRadius": 0.03556, "nectarRadius": 0.04572, "flowerHalfSize": 0.0847,
+            "flowers": [], "hive": { "tiltLimit": std::f32::consts::FRAC_PI_6 }, "robots": []
+        }))
+        .unwrap()
+    }
+
+    fn pollen(id: u32, center: [f32; 2], in_image: f32) -> BallLabel {
+        BallLabel {
+            id,
+            kind: BallKind::Pollen,
+            center,
+            radius: 12.0,
+            bbox: [center[0] - 12.0, center[1] - 12.0, center[0] + 12.0, center[1] + 12.0],
+            range: 1.0,
+            visible: 1.0,
+            in_image,
+            pixels: 400,
+            world: Vec3::new(0.0, 0.0356, 0.0),
+        }
+    }
+
+    fn row(cx: f32, cy: f32) -> LlRow {
+        LlRow { cls: 0, cx, cy, r: 12.0, conf: 0.9, ground: None }
+    }
+
+    #[test]
+    fn a_detection_on_a_cut_off_ball_is_neither_found_nor_false() {
+        let f = field();
+        let labels = [pollen(1, [100.0, 100.0], 1.0), pollen(2, [630.0, 478.0], 0.3)];
+        let (k, calls, _) = score(&labels, &[row(101.0, 100.0), row(629.0, 477.0), row(300.0, 300.0)], &f);
+        assert_eq!((k.targets, k.found, k.missed), (1, 1, 0));
+        assert_eq!(k.false_pos, 1, "only the detection on nothing is false");
+        assert_eq!(calls.len(), 1);
     }
 }

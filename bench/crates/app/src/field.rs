@@ -311,7 +311,7 @@ pub fn paint(p: &Proj, a: &Annotations, window: &mut Window) {
             let corners = robot_corners(r.x, r.z, r.heading, info.length, info.width);
             let pts: Vec<_> = corners.iter().filter_map(|q| p.screen(Vec3::new(q.0, info.height, q.1))).collect();
             if pts.len() == 4 {
-                path(window, &pts, ca(0x2a2d31, 0.92), None, true);
+                path(window, &pts, ca(0x2a2d31, 0.45), None, true);
                 let mut o = pts.clone();
                 o.push(o[0]);
                 path(window, &o, c(alliance(info.red())), Some(2.5), false);
