@@ -351,7 +351,7 @@ pub fn paint(p: &Proj, a: &Annotations, window: &mut Window) {
     }
 
     // The detector's calls on the balls the selected camera can see, and the hovered ball.
-    for &(id, kind, x, y, z) in &s.balls {
+    for &(id, kind, x, y, z, _) in &s.balls {
         let call = a.calls.iter().find(|(i, _)| *i == id).map(|(_, c)| *c);
         let hovered = a.hover_ball == Some(id);
         if call.is_none() && !hovered {

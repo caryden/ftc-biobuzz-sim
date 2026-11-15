@@ -87,7 +87,8 @@ fn ball_partly_behind_another_ball() {
     let front = Ball::new(1, BallKind::NectarRed, Vec3::new(1.0, 0.2, 0.0));
     let back = Ball::new(2, BallKind::Pollen, Vec3::new(1.5, 0.2, 0.05));
     let r = render(&Scene::empty(), &cam, &[front, back], &[], [0.0; 2]);
-    assert_eq!(label(&r, 1).visible, 1.0);
+    // The back ball shows through a few pixels where the front ball's holes line up.
+    assert!(label(&r, 1).visible > 0.99);
     let v = label(&r, 2).visible;
     assert!(v > 0.05 && v < 0.95, "visible {v}");
 }
@@ -180,4 +181,18 @@ fn lit_pollen_lands_in_the_detector_hsv_band() {
 fn scene_is_shareable_across_threads() {
     fn send_sync<T: Send + Sync>() {}
     send_sync::<Scene>();
+}
+
+#[test]
+fn holes_turn_with_the_ball() {
+    // A plain sphere looks the same however it is turned, so any change comes from the holes.
+    let cam = Camera::new(Intrinsics::default(), Vec3::new(0.0, 0.2, 0.0), 0.0, 0.0);
+    let ball = Ball::new(1, BallKind::Pollen, Vec3::new(0.5, 0.2, 0.0));
+    let a = render(&Scene::empty(), &cam, &[ball], &[], [0.0; 2]);
+    let b = render(&Scene::empty(), &cam, &[ball.turned(bench_render::Quat::from_rotation_y(0.3))], &[], [0.0; 2]);
+    let owned = (0..640 * 480).filter(|&i| a.frame.ids[i] == b.frame.ids[i] && a.frame.owner((i % 640) as u32, (i / 640) as u32) == Owner::Ball(0));
+    let (n, changed) = owned.fold((0, 0), |(n, c), i| (n + 1, c + (a.frame.rgb[3 * i..3 * i + 3] != b.frame.rgb[3 * i..3 * i + 3]) as u32));
+    let frac = changed as f32 / n as f32;
+    assert!(frac > 0.1 && frac < 0.6, "{frac:.3} of the ball changed");
+    assert!(label(&a, 1).visible > 0.99, "a hole isn't occlusion");
 }

@@ -27,6 +27,8 @@ impl Tri {
 /// A HIVE mesh in pivot-local coordinates, plus the pivot's node transform from the CAD.
 pub(crate) struct Hive {
     pub tris: Vec<Tri>,
+    /// The CELL skins, which are clear polycarbonate on the real HIVE.
+    pub glass: Vec<Tri>,
     pub pivot: Mat4,
 }
 
@@ -55,7 +57,10 @@ impl Scene {
             };
             if let Some(a) = hive {
                 let owner = Owner::Hive(if a == 0 { Alliance::Red } else { Alliance::Blue }).raw();
-                hives[a] = Some(Hive { tris: triangles(node, Mat4::IDENTITY, owner, |_| false).0, pivot: node.transform });
+                // The CELL skins are the light gray material, 0.791 in linear RGB; the trim, frame and tags stay solid.
+                let skin = |c: [f32; 4]| (c[0] - 0.791).abs() < 0.02 && (c[1] - 0.791).abs() < 0.02 && (c[2] - 0.791).abs() < 0.02;
+                let (tris, glass) = triangles(node, Mat4::IDENTITY, owner, skin);
+                hives[a] = Some(Hive { tris, glass, pivot: node.transform });
                 continue;
             }
             let see_through = |c: [f32; 4]| node.name == "perimeter" && c[0] > 0.4 && c[1] > 0.4;
@@ -74,7 +79,7 @@ impl Scene {
 
     /// A scene with only the floor: no CAD and no HIVE geometry. Useful for tests and for isolating balls.
     pub fn empty() -> Scene {
-        let pivot = |x: f32| Hive { tris: Vec::new(), pivot: Mat4::from_translation(Vec3::new(x, 1.1165, 0.0)) };
+        let pivot = |x: f32| Hive { tris: Vec::new(), glass: Vec::new(), pivot: Mat4::from_translation(Vec3::new(x, 1.1165, 0.0)) };
         Scene { field: Vec::new(), glass: Vec::new(), hives: [pivot(-0.3236), pivot(0.3241)], node_names: Vec::new() }
     }
 
@@ -85,7 +90,7 @@ impl Scene {
 
     /// The number of triangles loaded: solid field, glass and both HIVEs.
     pub fn triangle_count(&self) -> usize {
-        self.field.len() + self.glass.len() + self.hives.iter().map(|h| h.tris.len()).sum::<usize>()
+        self.field.len() + self.glass.len() + self.hives.iter().map(|h| h.tris.len() + h.glass.len()).sum::<usize>()
     }
 
     /// The world position of a HIVE's pivot.
@@ -121,27 +126,52 @@ const BUMPER_THICK: f32 = 0.05;
 const BUMPER_PROUD: f32 = 0.02;
 const CHASSIS_LOW: f32 = 0.012;
 
-/// A robot as triangles in world coordinates: a chassis box and four bumper bars.
+/// A robot as triangles in world coordinates: a stand-in for a typical BIOBUZZ build, with a low chassis, four
+/// wheels, alliance bumpers, an intake roller across the front, two uprights and a shooter housing at the rear. The
+/// robot's own CAD can replace it.
 pub(crate) fn robot_tris(robot: &Robot, index: u32) -> Vec<Tri> {
     let owner = Owner::Robot(index).raw();
-    let chassis = hex(0x5c6168);
+    let frame = hex(0x3d4147);
+    let plate = hex(0x5c6168);
+    let tread = hex(0x1b1c1e);
+    let roller = hex(0x2e7d32);
+    let flywheel = hex(0x8a8f96);
     let bumper = match robot.alliance {
         Alliance::Red => hex(0xd8261c),
         Alliance::Blue => hex(0x1f4fd8),
     };
-    let (hl, hw) = (robot.length / 2.0, robot.width / 2.0);
+    let (hl, hw, top) = (robot.length / 2.0, robot.width / 2.0, robot.height);
     let (ol, ow) = (hl + BUMPER_PROUD, hw + BUMPER_PROUD);
     let mid = (BUMPER_LOW + BUMPER_HIGH) / 2.0;
     let hb = (BUMPER_HIGH - BUMPER_LOW) / 2.0;
     let t = BUMPER_THICK / 2.0;
-    // Boxes as (forward, left, up) center and half sizes in the robot frame.
-    let boxes = [
-        ([0.0, 0.0, (CHASSIS_LOW + robot.height) / 2.0], [hl, hw, (robot.height - CHASSIS_LOW) / 2.0], chassis),
+    let wr = 0.048;
+    // Boxes as (forward, left, up) center and half sizes in the robot frame. The front is the intake.
+    let mut boxes = vec![
+        // The drive base: a low tray and a top plate.
+        ([0.0, 0.0, (CHASSIS_LOW + 0.07) / 2.0], [hl - 0.01, hw - 0.05, (0.07 - CHASSIS_LOW) / 2.0], frame),
+        ([0.0, 0.0, 0.075], [hl - 0.04, hw - 0.06, 0.006], plate),
+        // Side rails and a rear crossmember, as on a channel drive base. The front stays open for the intake.
+        ([0.0, hw - 0.02, 0.095], [hl - 0.01, 0.008, 0.085], frame),
+        ([0.0, -hw + 0.02, 0.095], [hl - 0.01, 0.008, 0.085], frame),
+        ([-hl + 0.02, 0.0, 0.095], [0.008, hw - 0.02, 0.085], frame),
+        // The intake roller across the front, low enough to sweep balls in.
+        ([hl - 0.03, 0.0, 0.065], [0.025, hw - 0.03, 0.025], roller),
+        // Two uprights, and the shooter housing between them at the rear.
+        ([-hl * 0.35, hw - 0.07, (0.08 + top) / 2.0], [0.015, 0.015, (top - 0.08) / 2.0], frame),
+        ([-hl * 0.35, -hw + 0.07, (0.08 + top) / 2.0], [0.015, 0.015, (top - 0.08) / 2.0], frame),
+        ([-hl * 0.55, 0.0, top - 0.07], [hl * 0.3, hw * 0.45, 0.07], plate),
+        ([-hl * 0.55, 0.0, top + 0.003], [0.05, 0.05, 0.004], flywheel),
+        // Bumpers.
         ([ol - t, 0.0, mid], [t, ow, hb], bumper),
         ([-ol + t, 0.0, mid], [t, ow, hb], bumper),
         ([0.0, ow - t, mid], [ol - 2.0 * t, t, hb], bumper),
         ([0.0, -ow + t, mid], [ol - 2.0 * t, t, hb], bumper),
     ];
+    // Four wheels just inside the bumpers.
+    for (f, l) in [(1.0, 1.0), (1.0, -1.0), (-1.0, 1.0), (-1.0, -1.0)] {
+        boxes.push(([f * (hl - 0.09), l * (hw - 0.035), wr], [wr, 0.02, wr], tread));
+    }
     let (f, l) = (robot.pose.forward(), robot.pose.left());
     let origin = Vec3::new(robot.pose.x, 0.0, robot.pose.z);
     let mut out = Vec::with_capacity(boxes.len() * 12);

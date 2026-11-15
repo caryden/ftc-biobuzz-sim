@@ -161,8 +161,8 @@ pub struct State {
     pub score: PerAlliance<Score>,
     pub hives: PerAlliance<HiveState>,
     pub flowers: Vec<Vec<u8>>,
-    /// id, kind (`POLLEN`, `NECTAR_RED`, `NECTAR_BLUE`), x, y, z.
-    pub balls: Vec<(u32, u8, f32, f32, f32)>,
+    /// id, kind (`POLLEN`, `NECTAR_RED`, `NECTAR_BLUE`), x, y, z, and the orientation as a quaternion.
+    pub balls: Vec<(u32, u8, f32, f32, f32, [f32; 4])>,
     pub robots: Vec<RobotSnap>,
     pub messages: Vec<Message>,
     pub fouls: usize,

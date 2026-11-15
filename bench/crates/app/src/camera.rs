@@ -7,7 +7,7 @@ use crate::model::{FieldInfo, State, NECTAR_BLUE, NECTAR_RED};
 use crate::plugins::{frames, parse_llpython, Detector, Harness, LlRow, LL_LEN};
 use crate::theme::*;
 use crate::Args;
-use bench_render::{Alliance, Ball, BallKind, BallLabel, Camera, Intrinsics, Mount, Pose, RenderOptions, Robot, Scene, Vec3, World};
+use bench_render::{Alliance, Ball, BallKind, BallLabel, Camera, Intrinsics, Mount, Pose, Quat, RenderOptions, Robot, Scene, Vec3, World};
 use gpui::{point, px, Bounds, PathBuilder, Pixels, RenderImage, Window};
 use serde::Deserialize;
 use serde_json::Value;
@@ -372,7 +372,11 @@ fn kind_of(k: u8) -> BallKind {
 
 /// The renderer's view of one snapshot. The camera's own robot is left out, since its camera sits at its edge.
 pub fn world_of(state: &State, field: &FieldInfo, skip: Option<usize>) -> (Vec<Ball>, Vec<Robot>, [f32; 2]) {
-    let mut balls: Vec<Ball> = state.balls.iter().map(|&(id, kind, x, y, z)| Ball::new(id, kind_of(kind), Vec3::new(x, y, z))).collect();
+    let mut balls: Vec<Ball> = state
+        .balls
+        .iter()
+        .map(|&(id, kind, x, y, z, [qx, qy, qz, qw])| Ball::new(id, kind_of(kind), Vec3::new(x, y, z)).turned(Quat::from_xyzw(qx, qy, qz, qw).normalize()))
+        .collect();
     // FLOWER stacks, as `flowerHeights` in src/sim/world.ts places them: POLLEN rests on what is below it, and NECTAR
     // sits at least on the middle ring.
     for (i, (fl, stack)) in field.flowers.iter().zip(&state.flowers).enumerate() {

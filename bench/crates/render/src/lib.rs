@@ -11,6 +11,7 @@ mod camera;
 mod floor;
 mod frame;
 mod glb;
+mod holes;
 mod labels;
 mod post;
 mod raster;
@@ -19,7 +20,7 @@ mod shade;
 
 pub use camera::{Camera, Intrinsics, Mount, Pose};
 pub use frame::{rgb_to_bgr_in_place, Frame, Owner, Rendered};
-pub use glam::Vec3;
+pub use glam::{Quat, Vec3};
 pub use labels::BallLabel;
 pub use post::PostFx;
 pub use scene::Scene;
@@ -67,18 +68,25 @@ pub struct Ball {
     pub kind: BallKind,
     pub center: Vec3,
     pub radius: f32,
+    /// The ball's orientation, which turns its holes as it rolls.
+    pub rot: Quat,
 }
 
 impl Ball {
     /// A ball of the given kind with the game's radius for that kind.
     pub fn new(id: u32, kind: BallKind, center: Vec3) -> Ball {
-        Ball { id, kind, center, radius: kind.radius() }
+        Ball { id, kind, center, radius: kind.radius(), rot: Quat::IDENTITY }
+    }
+
+    /// The same ball, turned to `rot`.
+    pub fn turned(self, rot: Quat) -> Ball {
+        Ball { rot, ..self }
     }
 
     /// A ball of the given kind resting on the floor at (x, z).
     pub fn on_floor(id: u32, kind: BallKind, x: f32, z: f32) -> Ball {
         let r = kind.radius();
-        Ball { id, kind, center: Vec3::new(x, r, z), radius: r }
+        Ball { id, kind, center: Vec3::new(x, r, z), radius: r, rot: Quat::IDENTITY }
     }
 }
 
@@ -117,12 +125,14 @@ pub struct RenderOptions {
     pub ball_shadows: bool,
     /// Opacity of the clear polycarbonate perimeter panels. 0 skips them.
     pub glass_alpha: f32,
+    /// Opacity of the HIVE's clear CELL skins, so the balls in a CELL show through. 0 skips them.
+    pub cell_alpha: f32,
     /// Blur and sensor noise applied after the labels are computed. Off by default.
     pub post: PostFx,
 }
 
 impl Default for RenderOptions {
     fn default() -> Self {
-        RenderOptions { ball_shadows: true, glass_alpha: 0.06, post: PostFx::default() }
+        RenderOptions { ball_shadows: true, glass_alpha: 0.06, cell_alpha: 0.28, post: PostFx::default() }
     }
 }

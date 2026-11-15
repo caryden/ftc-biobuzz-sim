@@ -4,8 +4,8 @@
 use crate::frame::Owner;
 use crate::raster::{clamp_rect, View, NEAR};
 use crate::scene::ball_albedo;
-use crate::{Ball, BallKind};
-use glam::{DMat3, DVec3, Vec3};
+use crate::{holes, Ball, BallKind};
+use glam::{DMat3, DVec3, Mat3, Vec3};
 use rayon::prelude::*;
 use serde::{Serialize, Serializer};
 
@@ -51,6 +51,10 @@ pub(crate) struct BallView {
     pub rect: Option<[usize; 4]>,
     pub albedo: Vec3,
     pub owner: u32,
+    /// Turns a camera-space normal into the ball's own frame, where its holes are.
+    local: Mat3,
+    holes: &'static [[f32; 3]],
+    hole_cos: f32,
 }
 
 /// The silhouette ellipse of a sphere fully in front of the camera.
@@ -63,6 +67,21 @@ pub(crate) struct Silhouette {
 impl BallView {
     pub fn center(&self) -> Vec3 {
         self.c.as_vec3()
+    }
+
+    /// True when a camera-space surface normal falls in one of the shell's holes.
+    pub fn in_hole(&self, n: Vec3) -> bool {
+        let l = self.local * n;
+        self.holes.iter().any(|h| l.x * h[0] + l.y * h[1] + l.z * h[2] > self.hole_cos)
+    }
+
+    /// The camera-z depth where the ray through pixel (u, v) leaves the sphere: the inside of the far wall.
+    pub fn exit(&self, view: &View, u: f64, v: f64) -> f64 {
+        let xn = (u - view.cx) / view.fx;
+        let yn = (v - view.cy) / view.fy;
+        let b = xn * self.c.x + yn * self.c.y + self.c.z;
+        let a = xn * xn + yn * yn + 1.0;
+        (b + (b * b - a * self.k).max(0.0).sqrt()) / a
     }
 
     /// The camera-z depth where the ray through pixel (u, v) first meets the sphere, if it does in front of the near
@@ -105,6 +124,9 @@ pub(crate) fn prepare(view: &View, balls: &[Ball]) -> Vec<BallView> {
                 rect,
                 albedo: ball_albedo(ball.kind),
                 owner: Owner::Ball(index as u32).raw(),
+                local: Mat3::from_quat(ball.rot).transpose() * view.rot.transpose(),
+                holes: if ball.kind == BallKind::Pollen { &holes::POLLEN } else { &holes::NECTAR },
+                hole_cos: (if ball.kind == BallKind::Pollen { holes::POLLEN_DEG } else { holes::NECTAR_DEG }).to_radians().cos(),
             })
         })
         .collect()

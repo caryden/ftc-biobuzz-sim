@@ -339,7 +339,7 @@ impl Bench {
         if best.is_some() {
             return best.map(|(_, h)| h);
         }
-        for &(id, _, x, y, z) in &state.balls {
+        for &(id, _, x, y, z, _) in &state.balls {
             let at = bench_render::Vec3::new(x, y, z);
             if let Some((bx, by)) = p.screen(at) {
                 let d = (bx - sx).hypot(by - sy);
@@ -737,7 +737,7 @@ impl Bench {
                 ]
             }
             Hover::Ball(id) => {
-                let &(_, kind, _, y, _) = state.balls.iter().find(|b| b.0 == id)?;
+                let &(_, kind, _, y, _, _) = state.balls.iter().find(|b| b.0 == id)?;
                 let name = match kind {
                     model::NECTAR_RED => "red NECTAR",
                     model::NECTAR_BLUE => "blue NECTAR",

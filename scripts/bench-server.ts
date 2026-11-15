@@ -109,7 +109,10 @@ function state() {
     score: { red: sim.score('red'), blue: sim.score('blue') },
     hives: Object.fromEntries((['red', 'blue'] as const).map(a => [a, { phi: r4(sim.hives[a].phi), up: sim.hives[a].upCell, tips: sim.hives[a].tips }])),
     stash: sim.stash, flowers: sim.flowers.map(f => f.stack.map(k => KIND[k])),
-    balls: [...sim.balls.values()].map(b => { const q = b.body.translation(); return [b.id, KIND[b.kind], r4(q.x), r4(q.y), r4(q.z)]; }),
+    balls: [...sim.balls.values()].map(b => {
+      const q = b.body.translation(), o = b.body.rotation();
+      return [b.id, KIND[b.kind], r4(q.x), r4(q.y), r4(q.z), [r4(o.x), r4(o.y), r4(o.z), r4(o.w)]];
+    }),
     robots, messages, events: sim.events.splice(0), fouls: referee?.calls.length ?? 0,
   };
 }

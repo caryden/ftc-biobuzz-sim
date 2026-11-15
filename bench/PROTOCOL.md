@@ -20,10 +20,10 @@ A driver stays until the next `drive`. `goto` plans around the FIELD elements an
 own follower. `heading` is optional.
 
 `state` carries the time, phase and clock, both score breakdowns, the HIVES, the FLOWER stacks, every ball as
-`[id, kind, x, y, z]` (kind 0 POLLEN, 1 red NECTAR, 2 blue NECTAR), and per robot its pose, velocity, what it carries,
-its tactic, its planned path and its behavior tree (the definition when it changes, then the running nodes and the
-nodes that ended since the last state). Coordinates are the field CAD's: meters, X from red to blue, Y up, Z from the
-rear wall to the audience. A heading of 0 faces +X and pi/2 faces the rear wall.
+`[id, kind, x, y, z, [qx, qy, qz, qw]]` (kind 0 POLLEN, 1 red NECTAR, 2 blue NECTAR, then its orientation), and per
+robot its pose, velocity, what it carries, its tactic, its planned path and its behavior tree (the definition when it
+changes, then the running nodes and the nodes that ended since the last state). Coordinates are the field CAD's:
+meters, X from red to blue, Y up, Z from the rear wall to the audience. A heading of 0 faces +X and pi/2 faces the rear wall.
 
 ## Detector (`--detector`)
 

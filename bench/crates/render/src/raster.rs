@@ -330,6 +330,9 @@ struct Ctx<'a> {
     glass: &'a [ScreenTri],
     glass_bins: &'a Bins,
     glass_alpha: f32,
+    cells: &'a [ScreenTri],
+    cell_bins: &'a Bins,
+    cell_alpha: f32,
     balls: &'a [BallView],
     shadows: &'a [Shadow],
 }
@@ -349,15 +352,20 @@ pub(crate) fn render(scene: &Scene, cam: &Camera, world: &World, opts: &RenderOp
     let robots: Vec<Tri> = world.robots.iter().enumerate().flat_map(|(i, r)| robot_tris(r, i as u32)).collect();
     let fixed = |tris| Instance { tris, m: view.rot, t: -(view.rot * view.pos), nm: Mat3::IDENTITY };
     let mut instances = vec![fixed(&scene.field), fixed(&robots)];
+    let mut cell_instances = Vec::new();
     for (hive, angle) in scene.hives.iter().zip(world.hive_angles) {
         let xf = hive.pivot * Mat4::from_rotation_x(angle);
         let r = Mat3::from_mat4(xf);
-        instances.push(Instance { tris: &hive.tris, m: view.rot * r, t: view.rot * (xf.w_axis.truncate() - view.pos), nm: r });
+        let (m, t) = (view.rot * r, view.rot * (xf.w_axis.truncate() - view.pos));
+        instances.push(Instance { tris: &hive.tris, m, t, nm: r });
+        cell_instances.push(Instance { tris: &hive.glass, m, t, nm: r });
     }
     let tris = project_all(&view, &instances);
     let bins = Bins::new(&tris, h);
     let glass = if opts.glass_alpha > 0.0 { project_all(&view, &[fixed(&scene.glass)]) } else { Vec::new() };
     let glass_bins = Bins::new(&glass, h);
+    let cells = if opts.cell_alpha > 0.0 { project_all(&view, &cell_instances) } else { Vec::new() };
+    let cell_bins = Bins::new(&cells, h);
     let balls = labels::prepare(&view, world.balls);
     let shadows = if opts.ball_shadows { shadows(&view, world.balls) } else { Vec::new() };
     let ctx = Ctx {
@@ -367,6 +375,9 @@ pub(crate) fn render(scene: &Scene, cam: &Camera, world: &World, opts: &RenderOp
         glass: &glass,
         glass_bins: &glass_bins,
         glass_alpha: opts.glass_alpha,
+        cells: &cells,
+        cell_bins: &cell_bins,
+        cell_alpha: opts.cell_alpha,
         balls: &balls,
         shadows: &shadows,
     };
@@ -402,6 +413,9 @@ fn draw_band(ctx: &Ctx, b: usize, band: &mut Band) {
     }
     for &i in ctx.glass_bins.band(b) {
         draw_glass(&ctx.glass[i as usize], ctx.view.w, ctx.glass_alpha, band);
+    }
+    for &i in ctx.cell_bins.band(b) {
+        draw_glass(&ctx.cells[i as usize], ctx.view.w, ctx.cell_alpha, band);
     }
     for z in band.iz.iter_mut() {
         *z = if *z > 0.0 { 1.0 / *z } else { f32::INFINITY };
@@ -472,16 +486,36 @@ fn draw_ball(view: &View, ball: &BallView, band: &mut Band) {
             if iz <= band.iz[i] {
                 continue;
             }
-            band.iz[i] = iz;
+            // A hole pixel still belongs to the ball, so occlusion and labels see the whole silhouette.
             band.ids[i] = ball.owner;
             let d = Vec3::new(((x as f64 - view.cx) / view.fx) as f32, ((row as f64 - view.cy) / view.fy) as f32, 1.0);
             let p = d * t as f32;
             let n = ((p - ball.center()) / ball.r as f32).normalize_or_zero();
-            let rgb = shade::glossy(ball.albedo, n, view.light, view.up, -p.normalize_or_zero());
-            band.rgb[3 * i..3 * i + 3].copy_from_slice(&rgb);
+            if !ball.in_hole(n) {
+                band.iz[i] = iz;
+                let rgb = shade::glossy(ball.albedo, n, view.light, view.up, -p.normalize_or_zero());
+                band.rgb[3 * i..3 * i + 3].copy_from_slice(&rgb);
+                continue;
+            }
+            // Through a hole: the inside of the far wall, in its own shade, unless that is a hole too.
+            let t2 = ball.exit(view, x as f64, row as f64);
+            let p2 = d * t2 as f32;
+            let n2 = ((p2 - ball.center()) / ball.r as f32).normalize_or_zero();
+            if ball.in_hole(n2) {
+                continue;
+            }
+            let iz2 = (1.0 / t2) as f32;
+            if iz2 > band.iz[i] {
+                band.iz[i] = iz2;
+                let rgb = shade::flat(ball.albedo * INSIDE, view.rot.transpose() * -n2);
+                band.rgb[3 * i..3 * i + 3].copy_from_slice(&rgb);
+            }
         }
     }
 }
+
+/// How much light reaches the inside of a ball's shell, as a fraction of the outside.
+const INSIDE: f32 = 0.45;
 
 fn draw_shadow(view: &View, s: &Shadow, band: &mut Band) {
     let [x0, x1, r0, r1] = s.rect;
