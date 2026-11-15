@@ -306,8 +306,10 @@ export class Sim {
     if (this.clock > 0) return;
     if (this.phase === 'auto') {
       this.robots.forEach((r, i) => {
-        const p = r.body.translation(), reach = Math.max(r.cfg.length, r.cfg.width) / 2 + 0.02;
-        r.autoLeave = FIELD.half - Math.max(Math.abs(p.x), Math.abs(p.z)) > reach; r.autoPark = this.view(i).robotInLoadingZone();
+        // A turned robot reaches farther toward a wall than half its length: a square one at 45° touches it with a corner.
+        const v = this.view(i), p = r.body.translation(), c = Math.abs(Math.cos(v.heading)), s = Math.abs(Math.sin(v.heading));
+        const ex = (r.cfg.length * c + r.cfg.width * s) / 2 + 0.02, ez = (r.cfg.length * s + r.cfg.width * c) / 2 + 0.02;
+        r.autoLeave = FIELD.half - Math.abs(p.x) > ex && FIELD.half - Math.abs(p.z) > ez; r.autoPark = v.robotInLoadingZone();
       });
       this.autoTips = { red: this.hives.red.tips, blue: this.hives.blue.tips };
       if (this.mode === 'auto') { this.phase = 'post'; this.clock = 0; this.say('AUTO ends'); this.events.push('match_end'); return; }
