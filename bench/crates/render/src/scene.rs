@@ -127,7 +127,7 @@ const BUMPER_PROUD: f32 = 0.02;
 const CHASSIS_LOW: f32 = 0.012;
 
 /// A robot's own CAD, from a GLB in the robot's frame: +X forward, Y up, +Z to the robot's right, standing on the
-/// floor centered at the origin. The cad repository's `parts-to-glb.mjs` writes one from an Onshape STEP export.
+/// floor centered at the origin. `bench/tools/parts-to-glb.mjs` writes one from an Onshape STEP export.
 #[derive(Debug)]
 pub struct RobotModel {
     tris: Vec<Tri>,

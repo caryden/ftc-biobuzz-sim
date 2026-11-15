@@ -53,7 +53,7 @@ pub struct Args {
     /// 0.30 m high, 20 degrees down.
     #[arg(long)]
     camera_json: Option<PathBuf>,
-    /// The team's robot CAD as a GLB (the cad repository's parts-to-glb.mjs writes one). The robots named by
+    /// The team's robot CAD as a GLB (bench/tools/parts-to-glb.mjs writes one). The robots named by
     /// --model-robots are drawn from it and sized to its footprint.
     #[arg(long)]
     robot_model: Option<PathBuf>,
