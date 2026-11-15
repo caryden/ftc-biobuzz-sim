@@ -1,0 +1,13 @@
+[package]
+name = "bench-render"
+description = "CPU renderer for a robot camera's view of the BIOBUZZ field, with exact per-ball labels."
+edition.workspace = true
+version.workspace = true
+
+[dependencies]
+anyhow.workspace = true
+glam.workspace = true
+image.workspace = true
+rayon.workspace = true
+serde.workspace = true
+serde_json.workspace = true

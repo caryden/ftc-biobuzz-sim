@@ -79,6 +79,7 @@ The results are in [experiments/](experiments/README.md). Every number on the si
 | `experiments/` | Results and logs of every measured change |
 | `traces/` | Annotated matches that drove the planner fixes |
 | `functions/`, `server/`, `migrations/`, `wrangler.toml` | The match counter and the tree catalog, on Cloudflare Pages and D1 |
+| `bench/`, `scripts/bench-server.ts` | A native app that plays the MATCH, renders a robot's camera from the field CAD, and runs camera and decision code against it. See [bench/README.md](bench/README.md). |
 | `.github/workflows/ci.yml` | The checks that every pull request must pass |
 | `docs/` | The lessons, the simulator description, the HIVE calibration, the behavior-tree design, and the backlog |
 
