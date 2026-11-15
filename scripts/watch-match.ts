@@ -14,7 +14,7 @@ for (let k = 0; k < seeds; k++) {
   const st = sim.robots.map(r => ({ goal: '', goalCarried: r.carried.length, lastCmd: { x: 0, z: 0 }, lastFlip: -9, carried: r.carried.length, pos: r.body.translation() })); let t = 0, autoPts = 0;
   while (sim.phase !== 'post') {
     sim.step(coaches.map((c, i) => c.update(sim.view(i), DT)), coaches.map(() => true)); t += DT;
-    if (sim.phase === 'transition' && !autoPts) { const r = sim.score('red'); autoPts = r.leave + r.autoPark + r.autoTips; }
+    if (sim.phase === 'teleop' && !autoPts) { const r = sim.score('red'); autoPts = r.leave + r.autoPark + r.autoTips; }
     if (sim.phase !== 'teleop') continue;
     sim.robots.forEach((r, i) => {
       if (r.alliance !== 'red') return; const s = st[i], ex = coaches[i].executor, p = r.body.translation(), v = sim.view(i), th = v.heading;

@@ -309,10 +309,11 @@ export class Sim {
         const p = r.body.translation(), reach = Math.max(r.cfg.length, r.cfg.width) / 2 + 0.02;
         r.autoLeave = FIELD.half - Math.max(Math.abs(p.x), Math.abs(p.z)) > reach; r.autoPark = this.view(i).robotInLoadingZone();
       });
-      this.autoTips = { red: this.hives.red.tips, blue: this.hives.blue.tips };
-      if (this.mode === 'auto') { this.phase = 'post'; this.clock = 0; this.say('AUTO ends'); this.events.push('match_end'); return; }
+      if (this.mode === 'auto') { this.autoTips = { red: this.hives.red.tips, blue: this.hives.blue.tips }; this.phase = 'post'; this.clock = 0; this.say('AUTO ends'); this.events.push('match_end'); return; }
       this.phase = 'transition'; this.clock = MATCH.transition; this.say('AUTO ends'); this.events.push('auto_end');
-    } else if (this.phase === 'transition') { this.phase = 'teleop'; this.clock = MATCH.teleop; this.say('TELEOP begins'); this.events.push('teleop_start'); }
+    } else if (this.phase === 'transition') {
+      // Section 10.5.B: a TIP that completes before TELEOP starts counts in AUTO, and a HIVE takes about 1.8 s to swing.
+      this.autoTips = { red: this.hives.red.tips, blue: this.hives.blue.tips }; this.phase = 'teleop'; this.clock = MATCH.teleop; this.say('TELEOP begins'); this.events.push('teleop_start'); }
     else if (this.phase === 'teleop') { this.phase = 'post'; this.clock = 0; this.say('MATCH ends'); this.events.push('match_end'); }
   }
 
@@ -643,7 +644,7 @@ export class Sim {
 
   score(a: Alliance): AllianceScore {
     const team = this.robots.map((r, i) => ({ r, v: this.view(i) })).filter(q => q.r.alliance === a), auto = this.autoTips[a], tips = this.hives[a].tips;
-    const autoTips = this.phase === 'auto' ? tips : auto;
+    const autoTips = this.phase === 'auto' || this.phase === 'transition' ? tips : auto;
     let flower = 0, bottomNectar = 0;
     for (const f of this.flowers) { const s = this.flowerStatus(f); if (s.owner === a) flower += s.scored * POINTS.flower; if (s.bottom === a) bottomNectar += POINTS.bottomNectar; }
     let garden = 0;

@@ -26,7 +26,7 @@ const waste = sim.robots.map(() => Object.fromEntries(KEYS.map(k => [k, 0])) as 
 let auto: { red: number; blue: number } | null = null; const referee = process.env.REFEREE ? new Referee() : null;
 while (sim.phase !== 'post') {
   sim.step(coaches.map((c, k) => c.update(sim.view(k), DT)), coaches.map(() => true)); referee?.update(sim, DT);
-  if (!auto && sim.phase === 'transition') { const r = sim.score('red'), b = sim.score('blue'); auto = { red: r.leave + r.autoPark + r.autoTips, blue: b.leave + b.autoPark + b.autoTips }; }
+  if (!auto && sim.phase === 'teleop') { const r = sim.score('red'), b = sim.score('blue'); auto = { red: r.leave + r.autoPark + r.autoTips, blue: b.leave + b.autoPark + b.autoTips }; }
   if (sim.phase !== 'teleop') continue;
   coaches.forEach((c, k) => {
     const ex = c.executor as unknown as { tactic: string; note: string; stall: { at: number } | null; recoverUntil: number; t: number }, r = sim.robots[k], p = r.body.translation(), v = r.body.linvel(), g = r.plan.goal, n = r.carried.length;

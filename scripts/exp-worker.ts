@@ -21,7 +21,7 @@ sim.start(); let stalls = 0; const seen = new Set<string>(); let auto: Record<st
 while (sim.phase !== 'post') {
   sim.step(coaches.map((c, i) => (sim.phase === 'auto' && c.autoOverride === 'none' ? NO_INPUT : c.update(sim.view(i), DT))), coaches.map(() => true));
   coaches.forEach((c, i) => { const st = c.executor.stall; if (sim.robots[i].alliance === 'red' && st && !seen.has(`${i}:${st.at}`)) { seen.add(`${i}:${st.at}`); stalls++; } });
-  if (!auto && sim.phase === 'transition') { const r = sim.score('red'); auto = { points: r.leave + r.autoPark + r.autoTips, tips: r.autoTips / 20 }; hopper = sim.robots.filter(q => q.alliance === 'red').reduce((n, q) => n + q.carried.length, 0); }
+  if (!auto && sim.phase === 'teleop') { const r = sim.score('red'); auto = { points: r.leave + r.autoPark + r.autoTips, tips: r.autoTips / 20 }; hopper = sim.robots.filter(q => q.alliance === 'red').reduce((n, q) => n + q.carried.length, 0); }
 }
 const r = sim.score('red'), b = sim.score('blue');
 console.log(JSON.stringify({ id, group: spec.group, seed, red: r.total, blue: b.total, margin: r.total - b.total, redTips: sim.hives.red.tips, blueTips: sim.hives.blue.tips, redFlowerPts: r.flower + r.bottomNectar, locked: sim.flowers.filter(f => flowerLocked(sim.view(0), f)).length, redAuto: auto?.points ?? 0, redAutoTips: auto?.tips ?? 0, redHopperAfterAuto: hopper, redPark: r.park, stalls, rp: Object.values(r.rp).filter(Boolean).length + (r.total > b.total ? 3 : r.total === b.total ? 1 : 0) }));
