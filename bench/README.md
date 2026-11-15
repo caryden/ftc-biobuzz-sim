@@ -54,6 +54,25 @@ The formats are in [PROTOCOL.md](PROTOCOL.md).
 
 ![The robot code tab, with the detector's stage timings](docs/code.png)
 
+## Your robot
+
+```
+cargo run --release -- --robot-model path/to/robot.glb --model-robots 0,1 --turret
+```
+
+The robots you name (0 and 1 are red, 2 and 3 are blue) are drawn from the GLB inside alliance bumpers, and the sim
+sizes them to its drivetrain footprint. `--turret` gives them a turret shooter. To make the GLB from an Onshape STEP
+export of the robot's assembly, run these from the simulator's checkout, with FreeCAD installed:
+
+```
+python3 bench/tools/step-colors.py robot.step colors.json
+freecadcmd -c "import sys; sys.argv=['x', 'robot.step', 'robot.parts']; exec(open('bench/tools/step-to-parts.py').read())"
+node bench/tools/parts-to-glb.mjs robot.parts colors.json robot.glb
+```
+
+`parts-to-glb.mjs` turns the robot so that its intake faces forward. Set `FRONT=+x`, `-x`, `+z` or `-z` if it picks
+the wrong end. Keep your team's CAD out of this repository.
+
 ## Training data
 
 ```

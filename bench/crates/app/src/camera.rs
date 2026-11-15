@@ -7,7 +7,8 @@ use crate::model::{FieldInfo, State, NECTAR_BLUE, NECTAR_RED};
 use crate::plugins::{frames, parse_llpython, Detector, Harness, LlRow, LL_LEN};
 use crate::theme::*;
 use crate::Args;
-use bench_render::{Alliance, Ball, BallKind, BallLabel, Camera, Intrinsics, Mount, Pose, Quat, RenderOptions, Robot, Scene, Vec3, World};
+use anyhow::Context as _;
+use bench_render::{Alliance, Ball, BallKind, BallLabel, Camera, Intrinsics, Mount, Pose, Quat, RenderOptions, Robot, RobotModel, Scene, Vec3, World};
 use gpui::{point, px, Bounds, PathBuilder, Pixels, RenderImage, Window};
 use serde::Deserialize;
 use serde_json::Value;
@@ -199,7 +200,7 @@ pub struct CameraWorker {
 }
 
 impl CameraWorker {
-    pub fn spawn(args: &Args) -> Self {
+    pub fn spawn(args: &Args, fleet: Fleet) -> Self {
         let (tx, rx) = channel();
         let out = Arc::new(Mutex::new(None));
         let totals = Arc::new(Mutex::new(Totals::default()));
@@ -209,6 +210,7 @@ impl CameraWorker {
             detector_cmd: args.detector.clone(),
             harness_cmd: args.harness.clone(),
             camera_json: args.camera_json.clone(),
+            fleet,
             out: out.clone(),
             totals: totals.clone(),
             error: error.clone(),
@@ -279,6 +281,7 @@ struct Worker {
     detector_cmd: Option<String>,
     harness_cmd: Option<String>,
     camera_json: Option<PathBuf>,
+    fleet: Fleet,
     out: Arc<Mutex<Option<Arc<CamResult>>>>,
     totals: Arc<Mutex<Totals>>,
     error: Arc<Mutex<Option<String>>>,
@@ -343,7 +346,7 @@ impl Worker {
                 harness_robot = req.robot;
             }
             let det = if req.detect { detector.as_mut() } else { None };
-            let (result, det_err, dec_err) = frame(&scene, &optics, &req, det, if req.live { harness.as_mut() } else { None });
+            let (result, det_err, dec_err) = frame(&scene, &self.fleet, &optics, &req, det, if req.live { harness.as_mut() } else { None });
             if let Some(e) = det_err {
                 self.fail("detector", e);
                 detector = None;
@@ -359,6 +362,33 @@ impl Worker {
     }
 }
 
+/// The team's robot CAD, and the robots drawn from it.
+#[derive(Clone, Default)]
+pub struct Fleet {
+    pub model: Option<Arc<RobotModel>>,
+    pub robots: Vec<usize>,
+    pub turret: bool,
+}
+
+impl Fleet {
+    pub fn load(args: &Args) -> anyhow::Result<Self> {
+        let Some(path) = &args.robot_model else { return Ok(Self::default()) };
+        let model = RobotModel::load(path).with_context(|| format!("loading --robot-model {}", path.display()))?;
+        let robots = args.model_robots.split(',').filter_map(|s| s.trim().parse().ok()).collect();
+        Ok(Self { model: Some(Arc::new(model)), robots, turret: args.turret })
+    }
+
+    /// Setup overrides for the sim, one per robot: a model robot gets the CAD's footprint as the sim's square size,
+    /// and the turret if `--turret` asks for it.
+    pub fn bots(&self, n: usize) -> serde_json::Value {
+        let size = self.model.as_ref().map(|m| (m.size.x.max(m.size.z) / 0.0254 * 10.0).round() / 10.0);
+        serde_json::Value::Array((0..n).map(|i| match size.filter(|_| self.robots.contains(&i)) {
+            Some(s) => serde_json::json!({ "sizeIn": s, "turret": self.turret }),
+            None => serde_json::json!({}),
+        }).collect())
+    }
+}
+
 /// Ids at or above this are balls stacked in a FLOWER, which the sim keeps as a list rather than as bodies.
 pub const FLOWER_BALL_IDS: u32 = 1_000_000;
 
@@ -371,7 +401,7 @@ fn kind_of(k: u8) -> BallKind {
 }
 
 /// The renderer's view of one snapshot. The camera's own robot is left out, since its camera sits at its edge.
-pub fn world_of(state: &State, field: &FieldInfo, skip: Option<usize>) -> (Vec<Ball>, Vec<Robot>, [f32; 2]) {
+pub fn world_of(state: &State, field: &FieldInfo, skip: Option<usize>, fleet: &Fleet) -> (Vec<Ball>, Vec<Robot>, [f32; 2]) {
     let mut balls: Vec<Ball> = state
         .balls
         .iter()
@@ -394,12 +424,13 @@ pub fn world_of(state: &State, field: &FieldInfo, skip: Option<usize>) -> (Vec<B
         .zip(field.robots.iter())
         .enumerate()
         .filter(|(i, _)| Some(*i) != skip)
-        .map(|(_, (r, info))| Robot {
+        .map(|(i, (r, info))| Robot {
             pose: Pose::new(r.x, r.z, r.heading),
             length: info.length,
             width: info.width,
             height: info.height,
             alliance: if info.red() { Alliance::Red } else { Alliance::Blue },
+            model: fleet.robots.contains(&i),
         })
         .collect();
     let tilt = field.hive.tilt_limit;
@@ -596,6 +627,7 @@ pub fn to_render_image(rgb: &[u8], w: u32, h: u32) -> Arc<RenderImage> {
 /// Renders one request and runs the robot code on it. Returns the result and any plug-in errors.
 fn frame(
     scene: &Scene,
+    fleet: &Fleet,
     optics: &Optics,
     req: &CamRequest,
     detector: Option<&mut Detector>,
@@ -603,9 +635,9 @@ fn frame(
 ) -> (CamResult, Option<anyhow::Error>, Option<anyhow::Error>) {
     let (state, field) = (&req.state, &req.field);
     let cam = camera_of(state, field, optics, req.mount, req.robot);
-    let (balls, robots, hive_angles) = world_of(state, field, Some(req.robot));
+    let (balls, robots, hive_angles) = world_of(state, field, Some(req.robot), fleet);
     let t0 = Instant::now();
-    let out = scene.render(&cam, &World { balls: &balls, robots: &robots, hive_angles }, &RenderOptions::default());
+    let out = scene.render(&cam, &World { balls: &balls, robots: &robots, hive_angles, robot_model: fleet.model.as_deref() }, &RenderOptions::default());
     let render_ms = t0.elapsed().as_secs_f32() * 1e3;
     let (w, h) = (out.frame.width, out.frame.height);
     let me = &state.robots[req.robot];

@@ -21,7 +21,7 @@ fn main() -> anyhow::Result<()> {
         Ball::on_floor(7, BallKind::NectarRed, 0.07, 0.59),
     ];
     let robots = [Robot::new(Pose::new(0.35, 0.85, 2.3), Alliance::Blue)];
-    let world = World { balls: &balls, robots: &robots, hive_angles: [0.0, 0.0] };
+    let world = World { balls: &balls, robots: &robots, hive_angles: [0.0, 0.0], robot_model: None };
 
     // A robot in the red alliance's audience-side corner facing the field center. The mount is tilted 5 degrees up
     // instead of the default pollen mount's 20 degrees down, so both HIVEs fit in the frame.

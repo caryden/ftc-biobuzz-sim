@@ -14,7 +14,7 @@ fn field() -> &'static Scene {
 }
 
 fn render(scene: &Scene, cam: &Camera, balls: &[Ball], robots: &[Robot], hive_angles: [f32; 2]) -> Rendered {
-    let world = World { balls, robots, hive_angles };
+    let world = World { balls, robots, hive_angles, robot_model: None };
     scene.render(cam, &world, &RenderOptions::default())
 }
 

@@ -18,7 +18,7 @@ fn median_frame_time() {
         Robot::new(Pose::new(0.9, 0.8, 1.0), Alliance::Blue),
         Robot::new(Pose::new(-0.6, 1.1, 0.4), Alliance::Red),
     ];
-    let world = World { balls: &balls, robots: &robots, hive_angles: [0.2, -0.1] };
+    let world = World { balls: &balls, robots: &robots, hive_angles: [0.2, -0.1], robot_model: None };
     let cam = Camera::on_robot(Pose::new(-1.5, 0.1, 0.05), &Mount::pollen_default(), Intrinsics::default());
     let opts = RenderOptions::default();
     scene.render(&cam, &world, &opts);

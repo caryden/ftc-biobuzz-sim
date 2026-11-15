@@ -23,7 +23,7 @@ pub use frame::{rgb_to_bgr_in_place, Frame, Owner, Rendered};
 pub use glam::{Quat, Vec3};
 pub use labels::BallLabel;
 pub use post::PostFx;
-pub use scene::Scene;
+pub use scene::{RobotModel, Scene};
 
 use serde::Serialize;
 
@@ -98,12 +98,14 @@ pub struct Robot {
     pub width: f32,
     pub height: f32,
     pub alliance: Alliance,
+    /// Draws the robot from [`World::robot_model`], the team's own CAD, inside alliance bumpers.
+    pub model: bool,
 }
 
 impl Robot {
     /// An 18 in. square robot, 0.30 m tall, the sim's default size.
     pub fn new(pose: Pose, alliance: Alliance) -> Robot {
-        Robot { pose, length: 0.43, width: 0.43, height: 0.30, alliance }
+        Robot { pose, length: 0.43, width: 0.43, height: 0.30, alliance, model: false }
     }
 }
 
@@ -116,6 +118,8 @@ pub struct World<'a> {
     /// The final rotation of each HIVE about its pivot's local X axis, in radians, `[red, blue]`. The web view uses
     /// `phi + tiltLimit` for red and `phi - tiltLimit` for blue; 0 is the pose stored in the CAD.
     pub hive_angles: [f32; 2],
+    /// The CAD that robots with `model` set are drawn from. Without it they get the stand-in.
+    pub robot_model: Option<&'a RobotModel>,
 }
 
 /// Per-frame switches. The default is a clean render with ball shadows and faint perimeter panels.

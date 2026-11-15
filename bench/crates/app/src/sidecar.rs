@@ -18,7 +18,7 @@ pub const STEPS_PER_SEC: f32 = 240.0;
 const SNAPSHOTS_PER_SEC: f32 = 60.0;
 
 pub enum Cmd {
-    Reset { seed: u32, mode: String },
+    Reset { seed: u32, mode: String, bots: Value },
     Start,
     Drive(Value),
 }
@@ -110,8 +110,9 @@ impl Server {
     }
 
     /// Resets the MATCH, and returns the field and the first snapshot.
-    pub fn reset(&mut self, seed: u32, mode: &str) -> anyhow::Result<(FieldInfo, State)> {
-        self.write(&json!({ "op": "reset", "seed": seed, "mode": mode }))?;
+    /// Resets the MATCH. `bots` holds setup overrides per robot, as in the web page's robot config.
+    pub fn reset(&mut self, seed: u32, mode: &str, bots: &Value) -> anyhow::Result<(FieldInfo, State)> {
+        self.write(&json!({ "op": "reset", "seed": seed, "mode": mode, "bots": bots }))?;
         let field = serde_json::from_value(self.read()?)?;
         Ok((field, self.state()?))
     }
@@ -196,9 +197,9 @@ impl Worker {
             };
             if let Some(c) = cmd {
                 match c {
-                    Cmd::Reset { seed, mode } => {
+                    Cmd::Reset { seed, mode, bots } => {
                         self.playing.store(false, Ordering::Relaxed);
-                        let (field, state) = s.reset(seed, &mode)?;
+                        let (field, state) = s.reset(seed, &mode, &bots)?;
                         let mut h = self.history.lock().unwrap();
                         h.reset(field);
                         h.push(state);

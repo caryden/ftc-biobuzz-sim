@@ -53,6 +53,16 @@ pub struct Args {
     /// 0.30 m high, 20 degrees down.
     #[arg(long)]
     camera_json: Option<PathBuf>,
+    /// The team's robot CAD as a GLB (the cad repository's parts-to-glb.mjs writes one). The robots named by
+    /// --model-robots are drawn from it and sized to its footprint.
+    #[arg(long)]
+    robot_model: Option<PathBuf>,
+    /// Which robots use --robot-model, as indices 0 to 3: red's two, then blue's.
+    #[arg(long, default_value = "0")]
+    model_robots: String,
+    /// Gives the --model-robots a turret, as the sim models one: it aims each launch at the raised CELL.
+    #[arg(long)]
+    turret: bool,
     #[command(subcommand)]
     command: Option<Sub>,
 }
@@ -106,6 +116,7 @@ struct Bench {
     cam: CameraWorker,
     shown: Option<Arc<CamResult>>,
     fieldw: FieldWorker,
+    fleet: camera::Fleet,
     field_img: Option<field::FieldImage>,
     retired: Vec<Arc<RenderImage>>,
     detector_on: bool,
@@ -147,10 +158,14 @@ fn step_speed(s: f32, by: i32) -> f32 {
 
 impl Bench {
     fn new(args: Args, focus: FocusHandle) -> Self {
+        let fleet = camera::Fleet::load(&args).unwrap_or_else(|e| {
+            eprintln!("bench: {e:#}");
+            camera::Fleet::default()
+        });
         let sim = Sim::spawn(args.sim_dir());
-        sim.send(Cmd::Reset { seed: args.seed, mode: args.mode.clone() });
-        let cam = CameraWorker::spawn(&args);
-        let fieldw = FieldWorker::spawn(args.sim_dir());
+        sim.send(Cmd::Reset { seed: args.seed, mode: args.mode.clone(), bots: fleet.bots(4) });
+        let cam = CameraWorker::spawn(&args, fleet.clone());
+        let fieldw = FieldWorker::spawn(args.sim_dir(), fleet.clone());
         Self {
             seed: args.seed,
             mode: args.mode.clone(),
@@ -165,6 +180,7 @@ impl Bench {
             cam,
             shown: None,
             fieldw,
+            fleet,
             field_img: None,
             retired: Vec::new(),
             autopilot: false,
@@ -199,7 +215,7 @@ impl Bench {
         self.sent_goal = None;
         self.goto = None;
         self.cam.clear();
-        self.sim.send(Cmd::Reset { seed, mode: self.mode.clone() });
+        self.sim.send(Cmd::Reset { seed, mode: self.mode.clone(), bots: self.fleet.bots(4) });
     }
 
     fn frame_index(&self, h: &History) -> usize {

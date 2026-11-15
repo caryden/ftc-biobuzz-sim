@@ -2,7 +2,7 @@
 //! the robot's pose and every ball that projects into the image. `bench export` plays MATCHES headless and writes
 //! frames from every robot's camera, so the training set sees the clumps, spills and occlusions of real play.
 
-use crate::camera::{camera_of, is_target, world_of, CamResult, MountKind, Optics};
+use crate::camera::{camera_of, is_target, world_of, CamResult, Fleet, MountKind, Optics};
 use crate::model::{FieldInfo, State};
 use crate::sidecar::{Server, STEPS_PER_SEC};
 use crate::Args;
@@ -119,13 +119,14 @@ pub fn run(args: &Args, e: &ExportArgs) -> anyhow::Result<()> {
     let out = e.out.clone().unwrap_or_else(|| default_dir().join(format!("export-{}", std::process::id())));
     std::fs::create_dir_all(out.join("frames"))?;
     let scene = Scene::load(args.sim_dir().join("public/field.glb"))?;
+    let fleet = Fleet::load(args)?;
     let optics = Optics::load(args.camera_json.as_deref())?;
     let mut index = std::fs::OpenOptions::new().create(true).append(true).open(out.join("labels.jsonl"))?;
     let mut server = Server::start(&args.sim_dir())?;
     let steps = ((e.every * STEPS_PER_SEC).round() as u32).max(1);
     let mut written = 0usize;
     for seed in seeds {
-        let (field, _) = server.reset(seed, &args.mode)?;
+        let (field, _) = server.reset(seed, &args.mode, &fleet.bots(4))?;
         let mut state = server.start_match()?;
         while state.phase != "post" {
             state = server.step(steps)?;
@@ -134,8 +135,8 @@ pub fn run(args: &Args, e: &ExportArgs) -> anyhow::Result<()> {
                 .par_iter()
                 .map(|&(r, m)| -> anyhow::Result<Option<Value>> {
                     let cam = camera_of(&state, &field, &optics, m, r);
-                    let (balls, robots, hive_angles) = world_of(&state, &field, Some(r));
-                    let o = scene.render(&cam, &World { balls: &balls, robots: &robots, hive_angles }, &RenderOptions::default());
+                    let (balls, robots, hive_angles) = world_of(&state, &field, Some(r), &fleet);
+                    let o = scene.render(&cam, &World { balls: &balls, robots: &robots, hive_angles, robot_model: fleet.model.as_deref() }, &RenderOptions::default());
                     if o.labels.iter().filter(|l| is_target(l, &field)).count() < e.min_targets {
                         return Ok(None);
                     }

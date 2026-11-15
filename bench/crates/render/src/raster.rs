@@ -349,7 +349,7 @@ struct Band<'a> {
 pub(crate) fn render(scene: &Scene, cam: &Camera, world: &World, opts: &RenderOptions) -> Rendered {
     let view = View::new(cam);
     let (w, h) = (view.w, view.h);
-    let robots: Vec<Tri> = world.robots.iter().enumerate().flat_map(|(i, r)| robot_tris(r, i as u32)).collect();
+    let robots: Vec<Tri> = world.robots.iter().enumerate().flat_map(|(i, r)| robot_tris(r, i as u32, world.robot_model)).collect();
     let fixed = |tris| Instance { tris, m: view.rot, t: -(view.rot * view.pos), nm: Mat3::IDENTITY };
     let mut instances = vec![fixed(&scene.field), fixed(&robots)];
     let mut cell_instances = Vec::new();

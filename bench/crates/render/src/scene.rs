@@ -126,10 +126,69 @@ const BUMPER_THICK: f32 = 0.05;
 const BUMPER_PROUD: f32 = 0.02;
 const CHASSIS_LOW: f32 = 0.012;
 
-/// A robot as triangles in world coordinates: a stand-in for a typical BIOBUZZ build, with a low chassis, four
-/// wheels, alliance bumpers, an intake roller across the front, two uprights and a shooter housing at the rear. The
-/// robot's own CAD can replace it.
-pub(crate) fn robot_tris(robot: &Robot, index: u32) -> Vec<Tri> {
+/// A robot's own CAD, from a GLB in the robot's frame: +X forward, Y up, +Z to the robot's right, standing on the
+/// floor centered at the origin. The cad repository's `parts-to-glb.mjs` writes one from an Onshape STEP export.
+#[derive(Debug)]
+pub struct RobotModel {
+    tris: Vec<Tri>,
+    /// Length (X), height (Y) and width (Z), in meters.
+    pub size: Vec3,
+}
+
+impl RobotModel {
+    pub fn load(path: impl AsRef<Path>) -> Result<RobotModel> {
+        let nodes = glb::load(path.as_ref())?;
+        let tris: Vec<Tri> = nodes.iter().flat_map(|n| triangles(n, n.transform, 0, |_| false).0).collect();
+        let (mut lo, mut hi) = (Vec3::splat(f32::INFINITY), Vec3::splat(f32::NEG_INFINITY));
+        for t in &tris {
+            for v in t.v {
+                lo = lo.min(v);
+                hi = hi.max(v);
+            }
+        }
+        anyhow::ensure!(!tris.is_empty(), "no triangles in {}", path.as_ref().display());
+        Ok(RobotModel { tris, size: hi - lo })
+    }
+}
+
+/// A robot as triangles in world coordinates: the team's CAD inside its bumpers when `model` is given, or else a
+/// stand-in.
+pub(crate) fn robot_tris(robot: &Robot, index: u32, model: Option<&RobotModel>) -> Vec<Tri> {
+    match model.filter(|_| robot.model) {
+        Some(m) => {
+            let owner = Owner::Robot(index).raw();
+            let (f, l) = (robot.pose.forward(), robot.pose.left());
+            let origin = Vec3::new(robot.pose.x, 0.0, robot.pose.z);
+            let place = |v: Vec3| origin + f * v.x + Vec3::Y * v.y - l * v.z;
+            let mut out: Vec<Tri> = m.tris.iter().filter_map(|t| Tri::new(t.v.map(place), t.albedo, owner)).collect();
+            out.extend(bumper_tris(robot, owner));
+            out
+        }
+        None => stand_in_tris(robot, index),
+    }
+}
+
+/// The four alliance bumper bars around a robot's footprint.
+fn bumper_tris(robot: &Robot, owner: u32) -> Vec<Tri> {
+    let bumper = match robot.alliance {
+        Alliance::Red => hex(0xd8261c),
+        Alliance::Blue => hex(0x1f4fd8),
+    };
+    let (ol, ow) = (robot.length / 2.0 + BUMPER_PROUD, robot.width / 2.0 + BUMPER_PROUD);
+    let (mid, hb, t) = ((BUMPER_LOW + BUMPER_HIGH) / 2.0, (BUMPER_HIGH - BUMPER_LOW) / 2.0, BUMPER_THICK / 2.0);
+    let boxes = [([ol - t, 0.0], [t, ow]), ([-ol + t, 0.0], [t, ow]), ([0.0, ow - t], [ol - 2.0 * t, t]), ([0.0, -ow + t], [ol - 2.0 * t, t])];
+    let (f, l) = (robot.pose.forward(), robot.pose.left());
+    let origin = Vec3::new(robot.pose.x, 0.0, robot.pose.z);
+    let mut out = Vec::new();
+    for (c, h) in boxes {
+        push_box(&mut out, origin + f * c[0] + l * c[1] + Vec3::Y * mid, [f * h[0], l * h[1], Vec3::Y * hb], bumper, owner);
+    }
+    out
+}
+
+/// A stand-in for a typical BIOBUZZ build: a low chassis, four wheels, alliance bumpers, an intake roller across the
+/// front, two uprights and a shooter housing at the rear.
+fn stand_in_tris(robot: &Robot, index: u32) -> Vec<Tri> {
     let owner = Owner::Robot(index).raw();
     let frame = hex(0x3d4147);
     let plate = hex(0x5c6168);

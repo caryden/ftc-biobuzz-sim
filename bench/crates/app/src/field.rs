@@ -2,7 +2,7 @@
 //! or from an orbiting camera, and the annotations are drawn on top through the same camera, at constant pixel
 //! widths.
 
-use crate::camera::world_of;
+use crate::camera::{world_of, Fleet};
 use crate::model::{FieldInfo, State, POLLEN};
 use crate::theme::*;
 use bench_render::{Camera, Intrinsics, RenderOptions, Scene, Vec3, World};
@@ -106,7 +106,7 @@ fn mode_key(m: ViewMode) -> [u32; 3] {
 }
 
 impl FieldWorker {
-    pub fn spawn(sim_dir: PathBuf) -> Self {
+    pub fn spawn(sim_dir: PathBuf, fleet: Fleet) -> Self {
         let (tx, rx) = channel::<FieldRequest>();
         let out = Arc::new(Mutex::new(None));
         let o = out.clone();
@@ -114,7 +114,7 @@ impl FieldWorker {
             .name("field".into())
             .spawn(move || {
                 if let Ok(scene) = Scene::load(sim_dir.join("public/field.glb")) {
-                    run(&scene, rx, &o);
+                    run(&scene, &fleet, rx, &o);
                 }
             })
             .expect("field thread");
@@ -135,13 +135,13 @@ impl FieldWorker {
     }
 }
 
-fn run(scene: &Scene, rx: Receiver<FieldRequest>, out: &Mutex<Option<FieldImage>>) {
+fn run(scene: &Scene, fleet: &Fleet, rx: Receiver<FieldRequest>, out: &Mutex<Option<FieldImage>>) {
     while let Ok(first) = rx.recv() {
         let r = rx.try_iter().last().unwrap_or(first);
         let camera = r.mode.camera(r.w, r.h, r.field.half);
-        let (balls, robots, hive_angles) = world_of(&r.state, &r.field, None);
+        let (balls, robots, hive_angles) = world_of(&r.state, &r.field, None, fleet);
         let glass_alpha = if matches!(r.mode, ViewMode::Plan) { 0.0 } else { 0.08 };
-        let o = scene.render(&camera, &World { balls: &balls, robots: &robots, hive_angles }, &RenderOptions { glass_alpha, ..RenderOptions::default() });
+        let o = scene.render(&camera, &World { balls: &balls, robots: &robots, hive_angles, robot_model: fleet.model.as_deref() }, &RenderOptions { glass_alpha, ..RenderOptions::default() });
         let image = crate::camera::to_render_image(&o.frame.rgb, o.frame.width, o.frame.height);
         *out.lock().unwrap() = Some(FieldImage { image, camera, state: r.state, plan: r.mode == ViewMode::Plan });
     }

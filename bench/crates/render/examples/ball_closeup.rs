@@ -10,6 +10,6 @@ fn main() -> anyhow::Result<()> {
         Ball::on_floor(3, BallKind::Pollen, 0.62, 0.16).turned(Quat::from_rotation_x(1.1)),
         Ball::on_floor(4, BallKind::NectarBlue, 0.6, -0.18),
     ];
-    let o = Scene::empty().render(&cam, &World { balls: &balls, robots: &[], hive_angles: [0.0; 2] }, &RenderOptions::default());
+    let o = Scene::empty().render(&cam, &World { balls: &balls, robots: &[], hive_angles: [0.0; 2], robot_model: None }, &RenderOptions::default());
     o.frame.save_png(out)
 }
