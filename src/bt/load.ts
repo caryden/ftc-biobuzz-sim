@@ -327,7 +327,7 @@ export function checkTree(source: unknown, reg: Registry, limits: Partial<Limits
    */
   function param(v: unknown, type: Type, c: Ctx, path: string, ps?: ParamBase): N.Ex {
     if (typeof v === 'string' && !stringy(type) && type.kind !== 'any') return expr(v, c, path, type).eval;
-    if (type.kind === 'nullable') return v === null ? () => null : param(v, type.of, c, path);
+    if (type.kind === 'nullable') return v === null ? () => null : param(v, type.of, c, path, ps);
     if (type.kind === 'object' && isObj(v)) {
       for (const k of Object.keys(v)) if (!(k in type.fields)) issue(path, `unknown field '${k}'; the fields are ${Object.keys(type.fields).join(', ')}`);
       const parts = Object.entries(type.fields).map(([k, ft]) => {
