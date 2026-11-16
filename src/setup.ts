@@ -41,6 +41,8 @@ export const DEFAULT_SETUP = { driveRpm: 600, sizeIn: 15, massLb: 22 };
 /** The reference launcher's errors, from `DEFAULT_ROBOT.shooter.pollen`. The 1x, 3x, and 5x chips in the robot config multiply them. */
 export const REF_ERR = { errElevDeg: DEFAULT_ROBOT.shooter.pollen.elevationDeg.std, errAzimDeg: DEFAULT_ROBOT.shooter.pollen.yawStdDeg, errSpeed: DEFAULT_ROBOT.shooter.pollen.speed.std };
 export const defaultBot = (i: number): BotSetup => ({ plate: BOT_IDS[i], driver: 'planner', stickFrame: 'field', shooter: 'dual', auto: 'default', flowerStartSec: 0, dualIntake: false, dualShooter: false, defense: 'none', ...REF_ERR, intakeP: DEFAULT_ROBOT.intake.successP, ...DEFAULT_SETUP });
+/** The robot that the HUD, the chase camera, the shot preview, and the robot camera follow: the first robot with a human driver, or R0. */
+export const focusRobot = (bots: BotSetup[]) => Math.max(0, bots.findIndex(b => b.driver !== 'planner'));
 
 /**
  * The robot that the simulator opens with: the combined build that the experiments point to. It is a four-element

@@ -1,10 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import { frameFiles, shotOf } from '../src/render/robot-camera';
 import { DEFAULT_ROBOT } from '../src/sim/config';
+import { assignDriver, defaultBot, focusRobot } from '../src/setup';
 import type { Sim } from '../src/sim/world';
 import { frameAsSim, type Frame, type Trace } from '../src/trace';
 
-const template = { robots: [0, 1, 2, 3].map(() => ({ cfg: DEFAULT_ROBOT })) } as unknown as Sim;
+const template = { me: 0, robots: [0, 1, 2, 3].map(() => ({ cfg: DEFAULT_ROBOT })) } as unknown as Sim;
 const frame = (t: number, robots: [string, number, number, number][]) =>
   ({ t, flowers: [], hives: { red: { phi: 0 }, blue: { phi: 0 } }, robots: robots.map(([id, x, z, h]) => ({ id, x, z, h, carried: [] })) }) as unknown as Frame;
 const trace = { flowerSites: [], frames: [
@@ -20,5 +21,13 @@ describe('robot camera replay', () => {
       [1.2, [0.685, 0.3, -0.25], 0],
       [3.4, [0.815, 0.3, -0.0003], 3.14],
     ]);
+  });
+
+  it("shows and saves R1's camera, plate, and time when a person drives R1", () => {
+    const bots = [0, 1, 2, 3].map(defaultBot); bots[1].plate = '23511'; assignDriver(bots, 1, 'pad1');
+    const sim = frameAsSim(trace, 0, { ...template, me: focusRobot(bots) } as Sim);
+    const { stem, meta } = frameFiles(shotOf(sim, 'pollen', bots.map(b => b.plate)), []);
+    expect(stem).toBe('23511_t001200_pollen');
+    expect([meta.t, meta.camera.position, meta.camera.yaw]).toEqual([1.2, [-0.815, 0.3, 1], 0]);
   });
 });

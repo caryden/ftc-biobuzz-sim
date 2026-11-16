@@ -3,7 +3,7 @@ import { readInput, type Frame } from './input';
 import { AUTO_PROBLEMS, AUTO_TREES, SOLO_AUTO, autoFor, autoStart, previewAuto } from './auto/onboard';
 import { FieldEditor } from './field-editor';
 import { loadUserTrees } from './user-trees';
-import { BOT_IDS, REF_ERR, startSide, assignDriver, defaultBot, metaBot, describe, describeLines, loadBots, robotConfig, sanitize, saveBots, type BotSetup, type DriverKind } from './setup';
+import { BOT_IDS, REF_ERR, startSide, assignDriver, defaultBot, focusRobot, metaBot, describe, describeLines, loadBots, robotConfig, sanitize, saveBots, type BotSetup, type DriverKind } from './setup';
 import { MatchAudio } from './audio';
 import { Coach } from './auto/coach';
 import { Referee } from './ref/referee';
@@ -64,13 +64,12 @@ unitsSel.onchange = () => { units = unitsSel.value as Units; setUnits(units); un
 let sim: Sim; let seed = 1; let startAt = 0; let recorder: TraceRecorder; let traceSaved = false; let coaches: Coach[] = [], referee: Referee | null = null;
 // A paused MATCH doesn't step. `callsSeen` counts the referee's calls that have a note, and `toasted` holds the sim messages that had a toast.
 let livePaused = false, callsSeen = 0, toasted = new WeakSet<object>(), savedFrames = -1;
-const review = new Review(view, () => sim, canvas); let finalClosed = false;
+const review = new Review(view, () => sim.view(focus()), canvas); let finalClosed = false;
 // The field editor edits one robot's AUTO poses before the MATCH. An edit switches the robot to the edited copy.
 const editor = new FieldEditor({ view, canvas, bots, sim: () => sim,
   setAuto: (k, id) => { bots[k].auto = id; saveBots(bots); if (coaches[k]) coaches[k].autoOverride = id === 'default' ? null : id; paintBots(); },
   changed: () => { camSel.value = view.mode; paintEditor(); paintTree(); } });
-/** The robot that the HUD, the chase camera, and the shot preview follow: the first robot with a human driver, or R0. */
-const focus = () => Math.max(0, bots.findIndex(b => b.driver !== 'planner'));
+const focus = () => focusRobot(bots);
 const settings = () => ({ match: modeSel.value, stage: stageSel.value, referee: refSel.value, ...Object.fromEntries(bots.map((b, i) => [BOT_IDS[i], `plate ${b.plate} · ${describe(b)}`])) });
 /**
  * Saves the trace into the repository's traces/ folder through the dev server. A trace that hasn't grown since the last
@@ -468,7 +467,7 @@ function hud(pads: Frame['pads']) {
   paintTree();
   if (view.robotCam) {
     const n = robotCam.targets;
-    $('rcplate').textContent = bots[focus()]?.plate ?? ''; $('rcstat').textContent = `${n} POLLEN to detect`;
+    $('rcplate').textContent = robotCam.shot?.plate ?? ''; $('rcstat').textContent = `${n} POLLEN to detect`;
   }
   // In the review, the scoreboard, the clock, and the score table show the trace frame at the cursor.
   const f = review.frame, r = f ? f.scores?.red ?? null : sim.score('red'), b = f ? f.scores?.blue ?? null : sim.score('blue');
