@@ -298,8 +298,9 @@ export class Sim {
   get driverEnabled(): boolean { return this.phase === 'teleop'; }
 
   private advanceClock() {
-    if (this.phase === 'pre' || this.phase === 'post' || this.mode === 'practice') return;
-    this.time += DT; this.clock -= DT;
+    if (this.phase === 'pre' || this.phase === 'post') return;
+    this.time += DT; if (this.mode === 'practice') return;
+    this.clock -= DT;
     if (this.phase === 'transition' && !this.pickupCued) { this.pickupCued = true; this.events.push('pick_up_controllers'); }
     if (this.phase === 'transition' && this.clock <= 3 && !this.countCued) { this.countCued = true; this.events.push('countdown'); }
     if (this.phase === 'teleop' && this.clock <= MATCH.endgame && !this.endgameCued) { this.endgameCued = true; this.events.push('endgame'); }

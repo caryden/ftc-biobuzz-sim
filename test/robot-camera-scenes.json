@@ -1,0 +1,17 @@
+{
+  "centered": {
+    "camera": { "position": [0, 0.3, 0], "yaw": 0, "pitch": 0.349066 },
+    "balls": [{ "id": 1, "kind": "pollen", "world": [0.7265, 0.03556, 0], "inFlower": false }]
+  },
+  "edge-clipped": {
+    "camera": { "position": [0, 0.3, 0], "yaw": 0, "pitch": 0.349066 },
+    "balls": [{ "id": 1, "kind": "pollen", "world": [0.7265, 0.03556, 0.395], "inFlower": false }]
+  },
+  "partly occluded": {
+    "camera": { "position": [0, 0.3, 0], "yaw": 0, "pitch": 0.349066 },
+    "balls": [
+      { "id": 1, "kind": "pollen", "world": [0.7265, 0.03556, 0], "inFlower": false },
+      { "id": 2, "kind": "pollen", "world": [0.64, 0.03556, 0], "inFlower": false }
+    ]
+  }
+}

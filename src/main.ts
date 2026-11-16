@@ -3,7 +3,7 @@ import { readInput, type Frame } from './input';
 import { AUTO_PROBLEMS, AUTO_TREES, SOLO_AUTO, autoFor, autoStart, previewAuto } from './auto/onboard';
 import { FieldEditor } from './field-editor';
 import { loadUserTrees } from './user-trees';
-import { BOT_IDS, REF_ERR, startSide, assignDriver, defaultBot, metaBot, describe, describeLines, loadBots, robotConfig, sanitize, saveBots, type BotSetup, type DriverKind } from './setup';
+import { BOT_IDS, REF_ERR, startSide, assignDriver, defaultBot, focusRobot, metaBot, describe, describeLines, loadBots, robotConfig, sanitize, saveBots, type BotSetup, type DriverKind } from './setup';
 import { MatchAudio } from './audio';
 import { Coach } from './auto/coach';
 import { Referee } from './ref/referee';
@@ -14,6 +14,7 @@ import { PALETTE } from './auto/palette';
 import { LiveTreeState, TreePanel, treeStateAt } from './render/tree-view';
 import { TELEOP_TREES } from './auto/driver';
 import { CAMERAS, View, type CameraMode } from './render/view';
+import { RobotCamera, type Mount } from './render/robot-camera';
 import { MATCH, RP } from './sim/config';
 import { fmtPos, getUnits, massFromInput, massToInput, setUnits, sizeFromInput, sizeToInput, speedFromInput, speedToInput, type Units } from './units';
 import { DT, NO_INPUT, Sim, type AllianceScore, type Inputs, type MatchMode } from './sim/world';
@@ -34,6 +35,17 @@ treeSel.onchange = () => { try { localStorage.setItem('biobuzz.treeview', treeSe
 const pathsSel = $<HTMLSelectElement>('autopaths');
 try { pathsSel.value = localStorage.getItem('biobuzz.autopaths') === 'off' ? 'off' : 'on'; } catch { /* Storage is a convenience. */ }
 pathsSel.onchange = () => { try { localStorage.setItem('biobuzz.autopaths', pathsSel.value); } catch { /* Storage is a convenience. */ } pathsSel.blur(); };
+// The robot camera follows the robot that the view follows. It draws after the main view, so it costs a render only
+// while it is open.
+const robotCamSel = $<HTMLSelectElement>('robotcamsel'), robotCam = new RobotCamera($<HTMLCanvasElement>('rcimg'), $<HTMLCanvasElement>('rcover'));
+try { const v = localStorage.getItem('biobuzz.robotcam'); if (v === 'pollen' || v === 'tags') robotCamSel.value = v; } catch { /* Storage is a convenience. */ }
+function paintRobotCam() {
+  const on = robotCamSel.value !== 'off'; $('robotcam').classList.toggle('hidden', !on);
+  view.robotCam = on ? robotCam : null; if (on) robotCam.mount = robotCamSel.value as Mount;
+}
+robotCamSel.onchange = () => { try { localStorage.setItem('biobuzz.robotcam', robotCamSel.value); } catch { /* Storage is a convenience. */ } robotCamSel.blur(); paintRobotCam(); };
+paintRobotCam();
+$('rcsave').onclick = () => { view.saveRobotCamera(); $('rcsave').blur(); };
 let treeRobot = -1; // -1 follows the focus robot.
 // One handler for the robot buttons. The buttons are rebuilt only when the robots or the choice change: a button that is
 // replaced between the press and the release of a click never receives the click.
@@ -52,13 +64,12 @@ unitsSel.onchange = () => { units = unitsSel.value as Units; setUnits(units); un
 let sim: Sim; let seed = 1; let startAt = 0; let recorder: TraceRecorder; let traceSaved = false; let coaches: Coach[] = [], referee: Referee | null = null;
 // A paused MATCH doesn't step. `callsSeen` counts the referee's calls that have a note, and `toasted` holds the sim messages that had a toast.
 let livePaused = false, callsSeen = 0, toasted = new WeakSet<object>(), savedFrames = -1;
-const review = new Review(view, () => sim, canvas); let finalClosed = false;
+const review = new Review(view, () => sim.view(focus()), canvas); let finalClosed = false;
 // The field editor edits one robot's AUTO poses before the MATCH. An edit switches the robot to the edited copy.
 const editor = new FieldEditor({ view, canvas, bots, sim: () => sim,
   setAuto: (k, id) => { bots[k].auto = id; saveBots(bots); if (coaches[k]) coaches[k].autoOverride = id === 'default' ? null : id; paintBots(); },
   changed: () => { camSel.value = view.mode; paintEditor(); paintTree(); } });
-/** The robot that the HUD, the chase camera, and the shot preview follow: the first robot with a human driver, or R0. */
-const focus = () => Math.max(0, bots.findIndex(b => b.driver !== 'planner'));
+const focus = () => focusRobot(bots);
 const settings = () => ({ match: modeSel.value, stage: stageSel.value, referee: refSel.value, ...Object.fromEntries(bots.map((b, i) => [BOT_IDS[i], `plate ${b.plate} · ${describe(b)}`])) });
 /**
  * Saves the trace into the repository's traces/ folder through the dev server. A trace that hasn't grown since the last
@@ -454,6 +465,10 @@ function paintTree() {
 
 function hud(pads: Frame['pads']) {
   paintTree();
+  if (view.robotCam) {
+    const n = robotCam.targets;
+    $('rcplate').textContent = robotCam.shot?.plate ?? ''; $('rcstat').textContent = `${n} POLLEN to detect`;
+  }
   // In the review, the scoreboard, the clock, and the score table show the trace frame at the cursor.
   const f = review.frame, r = f ? f.scores?.red ?? null : sim.score('red'), b = f ? f.scores?.blue ?? null : sim.score('blue');
   const totals = f ? f.score : { red: r!.total, blue: b!.total }, phase = (f ? f.phase : sim.phase) as Sim['phase'], clock = f ? f.clock : sim.timer;

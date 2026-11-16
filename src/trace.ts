@@ -72,15 +72,18 @@ export class TraceRecorder {
   private hive(sim: Sim, a: 'red' | 'blue') { const h = sim.hives[a]; return { phi: r2(h.phi), up: h.upCell, tips: h.tips, load: r2(sim.cellLoad(a)) }; }
 }
 
-/** Builds the minimal sim-shaped object that the view needs to draw one trace frame. Balls come from the latest frame that has them. */
+/**
+ * Builds the minimal sim-shaped object that the view needs to draw one trace frame, from the point of view of the
+ * template's robot. Balls come from the latest frame that has them.
+ */
 export function frameAsSim(trace: Trace, index: number, template: Sim): Sim {
-  const f = trace.frames[index]; let bi = index; while (bi > 0 && !trace.frames[bi].balls) bi--;
+  const f = trace.frames[index], me = template.me; let bi = index; while (bi > 0 && !trace.frames[bi].balls) bi--;
   const robots = f.robots.map((r, i) => ({ alliance: r.id[0] === 'R' ? 'red' : 'blue', slot: Number(r.id[1]), cfg: template.robots[Math.min(i, template.robots.length - 1)].cfg, carried: r.carried.map(k => KIND[k]),
     body: { translation: () => ({ x: r.x, y: 0.17, z: r.z }) }, heading: r.h }));
   const view = (i: number) => ({ cfg: robots[i].cfg, robot: robots[i].body, heading: robots[i].heading, alliance: robots[i].alliance, carried: robots[i].carried });
   const balls = new Map((trace.frames[bi].balls ?? []).map(([id, k, x, y, z]) => [id, { id, kind: KIND[k], body: { translation: () => ({ x: x / 100, y: y / 100, z: z / 100 }) } }]));
   return { robots, view, balls, flowers: trace.flowerSites.map((s, i) => ({ ...s, stack: f.flowers[i].map(k => KIND[k]) })), hives: { red: { phi: f.hives.red.phi }, blue: { phi: f.hives.blue.phi } },
-    ...view(0), cfg: robots[0].cfg, previewShot: () => ({ points: [], scores: false }) } as unknown as Sim;
+    ...view(me), me, time: f.t, previewShot: () => ({ points: [], scores: false }) } as unknown as Sim;
 }
 
 /** Writes the notes as Markdown, with what every robot was doing at each marked moment. */

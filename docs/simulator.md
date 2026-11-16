@@ -229,6 +229,15 @@ prints a timeline for red robot 0, the stalls per robot, and the final score of 
 are the match mode, the AUTO routine, the seed, and the time at which each group of robots starts FLOWER work.
 The comment at the start of `scripts/match.ts` lists them.
 
+## Robot camera
+
+**Robot camera** in the game setup shows what a Limelight on the robot that the view follows would see, at 640 x
+480: the pollen camera at the intake end, 0.30 m up and 20 degrees down, or the robot's AprilTag camera from its
+config. A green ring marks each POLLEN that a ball detector should report: on the floor, outside the FLOWERS, mostly
+in sight and in the image, and within 3.5 m. A second render pass, with each ball in its own color, gives how much of
+each ball is in sight. **Save frame** downloads the image as PNG and its labels as JSON, in the format of the native
+app's `bench export`, for training or testing a detector. The camera works in the review too.
+
 ## Review and annotate a match
 
 The page records every match at 10 Hz, with each frame's full score breakdown, so that the scoreboard scrubs too.
