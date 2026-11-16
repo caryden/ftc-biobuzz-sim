@@ -510,12 +510,11 @@ export class View {
 
   /** Draws the focus robot's camera, with the robot itself and every overlay of the page hidden from it. */
   private drawRobotCamera(sim: Sim, force = false) {
-    const me = (sim as unknown as { me?: number }).me ?? 0, r = sim.robots[me];
+    const me = sim.me;
     const hide = [this.robotGroups[me], this.pathLine, this.autoLine, this.autoPoses, this.arc, this.handleGroup, this.refGroup, this.linkGroup, this.gridGroup, this.ghost, this.runner, ...this.axisLabels]
       .filter((o): o is THREE.Object3D => !!o);
     const balls: BallMesh[] = [...this.ballMeshes].map(([id, mesh]) => ({ mesh, id, kind: mesh.userData.kind as BallKind, inFlower: false }));
     this.staticBalls.children.forEach((mesh, k) => balls.push({ mesh, id: 1_000_000 + k, kind: mesh.userData.kind as BallKind, inFlower: true }));
-    const plate = this.plates[me] ?? (r ? `${r.alliance === 'red' ? 'R' : 'B'}${r.slot}` : '');
-    this.robotCam!.update(this.renderer, this.scene, sim, plate, hide, this.clearMeshes, balls, force);
+    this.robotCam!.update(this.renderer, this.scene, sim, this.plates, hide, this.clearMeshes, balls, force);
   }
 }

@@ -42,6 +42,44 @@ function idMaterial(n: number): THREE.MeshBasicMaterial {
   return m;
 }
 
+/** The moment and the camera pose of one image: what the saved labels say about it besides the balls. */
+export interface Shot { t: number; plate: string; mount: Mount; position: [number, number, number]; yaw: number; pitch: number }
+
+/** The camera on the robot that `sim` stands for, as `mount` says, at the sim's time. `plates` holds each robot's number plate. */
+export function shotOf(sim: Sim, mount: Mount, plates: string[]): Shot {
+  const p = sim.robot.translation(), h = sim.heading, cfg = sim.cfg, r = sim.robots[sim.me];
+  const fwd = new THREE.Vector3(Math.cos(h), 0, -Math.sin(h)), left = new THREE.Vector3(-Math.sin(h), 0, -Math.cos(h));
+  let f: number, l: number, up: number, yaw: number, pitch: number;
+  if (mount === 'pollen') {
+    // The pollen camera: at the intake end, 0.30 m up, 20 degrees down. ASSUMPTION: the turret team's placeholder mount.
+    f = cfg.length / 2 - 0.03; l = 0; up = 0.3; yaw = 0; pitch = (20 * Math.PI) / 180;
+  } else {
+    // The AprilTag camera from the robot's config: toward the shooter end, looking up at the raised CELL.
+    const rear = cfg.shooter.facing === 'rear', s = rear ? -1 : 1, o = cfg.camera.offset;
+    f = s * o[0]; l = s * o[1]; up = o[2]; yaw = rear ? Math.PI : 0; pitch = -(cfg.camera.pitchDeg * Math.PI) / 180;
+  }
+  const pos = new THREE.Vector3(p.x, 0, p.z).addScaledVector(fwd, f).addScaledVector(left, l).setY(up);
+  return { t: sim.time, plate: plates[sim.me] ?? `${r.alliance === 'red' ? 'R' : 'B'}${r.slot}`, mount, position: [pos.x, pos.y, pos.z], yaw: h + yaw, pitch };
+}
+
+/** Points `camera` as `shot` says: `yaw` counterclockwise from +x seen from above, and `pitch` down. */
+function aim(camera: THREE.Camera, shot: Pick<Shot, 'position' | 'yaw' | 'pitch'>) {
+  const { yaw: a, pitch } = shot, pos = new THREE.Vector3(...shot.position);
+  camera.position.copy(pos); camera.up.set(0, 1, 0);
+  camera.lookAt(pos.clone().add(new THREE.Vector3(Math.cos(a) * Math.cos(pitch), -Math.sin(pitch), -Math.sin(a) * Math.cos(pitch)))); camera.updateMatrixWorld();
+}
+
+/** The saved files' name without the extension, and the labels JSON, in the native app's `bench export` format. */
+export function frameFiles(shot: Shot, labels: BallLabel[]) {
+  const stem = `${shot.plate}_t${String(Math.round(shot.t * 1000)).padStart(6, '0')}_${shot.mount}`;
+  const meta = {
+    file: `${stem}.png`, t: r4(shot.t), mount: shot.mount,
+    camera: { position: shot.position.map(r4), yaw: r4(shot.yaw), pitch_down: r4(shot.pitch), intrinsics: INTRINSICS },
+    balls: labels.map(l => ({ id: l.id, kind: l.kind, center: l.center, radius: l.radius, range: l.range, visible: l.visible, in_image: l.inImage, world: l.world, target: l.target })),
+  };
+  return { stem, meta };
+}
+
 export class RobotCamera {
   readonly camera = new THREE.PerspectiveCamera((2 * Math.atan(INTRINSICS.cy / INTRINSICS.fy) * 180) / Math.PI, INTRINSICS.width / INTRINSICS.height, 0.03, 30);
   labels: BallLabel[] = [];
@@ -54,8 +92,8 @@ export class RobotCamera {
   private black = new THREE.MeshBasicMaterial({ color: 0x000000, toneMapped: false });
   private idMats: THREE.MeshBasicMaterial[] = [];
   private frame = 0;
-  /** The pose and time of the image on screen, for the saved labels. */
-  private shot: { t: number; plate: string; yaw: number; pitch: number } | null = null;
+  /** The moment and the pose of the image on screen. */
+  shot: Shot | null = null;
 
   constructor(private canvas: HTMLCanvasElement, private overlay: HTMLCanvasElement) {
     this.target.texture.colorSpace = THREE.SRGBColorSpace;
@@ -63,34 +101,15 @@ export class RobotCamera {
     this.image = new ImageData(INTRINSICS.width, INTRINSICS.height);
   }
 
-  /** Places the camera on the robot `sim` stands for, as its mount says. */
-  private place(sim: Sim) {
-    const p = sim.robot.translation(), h = sim.heading, cfg = sim.cfg;
-    const fwd = new THREE.Vector3(Math.cos(h), 0, -Math.sin(h)), left = new THREE.Vector3(-Math.sin(h), 0, -Math.cos(h));
-    let f: number, l: number, up: number, yaw: number, pitch: number;
-    if (this.mount === 'pollen') {
-      // The pollen camera: at the intake end, 0.30 m up, 20 degrees down. ASSUMPTION: the turret team's placeholder mount.
-      f = cfg.length / 2 - 0.03; l = 0; up = 0.3; yaw = 0; pitch = (20 * Math.PI) / 180;
-    } else {
-      // The AprilTag camera from the robot's config: toward the shooter end, looking up at the raised CELL.
-      const rear = cfg.shooter.facing === 'rear', s = rear ? -1 : 1, o = cfg.camera.offset;
-      f = s * o[0]; l = s * o[1]; up = o[2]; yaw = rear ? Math.PI : 0; pitch = -(cfg.camera.pitchDeg * Math.PI) / 180;
-    }
-    const pos = new THREE.Vector3(p.x, 0, p.z).addScaledVector(fwd, f).addScaledVector(left, l).setY(up);
-    const a = h + yaw, dir = new THREE.Vector3(Math.cos(a) * Math.cos(pitch), -Math.sin(pitch), -Math.sin(a) * Math.cos(pitch));
-    this.camera.position.copy(pos); this.camera.up.set(0, 1, 0); this.camera.lookAt(pos.clone().add(dir)); this.camera.updateMatrixWorld();
-    return { yaw: a, pitch };
-  }
-
   /**
    * Renders the camera's image and, every few frames, the labels. `hide` are the objects the camera must not see: the
    * robot it rides on and the page's overlays. `clear` are the see-through panels, which don't block the view.
    */
-  update(renderer: THREE.WebGLRenderer, scene: THREE.Scene, sim: Sim, plate: string, hide: THREE.Object3D[], clear: THREE.Object3D[], balls: BallMesh[], force = false) {
+  update(renderer: THREE.WebGLRenderer, scene: THREE.Scene, sim: Sim, plates: string[], hide: THREE.Object3D[], clear: THREE.Object3D[], balls: BallMesh[], force = false) {
     this.frame++;
     if (!force && this.frame % 2) return;
     const was = hide.map(o => o.visible); hide.forEach(o => { o.visible = false; });
-    const { yaw, pitch } = this.place(sim);
+    const shot = shotOf(sim, this.mount, plates); aim(this.camera, shot);
     renderer.setRenderTarget(this.target); renderer.render(scene, this.camera);
     renderer.readRenderTargetPixels(this.target, 0, 0, INTRINSICS.width, INTRINSICS.height, this.pixels);
     const visible = force || this.frame % 4 === 0 ? this.visibility(renderer, scene, clear, balls) : null;
@@ -101,7 +120,7 @@ export class RobotCamera {
     for (let y = 0; y < INTRINSICS.height; y++) this.image.data.set(this.pixels.subarray((INTRINSICS.height - 1 - y) * w4, (INTRINSICS.height - y) * w4), y * w4);
     this.canvas.getContext('2d')!.putImageData(this.image, 0, 0);
     if (visible) this.labels = this.label(balls, visible);
-    this.shot = { t: (sim as unknown as { time?: number }).time ?? 0, plate, yaw, pitch };
+    this.shot = shot;
     this.drawOverlay();
   }
 
@@ -173,13 +192,7 @@ export class RobotCamera {
   /** Downloads the image on screen as a PNG and its labels as JSON, in the native app's `bench export` format. */
   save() {
     if (!this.shot) return;
-    const stem = `${this.shot.plate}_t${String(Math.round(this.shot.t * 1000)).padStart(6, '0')}_${this.mount}`;
-    const pos = this.camera.position;
-    const meta = {
-      file: `${stem}.png`, t: r4(this.shot.t), mount: this.mount,
-      camera: { position: [r4(pos.x), r4(pos.y), r4(pos.z)], yaw: r4(this.shot.yaw), pitch_down: r4(this.shot.pitch), intrinsics: INTRINSICS },
-      balls: this.labels.map(l => ({ id: l.id, kind: l.kind, center: l.center, radius: l.radius, range: l.range, visible: l.visible, in_image: l.inImage, world: l.world, target: l.target })),
-    };
+    const { stem, meta } = frameFiles(this.shot, this.labels);
     const download = (href: string, name: string) => { const a = document.createElement('a'); a.href = href; a.download = name; a.click(); };
     download(this.canvas.toDataURL('image/png'), `${stem}.png`);
     const url = URL.createObjectURL(new Blob([JSON.stringify(meta, null, 1)], { type: 'application/json' }));

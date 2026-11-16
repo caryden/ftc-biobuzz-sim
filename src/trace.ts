@@ -80,7 +80,7 @@ export function frameAsSim(trace: Trace, index: number, template: Sim): Sim {
   const view = (i: number) => ({ cfg: robots[i].cfg, robot: robots[i].body, heading: robots[i].heading, alliance: robots[i].alliance, carried: robots[i].carried });
   const balls = new Map((trace.frames[bi].balls ?? []).map(([id, k, x, y, z]) => [id, { id, kind: KIND[k], body: { translation: () => ({ x: x / 100, y: y / 100, z: z / 100 }) } }]));
   return { robots, view, balls, flowers: trace.flowerSites.map((s, i) => ({ ...s, stack: f.flowers[i].map(k => KIND[k]) })), hives: { red: { phi: f.hives.red.phi }, blue: { phi: f.hives.blue.phi } },
-    ...view(0), cfg: robots[0].cfg, previewShot: () => ({ points: [], scores: false }) } as unknown as Sim;
+    ...view(0), cfg: robots[0].cfg, me: 0, time: f.t, previewShot: () => ({ points: [], scores: false }) } as unknown as Sim;
 }
 
 /** Writes the notes as Markdown, with what every robot was doing at each marked moment. */
