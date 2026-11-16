@@ -78,9 +78,10 @@ the wrong end. Keep your team's CAD out of this repository.
 ## Training data
 
 ```
-cargo run --release -- export --seeds 1-20 --every 0.5 --mount pollen --out ~/bench-datasets/run1
+cargo run --release -- export --seeds 1-20 --every 0.5 --mount pollen --out ~/bench-datasets
 ```
 
-This plays each seed headless and writes every robot's camera frame as a PNG, with one line per frame in
+This plays each seed headless and writes a new folder in `--out`, `run-1`, then `run-2` and so on. It holds every
+robot's camera frame as a PNG, the camera and export settings in `manifest.json`, and one line per frame in
 `labels.jsonl`: the camera pose and intrinsics, and for each ball in view its kind, image circle, range, how much of
 it is visible, and whether it is a target (floor POLLEN outside the FLOWERS within 3.5 m).

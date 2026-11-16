@@ -27,7 +27,7 @@ pub struct ExportArgs {
     /// Skip frames with fewer floor POLLEN in view than this.
     #[arg(long, default_value_t = 0)]
     min_targets: usize,
-    /// Output folder. Default: ~/bench-datasets/<date and time>.
+    /// The folder each export makes a new run-N folder in. Default: ~/bench-datasets.
     #[arg(long)]
     out: Option<PathBuf>,
 }
@@ -96,6 +96,26 @@ fn row(file: &str, shot: &Shot, state: &State, field: &FieldInfo, cam: &Camera, 
     })
 }
 
+/// Makes the next free run-N folder in `base`, with `manifest` as manifest.json and an empty labels.jsonl, so a run's
+/// labels and images always come from the same settings.
+fn new_run(base: &Path, manifest: &Value) -> anyhow::Result<(PathBuf, std::fs::File)> {
+    std::fs::create_dir_all(base)?;
+    let mut n = 1;
+    loop {
+        let dir = base.join(format!("run-{n}"));
+        match std::fs::create_dir(&dir) {
+            Ok(()) => {
+                std::fs::create_dir(dir.join("frames"))?;
+                std::fs::write(dir.join("manifest.json"), serde_json::to_string_pretty(manifest)?)?;
+                let labels = std::fs::File::create(dir.join("labels.jsonl"))?;
+                return Ok((dir, labels));
+            }
+            Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => n += 1,
+            Err(e) => return Err(e.into()),
+        }
+    }
+}
+
 /// Saves the frame on screen, with its labels, to `dir`.
 pub fn write_frame(dir: &Path, r: &CamResult) -> anyhow::Result<PathBuf> {
     std::fs::create_dir_all(dir)?;
@@ -116,16 +136,21 @@ pub fn run(args: &Args, e: &ExportArgs) -> anyhow::Result<()> {
         "both" => vec![MountKind::Pollen, MountKind::Tags],
         m => anyhow::bail!("--mount is pollen, tags or both, not {m}"),
     };
-    let out = e.out.clone().unwrap_or_else(|| default_dir().join(format!("export-{}", std::process::id())));
-    std::fs::create_dir_all(out.join("frames"))?;
     let scene = Scene::load(args.sim_dir().join("public/field.glb"))?;
     let fleet = Fleet::load(args)?;
     let optics = Optics::load(args.camera_json.as_deref())?;
-    let mut index = std::fs::OpenOptions::new().create(true).append(true).open(out.join("labels.jsonl"))?;
+    let k = optics.intrinsics;
+    let manifest = json!({
+        "seeds": seeds, "every": e.every, "mount": e.mount, "min_targets": e.min_targets, "mode": args.mode,
+        "intrinsics": { "fx": k.fx, "fy": k.fy, "cx": k.cx, "cy": k.cy, "width": k.width, "height": k.height },
+        "pollen_mount": { "height_m": optics.height, "pitch_deg": optics.pitch.to_degrees() },
+        "robot_model": args.robot_model, "model_robots": args.model_robots, "turret": args.turret,
+    });
+    let (out, mut index) = new_run(&e.out.clone().unwrap_or_else(default_dir), &manifest)?;
     let mut server = Server::start(&args.sim_dir())?;
     let steps = ((e.every * STEPS_PER_SEC).round() as u32).max(1);
     let mut written = 0usize;
-    for seed in seeds {
+    for &seed in &seeds {
         let (field, _) = server.reset(seed, &args.mode, &fleet.bots(4))?;
         let mut state = server.start_match()?;
         while state.phase != "post" {
@@ -154,4 +179,24 @@ pub fn run(args: &Args, e: &ExportArgs) -> anyhow::Result<()> {
     }
     eprintln!("wrote {written} frames to {}", out.display());
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn each_export_gets_its_own_run() {
+        let base = std::env::temp_dir().join(format!("bench-export-test-{}", std::process::id()));
+        let (a, mut labels) = new_run(&base, &json!({ "intrinsics": { "fx": 620.0 } })).unwrap();
+        writeln!(labels, r#"{{"file":"frames/s001_t000500_r0_pollen.png"}}"#).unwrap();
+        let (b, _) = new_run(&base, &json!({ "intrinsics": { "fx": 500.0 } })).unwrap();
+        let read = |p: PathBuf| std::fs::read_to_string(p).unwrap();
+        assert_eq!((a.clone(), b.clone()), (base.join("run-1"), base.join("run-2")));
+        assert_eq!(read(a.join("labels.jsonl")), "{\"file\":\"frames/s001_t000500_r0_pollen.png\"}\n");
+        assert_eq!(read(b.join("labels.jsonl")), "");
+        let fx = |dir: &Path| serde_json::from_str::<Value>(&read(dir.join("manifest.json"))).unwrap()["intrinsics"]["fx"].clone();
+        assert_eq!((fx(&a), fx(&b)), (json!(620.0), json!(500.0)));
+        std::fs::remove_dir_all(base).unwrap();
+    }
 }
