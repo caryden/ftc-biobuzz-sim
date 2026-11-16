@@ -63,7 +63,7 @@ export function shotOf(sim: Sim, mount: Mount, plates: string[]): Shot {
 }
 
 /** Points `camera` as `shot` says: `yaw` counterclockwise from +x seen from above, and `pitch` down. */
-function aim(camera: THREE.Camera, shot: Pick<Shot, 'position' | 'yaw' | 'pitch'>) {
+export function aim(camera: THREE.Camera, shot: Pick<Shot, 'position' | 'yaw' | 'pitch'>) {
   const { yaw: a, pitch } = shot, pos = new THREE.Vector3(...shot.position);
   camera.position.copy(pos); camera.up.set(0, 1, 0);
   camera.lookAt(pos.clone().add(new THREE.Vector3(Math.cos(a) * Math.cos(pitch), -Math.sin(pitch), -Math.sin(a) * Math.cos(pitch)))); camera.updateMatrixWorld();
@@ -78,6 +78,30 @@ export function frameFiles(shot: Shot, labels: BallLabel[]) {
     balls: labels.map(l => ({ id: l.id, kind: l.kind, center: l.center, radius: l.radius, range: l.range, visible: l.visible, in_image: l.inImage, world: l.world, target: l.target })),
   };
   return { stem, meta };
+}
+
+/** Labels the balls that `camera` sees. `counts` holds each ball's pixels in the visibility pass, by its index in `balls`. */
+export function labelBalls(camera: THREE.Camera, balls: BallMesh[], counts: Map<number, number>): BallLabel[] {
+  const k = INTRINSICS, view = camera.matrixWorldInverse, out: BallLabel[] = [], sx = ID_W / k.width;
+  balls.forEach((b, i) => {
+    const w = new THREE.Vector3(); b.mesh.getWorldPosition(w);
+    const c = w.clone().applyMatrix4(view), depth = -c.z, r = b.kind === 'pollen' ? FIELD.pollenRadius : FIELD.nectarRadius;
+    if (depth <= 0.03) return;
+    const u = k.cx + (k.fx * c.x) / depth, v = k.cy - (k.fy * c.y) / depth, rp = (k.fx * r) / depth;
+    if (u + rp < 0 || u - rp > k.width || v + rp < 0 || v - rp > k.height) return;
+    // The silhouette's pixels at the visibility pass's scale, all of them and those inside the image.
+    const ru = rp * sx, cu = u * sx, cv = v * sx;
+    let all = 0, inside = 0;
+    for (let y = Math.floor(cv - ru); y <= Math.ceil(cv + ru); y++) for (let x = Math.floor(cu - ru); x <= Math.ceil(cu + ru); x++) {
+      if ((x + 0.5 - cu) ** 2 + (y + 0.5 - cv) ** 2 > ru * ru) continue;
+      all++; if (x >= 0 && y >= 0 && x < ID_W && y < ID_H) inside++;
+    }
+    if (!inside) return;
+    const visible = Math.min(1, (counts.get(i) ?? 0) / inside), inImage = inside / Math.max(all, 1), range = w.distanceTo(camera.position);
+    const target = b.kind === 'pollen' && !b.inFlower && w.y < r + 0.03 && visible >= 0.5 && inImage >= 0.5 && range <= MAX_RANGE;
+    out.push({ id: b.id, kind: b.kind, center: [r4(u), r4(v)], radius: r4(rp), range: r4(range), visible: r4(visible), inImage: r4(inImage), world: [r4(w.x), r4(w.y), r4(w.z)], target });
+  });
+  return out;
 }
 
 export class RobotCamera {
@@ -119,7 +143,7 @@ export class RobotCamera {
     const w4 = INTRINSICS.width * 4;
     for (let y = 0; y < INTRINSICS.height; y++) this.image.data.set(this.pixels.subarray((INTRINSICS.height - 1 - y) * w4, (INTRINSICS.height - y) * w4), y * w4);
     this.canvas.getContext('2d')!.putImageData(this.image, 0, 0);
-    if (visible) this.labels = this.label(balls, visible);
+    if (visible) this.labels = labelBalls(this.camera, balls, visible);
     this.shot = shot;
     this.drawOverlay();
   }
@@ -148,29 +172,6 @@ export class RobotCamera {
       if (v > 0) counts.set(v - 1, (counts.get(v - 1) ?? 0) + 1);
     }
     return counts;
-  }
-
-  private label(balls: BallMesh[], counts: Map<number, number>): BallLabel[] {
-    const k = INTRINSICS, view = this.camera.matrixWorldInverse, out: BallLabel[] = [], sx = ID_W / k.width;
-    balls.forEach((b, i) => {
-      const w = new THREE.Vector3(); b.mesh.getWorldPosition(w);
-      const c = w.clone().applyMatrix4(view), depth = -c.z, r = b.kind === 'pollen' ? FIELD.pollenRadius : FIELD.nectarRadius;
-      if (depth <= 0.03) return;
-      const u = k.cx + (k.fx * c.x) / depth, v = k.cy - (k.fy * c.y) / depth, rp = (k.fx * r) / depth;
-      if (u + rp < 0 || u - rp > k.width || v + rp < 0 || v - rp > k.height) return;
-      // The silhouette's pixels at the visibility pass's scale, all of them and those inside the image.
-      const ru = rp * sx, cu = u * sx, cv = v * sx;
-      let all = 0, inside = 0;
-      for (let y = Math.floor(cv - ru); y <= Math.ceil(cv + ru); y++) for (let x = Math.floor(cu - ru); x <= Math.ceil(cu + ru); x++) {
-        if ((x + 0.5 - cu) ** 2 + (y + 0.5 - cv) ** 2 > ru * ru) continue;
-        all++; if (x >= 0 && y >= 0 && x < ID_W && y < ID_H) inside++;
-      }
-      if (!inside) return;
-      const visible = Math.min(1, (counts.get(i) ?? 0) / inside), inImage = inside / Math.max(all, 1), range = w.distanceTo(this.camera.position);
-      const target = b.kind === 'pollen' && !b.inFlower && w.y < r + 0.03 && visible >= 0.5 && inImage >= 0.5 && range <= MAX_RANGE;
-      out.push({ id: b.id, kind: b.kind, center: [r4(u), r4(v)], radius: r4(rp), range: r4(range), visible: r4(visible), inImage: r4(inImage), world: [r4(w.x), r4(w.y), r4(w.z)], target });
-    });
-    return out;
   }
 
   /** Rings on the POLLEN a detector should report, and dashed ones on floor POLLEN cut off by the image edge. */

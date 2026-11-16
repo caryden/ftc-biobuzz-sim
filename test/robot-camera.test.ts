@@ -1,9 +1,11 @@
+import * as THREE from 'three';
 import { describe, expect, it } from 'vitest';
-import { frameFiles, shotOf } from '../src/render/robot-camera';
+import { aim, frameFiles, labelBalls, shotOf, type BallMesh } from '../src/render/robot-camera';
 import { DEFAULT_ROBOT } from '../src/sim/config';
 import { assignDriver, defaultBot, focusRobot } from '../src/setup';
 import type { Sim } from '../src/sim/world';
 import { frameAsSim, type Frame, type Trace } from '../src/trace';
+import SCENES from './robot-camera-scenes.json';
 
 const template = { me: 0, robots: [0, 1, 2, 3].map(() => ({ cfg: DEFAULT_ROBOT })) } as unknown as Sim;
 const frame = (t: number, robots: [string, number, number, number][]) =>
@@ -29,5 +31,35 @@ describe('robot camera replay', () => {
     const { stem, meta } = frameFiles(shotOf(sim, 'pollen', bots.map(b => b.plate)), []);
     expect(stem).toBe('23511_t001200_pollen');
     expect([meta.t, meta.camera.position, meta.camera.yaw]).toEqual([1.2, [-0.815, 0.3, 1], 0]);
+  });
+});
+
+/** Labels a scene of robot-camera-scenes.json, given each ball's pixels in the visibility pass, in the order of its balls. */
+function labelScene(name: keyof typeof SCENES, pixels: number[]) {
+  const scene = SCENES[name], camera = new THREE.PerspectiveCamera(); aim(camera, scene.camera as Parameters<typeof aim>[1]);
+  const balls = scene.balls.map(b => { const mesh = new THREE.Object3D(); mesh.position.fromArray(b.world); return { ...b, mesh } as BallMesh; });
+  return labelBalls(camera, balls, new Map(pixels.map((n, i) => [i, n])));
+}
+
+// The pixel counts are what the visibility pass rendered for each scene in headless Chrome, with the CAD POLLEN of
+// public/balls.gltf. Unhidden, that POLLEN renders 620 pixels where the circle has 640.
+describe('ball labels', () => {
+  it('labels a centered POLLEN a little short of fully visible', () => {
+    expect(labelScene('centered', [620])).toEqual([
+      { id: 1, kind: 'pollen', center: [320, 240.0117], radius: 28.5168, range: 0.7731, visible: 0.9688, inImage: 1, world: [0.7265, 0.0356, 0], target: true },
+    ]);
+  });
+  it('labels a POLLEN cut by the image edge', () => {
+    // Off axis, the rendered ball is wider than the circle: 385 pixels in the image against the circle's 362, so `visible` is clamped to 1.
+    expect(labelScene('edge-clipped', [385])).toEqual([
+      { id: 1, kind: 'pollen', center: [636.7641, 240.0117], radius: 28.5168, range: 0.8682, visible: 1, inImage: 0.5674, world: [0.7265, 0.0356, 0.395], target: true },
+    ]);
+  });
+  it('labels a POLLEN half hidden by a nearer one as hidden', () => {
+    // Exactly half of the far ball's 620 rendered pixels show, but against the circle's 640 that is under 0.5.
+    expect(labelScene('partly occluded', [310, 785])).toEqual([
+      { id: 1, kind: 'pollen', center: [320, 240.0117], radius: 28.5168, range: 0.7731, visible: 0.4844, inImage: 1, world: [0.7265, 0.0356, 0], target: false },
+      { id: 2, kind: 'pollen', center: [320, 266.5255], radius: 31.8672, range: 0.6925, visible: 0.9813, inImage: 1, world: [0.64, 0.0356, 0], target: true },
+    ]);
   });
 });
