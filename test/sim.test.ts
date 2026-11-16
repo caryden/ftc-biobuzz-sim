@@ -169,6 +169,16 @@ describe('AUTO', () => {
     for (let i = 0; i < 30 / DT; i++) prog.step(NO_INPUT, true);
     expect(prog.phase).toBe('transition'); expect(prog.score('red').leave).toBe(3);
   });
+  it('counts a TIP that completes in the transition as an AUTO TIP (section 10.5.B)', () => {
+    const s = new Sim(RAPIER, undefined, 'full', 3); s.start(); run(s, 29.9);
+    // Loaded 0.1 s before AUTO ends, the HIVE tips during the transition.
+    const h = s.hives.red, at = (p: { x: number; y: number; z: number }) => [p.x, p.y, p.z] as const;
+    for (let i = 0; i < 4; i++) s.spawn('nectar_red', ...at(h.raisedCellPoint((i - 1.5) * 0.09, 0.15, 0.4)));
+    for (let i = 0; i < 3; i++) s.spawn('pollen', ...at(h.raisedCellPoint((i - 1) * 0.09, 0.2, 0.3)));
+    run(s, 0.2); expect(s.phase).toBe('transition'); expect(h.tips).toBe(0);
+    run(s, 8); expect(s.phase).toBe('teleop'); expect(h.tips).toBe(1);
+    expect(s.score('red').autoTips).toBe(20); expect(s.score('red').teleopTips).toBe(0);
+  });
   it('scores no LEAVE for a turned robot whose corner still touches the wall (section 10.5.4)', () => {
     const leave = (heading: number) => {
       const s = new Sim(RAPIER, undefined, 'auto'), q = { x: 0, y: Math.sin(heading / 2), z: 0, w: Math.cos(heading / 2) };
