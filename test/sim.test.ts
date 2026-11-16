@@ -8,6 +8,14 @@ import { DT, NO_INPUT, Sim } from '../src/sim/world';
 beforeAll(async () => { await RAPIER.init(); });
 const run = (s: Sim, sec: number, inp = NO_INPUT) => { for (let i = 0; i < sec / DT; i++) s.step(inp); };
 
+describe('match time', () => {
+  it('runs in practice, which has no clock', () => {
+    const s = new Sim(RAPIER, undefined, 'practice');
+    run(s, 1);
+    expect(s.time).toBeCloseTo(1, 5); expect(s.timer).toBe(Infinity);
+  });
+});
+
 describe('drivetrain', () => {
   it('produces no net force at rest with no command', () => {
     const o = mecanumForces(DEFAULT_ROBOT, { forward: 0, strafeRight: 0, turnRight: 0 }, { vf: 0, vl: 0, w: 0 });
