@@ -169,6 +169,18 @@ describe('AUTO', () => {
     for (let i = 0; i < 30 / DT; i++) prog.step(NO_INPUT, true);
     expect(prog.phase).toBe('transition'); expect(prog.score('red').leave).toBe(3);
   });
+  it('scores no LEAVE for a turned robot whose corner still touches the wall (section 10.5.4)', () => {
+    const leave = (heading: number) => {
+      const s = new Sim(RAPIER, undefined, 'auto'), q = { x: 0, y: Math.sin(heading / 2), z: 0, w: Math.cos(heading / 2) };
+      // At 45°, the corner of the square robot is half its diagonal from the center: this puts it 5 mm from the wall.
+      const at = { x: -FIELD.half + (DEFAULT_ROBOT.length / 2) * Math.SQRT2 + 0.005, y: s.robot.translation().y, z: 0.1 };
+      s.start();
+      while (s.phase === 'auto') { s.robot.setTranslation(at, true); s.robot.setRotation(q, true); s.step(NO_INPUT); }
+      return s.score('red').leave;
+    };
+    expect(leave(Math.PI / 4)).toBe(0);
+    expect(leave(0)).toBe(3);
+  });
 });
 
 describe('AprilTag camera', () => {
