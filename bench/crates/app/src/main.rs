@@ -215,6 +215,9 @@ impl Bench {
         self.sent_goal = None;
         self.goto = None;
         self.cam.clear();
+        if let Some(prev) = self.shown.take() {
+            self.retired.push(prev.image.clone());
+        }
         self.sim.send(Cmd::Reset { seed, mode: self.mode.clone(), bots: self.fleet.bots(4) });
     }
 

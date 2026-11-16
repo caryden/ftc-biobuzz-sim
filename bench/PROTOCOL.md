@@ -64,3 +64,6 @@ LOST), `tracks`, and `target` and `far`, each null or a cluster with `c`, `intak
 Without `--detector`, bench builds `llpython` from the renderer's labels: every floor POLLEN in view, mostly
 unoccluded and within 3.5 m, nearest first. That is a perfect camera, so the decision layer can be tested apart from
 the detector.
+
+bench restarts the detector and the decision layer at each new MATCH, and drops any reply still in flight from the
+last one.

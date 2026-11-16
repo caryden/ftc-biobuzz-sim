@@ -179,21 +179,34 @@ impl CamResult {
     }
 }
 
+/// Each message carries the MATCH generation it was sent in.
 enum Msg {
-    Render(CamRequest),
-    Intaken,
+    Render(u64, CamRequest),
+    Intaken(u64),
 }
 
+/// What the worker hands the UI during one MATCH.
 #[derive(Default)]
-struct Totals {
+struct Results {
+    /// Counts MATCHES, so that a frame which finishes after a reset is dropped.
+    generation: u64,
+    newest: Option<Arc<CamResult>>,
     /// Per (robot, frame), so a frame seen twice while scrubbing counts once.
     frames: BTreeMap<(usize, usize), (Counts, bool)>,
 }
 
+impl Results {
+    fn publish(&mut self, generation: u64, robot: usize, frame: usize, r: CamResult) {
+        if generation == self.generation {
+            self.frames.insert((robot, frame), (r.counts.clone(), r.real()));
+            self.newest = Some(Arc::new(r));
+        }
+    }
+}
+
 pub struct CameraWorker {
     tx: Sender<Msg>,
-    out: Arc<Mutex<Option<Arc<CamResult>>>>,
-    totals: Arc<Mutex<Totals>>,
+    results: Arc<Mutex<Results>>,
     error: Arc<Mutex<Option<String>>>,
     last: Option<(usize, usize, MountKind, bool)>,
     robot: usize,
@@ -202,8 +215,7 @@ pub struct CameraWorker {
 impl CameraWorker {
     pub fn spawn(args: &Args, fleet: Fleet) -> Self {
         let (tx, rx) = channel();
-        let out = Arc::new(Mutex::new(None));
-        let totals = Arc::new(Mutex::new(Totals::default()));
+        let results = Arc::new(Mutex::new(Results::default()));
         let error = Arc::new(Mutex::new(None));
         let w = Worker {
             sim_dir: args.sim_dir(),
@@ -211,12 +223,11 @@ impl CameraWorker {
             harness_cmd: args.harness.clone(),
             camera_json: args.camera_json.clone(),
             fleet,
-            out: out.clone(),
-            totals: totals.clone(),
+            results: results.clone(),
             error: error.clone(),
         };
         std::thread::Builder::new().name("camera".into()).spawn(move || w.run(rx)).expect("camera thread");
-        Self { tx, out, totals, error, last: None, robot: 0 }
+        Self { tx, results, error, last: None, robot: 0 }
     }
 
     /// Asks for a frame. A request for the frame already on screen is dropped.
@@ -227,7 +238,7 @@ impl CameraWorker {
         }
         self.last = Some(key);
         self.robot = r.robot;
-        let _ = self.tx.send(Msg::Render(r));
+        let _ = self.tx.send(Msg::Render(self.generation(), r));
     }
 
     /// Forgets the last request, so that the next one renders even if it is for the same frame.
@@ -235,18 +246,23 @@ impl CameraWorker {
         self.last = None;
     }
 
-    /// Clears the MATCH totals, for a new MATCH.
+    fn generation(&self) -> u64 {
+        self.results.lock().unwrap().generation
+    }
+
+    /// Starts a new MATCH: clears the totals, drops frames still in flight, and restarts the robot code.
     pub fn clear(&mut self) {
         self.last = None;
-        self.totals.lock().unwrap().frames.clear();
+        let mut r = self.results.lock().unwrap();
+        *r = Results { generation: r.generation + 1, ..Results::default() };
     }
 
     pub fn take(&self) -> Option<Arc<CamResult>> {
-        self.out.lock().unwrap().take()
+        self.results.lock().unwrap().newest.take()
     }
 
     pub fn intaken(&self) {
-        let _ = self.tx.send(Msg::Intaken);
+        let _ = self.tx.send(Msg::Intaken(self.generation()));
     }
 
     pub fn error(&self) -> Option<String> {
@@ -255,14 +271,14 @@ impl CameraWorker {
 
     /// Frames of the selected robot with missed floor POLLEN, for the timeline.
     pub fn miss_history(&self) -> Vec<(usize, u32)> {
-        let t = self.totals.lock().unwrap();
+        let t = self.results.lock().unwrap();
         t.frames.range((self.robot, 0)..(self.robot + 1, 0)).filter(|(_, (k, _))| k.missed > 0).map(|((_, f), (k, _))| (*f, k.missed)).collect()
     }
 
     /// Over the MATCH so far, for the selected robot and only frames a real detector ran on: the frame count, the
     /// recall, and false detections per frame.
     pub fn totals(&self) -> Option<(usize, f32, f32)> {
-        let t = self.totals.lock().unwrap();
+        let t = self.results.lock().unwrap();
         let (mut n, mut targets, mut found, mut fp) = (0usize, 0u32, 0u32, 0u32);
         for (_, (k, real)) in t.frames.range((self.robot, 0)..(self.robot + 1, 0)) {
             if *real {
@@ -282,8 +298,7 @@ struct Worker {
     harness_cmd: Option<String>,
     camera_json: Option<PathBuf>,
     fleet: Fleet,
-    out: Arc<Mutex<Option<Arc<CamResult>>>>,
-    totals: Arc<Mutex<Totals>>,
+    results: Arc<Mutex<Results>>,
     error: Arc<Mutex<Option<String>>>,
 }
 
@@ -307,13 +322,23 @@ impl Worker {
         let mut detector: Option<Detector> = None;
         let mut harness: Option<Harness> = None;
         let mut harness_robot = usize::MAX;
+        let mut generation = 0;
         while let Ok(first) = rx.recv() {
             // Only the newest request matters. Intake notices all go through, in order.
             let mut req = None;
             for m in std::iter::once(first).chain(rx.try_iter()) {
                 match m {
-                    Msg::Render(r) => req = Some(r),
-                    Msg::Intaken => {
+                    Msg::Render(g, r) => {
+                        // A new MATCH gets new processes, so no track, target lock or timer carries over.
+                        if g != generation {
+                            generation = g;
+                            detector = None;
+                            harness = None;
+                        }
+                        req = Some(r);
+                    }
+                    Msg::Intaken(g) if g != generation => {}
+                    Msg::Intaken(_) => {
                         if let Some(h) = harness.as_mut() {
                             if let Err(e) = h.intaken() {
                                 self.fail("decision layer", e);
@@ -355,9 +380,7 @@ impl Worker {
                 self.fail("decision layer", e);
                 harness = None;
             }
-            let real = result.det.as_ref().is_some_and(|d| d.real);
-            self.totals.lock().unwrap().frames.insert((req.robot, req.frame), (result.counts.clone(), real));
-            *self.out.lock().unwrap() = Some(Arc::new(result));
+            self.results.lock().unwrap().publish(generation, req.robot, req.frame, result);
         }
     }
 }
@@ -832,5 +855,42 @@ mod tests {
         assert_eq!((k.targets, k.found, k.missed), (1, 1, 0));
         assert_eq!(k.false_pos, 1, "only the detection on nothing is false");
         assert_eq!(calls.len(), 1);
+    }
+
+    fn blank(missed: u32) -> CamResult {
+        CamResult {
+            robot: 0,
+            plate: String::new(),
+            live: true,
+            t: 0.0,
+            width: 1,
+            height: 1,
+            image: to_render_image(&[0; 3], 1, 1),
+            rgb: vec![0; 3],
+            labels: Vec::new(),
+            camera: Camera::new(Intrinsics::default(), Vec3::ZERO, 0.0, 0.0),
+            overlay: Vec::new(),
+            tags: Vec::new(),
+            footprint: Vec::new(),
+            calls: Vec::new(),
+            false_ground: Vec::new(),
+            det: None,
+            decision: None,
+            counts: Counts { missed, ..Counts::default() },
+            render_ms: 0.0,
+        }
+    }
+
+    #[test]
+    fn a_frame_from_the_last_match_is_dropped() {
+        let (tx, _rx) = channel();
+        let mut cam = CameraWorker { tx, results: Default::default(), error: Default::default(), last: None, robot: 0 };
+        cam.clear();
+        cam.results.lock().unwrap().publish(0, 0, 7, blank(2));
+        assert!(cam.take().is_none());
+        assert_eq!(cam.miss_history(), []);
+        cam.results.lock().unwrap().publish(1, 0, 8, blank(2));
+        assert!(cam.take().is_some());
+        assert_eq!(cam.miss_history(), [(8, 2)]);
     }
 }
