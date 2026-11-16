@@ -61,9 +61,10 @@ The pose is in the decision layer's map frame: inches from the inside audience-l
 LOST), `tracks`, and `target` and `far`, each null or a cluster with `c`, `intake` `[x, y, heading]`, `sweep` and
 `pts`, all in map inches. bench sends only the newest frame of a running MATCH, in order, as a camera would.
 
-Without `--detector`, bench builds `llpython` from the renderer's labels: every floor POLLEN in view, mostly
-unoccluded and within 3.5 m, nearest first. That is a perfect camera, so the decision layer can be tested apart from
-the detector.
+Without `--detector`, or with it switched off, bench builds `llpython` from the renderer's labels: every floor POLLEN
+in view, mostly unoccluded and within 3.5 m, nearest first. That is a perfect camera, so the decision layer can be
+tested apart from the detector. When the detector replies with an error or anything but a valid `llpython`, the
+decision layer gets an `N` loop for that frame.
 
 bench restarts the detector and the decision layer at each new MATCH, and drops any reply still in flight from the
 last one.

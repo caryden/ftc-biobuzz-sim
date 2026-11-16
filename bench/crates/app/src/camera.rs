@@ -8,7 +8,7 @@ use crate::plugins::{frames, parse_llpython, Detector, Harness, LlRow, LL_LEN};
 use crate::theme::*;
 use crate::Args;
 use anyhow::Context as _;
-use bench_render::{Alliance, Ball, BallKind, BallLabel, Camera, Intrinsics, Mount, Pose, Quat, RenderOptions, Robot, RobotModel, Scene, Vec3, World};
+use bench_render::{Alliance, Ball, BallKind, BallLabel, Camera, Frame, Intrinsics, Mount, Pose, Quat, RenderOptions, Robot, RobotModel, Scene, Vec3, World};
 use gpui::{point, px, Bounds, PathBuilder, Pixels, RenderImage, Window};
 use serde::Deserialize;
 use serde_json::Value;
@@ -128,7 +128,10 @@ pub struct Counts {
     pub cropped: u32,
 }
 
+#[derive(Debug)]
 pub struct DetOut {
+    /// The `llpython` array, as the decision layer gets it.
+    pub ll: Vec<f64>,
     pub rows: Vec<LlRow>,
     pub timings: [f32; 5],
     pub ms: f32,
@@ -370,8 +373,7 @@ impl Worker {
                 harness = self.harness_cmd.as_ref().and_then(|cmd| Harness::start(cmd, &self.sim_dir).ok());
                 harness_robot = req.robot;
             }
-            let det = if req.detect { detector.as_mut() } else { None };
-            let (result, det_err, dec_err) = frame(&scene, &self.fleet, &optics, &req, det, if req.live { harness.as_mut() } else { None });
+            let (result, det_err, dec_err) = frame(&scene, &self.fleet, &optics, &req, detector.as_mut(), if req.live { harness.as_mut() } else { None });
             if let Some(e) = det_err {
                 self.fail("detector", e);
                 detector = None;
@@ -502,6 +504,23 @@ pub fn llpython_from_labels(labels: &[BallLabel], field: &FieldInfo) -> Vec<f64>
         }
     }
     a
+}
+
+/// What the camera reports for one frame. With `detect` off, a perfect camera built from the labels. With it on, the
+/// detector's `llpython`, or nothing if the detector isn't running. A detector that fails gives an error, never a
+/// perfect frame in its place.
+fn detect(detect: bool, detector: Option<&mut Detector>, frame: &Frame, pose: [f32; 3], labels: &[BallLabel], field: &FieldInfo) -> anyhow::Result<Option<DetOut>> {
+    if !detect {
+        let ll = llpython_from_labels(labels, field);
+        let (timings, rows) = parse_llpython(&ll)?;
+        return Ok(Some(DetOut { ll, rows, timings, ms: 0.0, real: false }));
+    }
+    let Some(d) = detector else { return Ok(None) };
+    let t = Instant::now();
+    let ll = d.run(&frame.to_bgr(), frame.width as usize, frame.height as usize, Some(pose))?;
+    let ms = t.elapsed().as_secs_f32() * 1e3;
+    let (timings, rows) = parse_llpython(&ll)?;
+    Ok(Some(DetOut { ll, rows, timings, ms, real: true }))
 }
 
 /// Matches detections to labels by image distance, nearest first.
@@ -669,42 +688,14 @@ fn frame(
         [g[0], g[1], me.heading]
     };
 
-    let mut det_err = None;
-    let ll: Vec<f64> = match detector {
-        Some(d) => {
-            let t = Instant::now();
-            match d.run(&out.frame.to_bgr(), w as usize, h as usize, Some(pose_field)) {
-                Ok(a) => {
-                    let ms = t.elapsed().as_secs_f32() * 1e3;
-                    match parse_llpython(&a) {
-                        Ok(_) => a.into_iter().chain(std::iter::once(ms as f64)).collect(),
-                        Err(e) => {
-                            det_err = Some(e);
-                            Vec::new()
-                        }
-                    }
-                }
-                Err(e) => {
-                    det_err = Some(e);
-                    Vec::new()
-                }
-            }
-        }
-        None => Vec::new(),
-    };
-    let (ll, det) = if ll.len() == LL_LEN + 1 {
-        let ms = ll[LL_LEN] as f32;
-        let a = ll[..LL_LEN].to_vec();
-        let (timings, rows) = parse_llpython(&a).unwrap_or_default();
-        (a, Some(DetOut { rows, timings, ms, real: true }))
-    } else {
-        let a = llpython_from_labels(&out.labels, field);
-        let (timings, rows) = parse_llpython(&a).unwrap_or_default();
-        (a, Some(DetOut { rows, timings, ms: 0.0, real: false }))
+    let (det, det_err) = match detect(req.detect, detector, &out.frame, pose_field, &out.labels, field) {
+        Ok(d) => (d, None),
+        Err(e) => (None, Some(e)),
     };
 
+    // A frame with no detector result is missing data: it is neither scored nor counted.
     let rows = det.as_ref().map(|d| d.rows.clone()).unwrap_or_default();
-    let (mut counts, calls, det_to) = score(&out.labels, &rows, field);
+    let (mut counts, calls, det_to) = if det.is_some() { score(&out.labels, &rows, field) } else { Default::default() };
     let mut overlay = Vec::new();
     let real = det.as_ref().is_some_and(|d| d.real);
     for (lab, call) in calls.iter().filter_map(|(id, c)| out.labels.iter().find(|l| l.id == *id).map(|l| (l, c))) {
@@ -746,7 +737,7 @@ fn frame(
     let mut dec_err = None;
     let decision = harness.and_then(|hn| {
         let pose = frames::to_map(me.x, me.z, field.half);
-        match hn.frame((state.t * 1000.0) as u64, Some([pose[0], pose[1], me.heading]), Some(&ll)) {
+        match hn.frame((state.t * 1000.0) as u64, Some([pose[0], pose[1], me.heading]), det.as_ref().map(|d| d.ll.as_slice())) {
             Ok(v) => Some(parse_decision(&v, field.half)),
             Err(e) => {
                 dec_err = Some(e);
@@ -892,5 +883,36 @@ mod tests {
         cam.results.lock().unwrap().publish(1, 0, 8, blank(2));
         assert!(cam.take().is_some());
         assert_eq!(cam.miss_history(), [(8, 2)]);
+    }
+
+    fn pixel() -> Frame {
+        Frame { width: 1, height: 1, rgb: vec![0; 3], depth: vec![f32::INFINITY], ids: vec![0] }
+    }
+
+    fn detector(reply: &str) -> Detector {
+        Detector::start(&format!("read header; head -c 3 >/dev/null; echo '{reply}'"), Path::new(".")).unwrap()
+    }
+
+    #[test]
+    fn a_detector_error_is_no_observation() {
+        let mut d = detector(r#"{"error":"no pipeline"}"#);
+        let e = detect(true, Some(&mut d), &pixel(), [0.0; 3], &[pollen(1, [100.0, 100.0], 1.0)], &field()).unwrap_err();
+        assert_eq!(e.to_string(), "detector: no pipeline");
+    }
+
+    #[test]
+    fn malformed_detector_output_is_no_observation() {
+        let mut d = detector(r#"{"llpython":[1,0]}"#);
+        let e = detect(true, Some(&mut d), &pixel(), [0.0; 3], &[pollen(1, [100.0, 100.0], 1.0)], &field()).unwrap_err();
+        assert_eq!(e.to_string(), "llpython has 2 values, expected 71");
+    }
+
+    #[test]
+    fn perfect_detections_only_when_picked() {
+        let labels = [pollen(1, [100.0, 100.0], 1.0)];
+        let perfect = detect(false, None, &pixel(), [0.0; 3], &labels, &field()).unwrap().unwrap();
+        assert!(!perfect.real);
+        assert_eq!(perfect.rows.iter().map(|r| [r.cx, r.cy]).collect::<Vec<_>>(), [[100.0, 100.0]]);
+        assert!(detect(true, None, &pixel(), [0.0; 3], &labels, &field()).unwrap().is_none());
     }
 }

@@ -348,6 +348,7 @@ fn camera_block(b: &Bench, iw: f32, cx: &mut Context<Bench>) -> impl IntoElement
                     .child(mono(format!("{:.1}% recall", recall * 100.0), TEXT))
                     .child(div().text_size(px(10.5)).text_color(c(DIM)).child(format!("{fp:.2} false per frame, {n} frames"))),
             ),
+            (false, _) if r.det.is_none() => stats.child(div().max_w(px(170.0)).text_size(px(10.5)).text_color(c(RED)).child("no detector result: the decision layer got no fresh frame")),
             (false, _) => stats.child(div().max_w(px(170.0)).text_size(px(10.5)).text_color(c(DIM)).child("perfect camera from the labels: pass --detector to test a real one")),
             _ => stats,
         };

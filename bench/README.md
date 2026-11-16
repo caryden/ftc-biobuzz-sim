@@ -45,8 +45,10 @@ cargo run --release -- \
 
 Commands run in the simulator's checkout. `plugins/snapscript.py` runs a Limelight SnapScript unchanged. With a
 detector, the camera view and the FIELD mark each floor POLLEN it found (green) or missed (red dashes), and each false
-detection (red), and the timeline marks frames with misses. Without one, a perfect camera built from the labels feeds
-the decision layer, so the decisions can be tested apart from detection.
+detection (red), and the timeline marks frames with misses. Without one, or with it switched off (D), a perfect camera
+built from the labels feeds the decision layer, so the decisions can be tested apart from detection. A frame the
+detector fails on gives the decision layer no fresh result, not the perfect camera's. A new MATCH restarts both
+processes.
 
 With a decision layer, the FIELD shows its tracks and target, and A hands the selected robot to an autopilot that
 drives to the target's intake pose. When the robot is full, the planner launches, and the autopilot takes it back.
