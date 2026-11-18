@@ -1,0 +1,21 @@
+[package]
+name = "bench"
+edition.workspace = true
+version.workspace = true
+
+[[bin]]
+name = "bench"
+path = "src/main.rs"
+
+[dependencies]
+bench-render.workspace = true
+anyhow.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+clap.workspace = true
+glam.workspace = true
+rayon.workspace = true
+image.workspace = true
+gpui.workspace = true
+gpui_platform.workspace = true
+smallvec = "1"

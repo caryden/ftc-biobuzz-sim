@@ -39,3 +39,23 @@ jobs:
           git diff --exit-code -- public/lab public/lessons docs/results.html
       - name: Build the site
         run: npx vite build
+
+  bench:
+    name: Build and test bench
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    defaults:
+      run:
+        working-directory: bench
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install gpui's system libraries
+        run: sudo apt-get update && sudo apt-get install -y pkg-config libfontconfig-dev libfreetype-dev libxcb1-dev libxkbcommon-dev libxkbcommon-x11-dev
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: bench
+      - name: Build
+        run: cargo build --locked
+      - name: Test
+        run: cargo test --locked
