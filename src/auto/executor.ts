@@ -421,8 +421,8 @@ export class Executor {
     // Replan when the target is gone, and otherwise look again every 0.5 s but keep the plan unless a new one is
     // clearly better. Switching between near-equal plans is what makes a robot hesitate and reverse.
     if (gone || this.pickupAt < 0 || this.t - this.pickupAt > 0.5) {
-      const plan = this.planPickup(sim, kinds, needLoad, slots, end); this.pickupAt = this.t;
       const current = gone || this.pickupAt < 0 ? Infinity : this.routeCost(sim, this.pickup, end);
+      const plan = this.planPickup(sim, kinds, needLoad, slots, end); this.pickupAt = this.t;
       if (gone || !plan.seq[0] || plan.seq[0].key === first?.key || plan.cost < current - 0.45) { if (plan.seq[0]?.key !== first?.key) this.staged = ''; this.pickup = plan.seq; }
     }
     this.pickupEnd = end; const s = this.pickup[0]; if (!s) return null;
