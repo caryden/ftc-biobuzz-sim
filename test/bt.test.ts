@@ -345,6 +345,12 @@ describe('loading', () => {
     const broken = defineLeaf<Env>()({ id: 'test.broken', version: 1, doc: 'A wrong default.', params: { n: { type: t.number(), default: 'three' as unknown as number } }, *run() { return 1; } });
     expect(() => loadTree(tree({ ref: 'test.broken' }), { ...REG, leaves: { ...REG.leaves, [broken.id]: broken } })).toThrow(/test.broken is defined wrongly: the default of 'n' must be a number/);
   });
+  it('checks the bounds of a number parameter that can be null', () => {
+    const limit = defineLeaf<Env>()({ id: 'test.limit', version: 1, doc: 'A nullable bounded number.', params: { sec: { type: t.nullable(t.number()), default: null, min: 0 } }, *run() { return 1; } });
+    const reg = { ...REG, leaves: { ...REG.leaves, [limit.id]: limit } };
+    expect(() => loadTree(tree({ ref: 'test.limit', params: { sec: -5 } }), reg)).toThrow(/params.sec: must be at least 0/);
+    expect(() => loadTree(tree({ ref: 'test.limit', params: { sec: null } }), reg)).not.toThrow();
+  });
   it("rejects a leaf that needs something the tree's environment doesn't have", () => {
     expect(issues(tree({ ref: 'test.camera' }, { env: 'bare' }))[0]).toMatch(/needs 'camera', which the bare environment doesn't have/);
     expect(issues(tree({ ref: 'test.camera' }))).toEqual([]);
