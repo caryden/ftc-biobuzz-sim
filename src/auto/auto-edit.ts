@@ -287,6 +287,9 @@ export function deleteDef(tree: Json, handles: readonly Handle[], name: string):
   return users.length ? { error: `${users.join(', ')} still ${users.length === 1 ? 'uses' : 'use'} ${name}. Change ${users.length === 1 ? 'it' : 'them'} first.` } : { tree: out, madeAbsolute };
 }
 
+/** The fields of a node, or of its settings, that hold an expression: see `src/bt/load.ts`. */
+const EXPR_FIELDS = ['condition', 'map', 'matches', 'when', 'sec', 'attempts', 'times', 'value'];
+
 /** Gets the definitions and step ids whose expressions name `name`. A quoted string, such as `'rear'`, or a field, such as `park.x`'s `x`, doesn't count. */
 export function defUsers(tree: Json, name: string): string[] {
   const word = new RegExp(`(?<![\\w.'"])${name}(?![\\w'"])`), out: string[] = [];
@@ -296,7 +299,7 @@ export function defUsers(tree: Json, name: string): string[] {
     if (Array.isArray(n)) { n.forEach(c => walk(c, id)); return; }
     if (!n || typeof n !== 'object') return;
     const o = n as Json, mine = typeof o.id === 'string' ? o.id : id;
-    if (o.params && names(o.params)) out.push(mine ?? String(o.ref));
+    if ((o.params && names(o.params)) || EXPR_FIELDS.some(k => typeof o[k] === 'string' && word.test(o[k] as string))) out.push(mine ?? String(o.ref));
     for (const [k, v] of Object.entries(o)) if (k !== 'params' && k !== 'meta') walk(v, mine);
   };
   walk(tree.root, null);

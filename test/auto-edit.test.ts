@@ -1,6 +1,6 @@
 import RAPIER from '@dimforge/rapier3d-compat';
 import { beforeAll, describe, expect, it } from 'vitest';
-import { addReference, changedDefs, deleteDef, changedSteps, clonePlan, editHandles, makeAbsolute, moveReference, referenceOf, referencePoints, referTo, findNode, isEdited, moveHandle, planId, poseText, resetHandle, sharedWith, shiftPose, sourceOf, turnHandle } from '../src/auto/auto-edit';
+import { addReference, changedDefs, defUsers, deleteDef, changedSteps, clonePlan, editHandles, makeAbsolute, moveReference, referenceOf, referencePoints, referTo, findNode, isEdited, moveHandle, planId, poseText, resetHandle, sharedWith, shiftPose, sourceOf, turnHandle } from '../src/auto/auto-edit';
 import { AUTO_SOURCES, AUTO_TREES, BUILT_IN_AUTO, addAutoTree, removeAutoTree } from '../src/auto/onboard';
 import { Coach } from '../src/auto/coach';
 import { literalNumber, splitCall, type CNode } from '../src/bt';
@@ -157,6 +157,14 @@ describe('deleting a reference point', () => {
       const p = deleteDef(tree, handles, 'park'); expect(p).toEqual({ error: expect.stringMatching(/^parkRight still uses park\./) });
       expect(deleteDef(tree, handles, 'nothing')).toEqual({ error: expect.stringMatching(/no definition/) });
     } finally { removeAutoTree(`${id}-test`); }
+  });
+  it('counts a definition that a condition or a control node uses', () => {
+    const tree = { defs: { early: '20' }, root: { sequence: { children: [
+      { id: 'wait', guard: { when: 'clock.remaining > early', child: { ref: 'idle' } } },
+      { id: 'check', condition: 'clock.remaining < early' },
+      { id: 'limit', timeout: { sec: 'early', child: { ref: 'idle' } } },
+    ] } } };
+    expect(defUsers(tree, 'early')).toEqual(['wait', 'check', 'limit']);
   });
 });
 
